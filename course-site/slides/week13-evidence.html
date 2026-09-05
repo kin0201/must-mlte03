@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 13 — Building the Evidence · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 13 · Evidence<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1 TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Building the Evidence</h1>
+    <p class="tp-sub">建立證據</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 13 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. The session plan follows; keep this up while people settle.</aside>
+</section>
+
+<!-- 2 AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan</h2>
+  <table class="agenda">
+    <tr><th>Clock</th><th>Segment</th><th></th></tr>
+    <tr><td class="t">00:00</td><td>Quiz (Wk-12 MPC) · where the project stands</td><td>10′</td></tr>
+    <tr><td class="t">00:10</td><td><b>Block A</b> — what makes a comparison <i>controlled</i></td><td>30′</td></tr>
+    <tr><td class="t">00:40</td><td>Concept check</td><td>10′</td></tr>
+    <tr><td class="t">00:50</td><td><b>Block B</b> — the seed is part of the experiment</td><td>25′</td></tr>
+    <tr><td class="t">01:15</td><td><b>Block C</b> — requirements review: a defective requirement</td><td>15′</td></tr>
+    <tr class="break"><td class="t">01:30</td><td>Break</td><td>10′</td></tr>
+    <tr><td class="t">01:40</td><td><b>Block D</b> — the craft: activation · anticipation · ablation · timing</td><td>20′</td></tr>
+    <tr class="lab"><td class="t">02:00</td><td><b>Lab session</b>: evidence kit v1 on your own mission</td><td>45′</td></tr>
+    <tr><td class="t">02:45</td><td>Debrief + <b>project gate</b>: method running + evidence kit v1</td><td>15′</td></tr>
+  </table>
+</section>
+
+<!-- 3 RECAP -->
+<section class="dense">
+  <p class="eyebrow">Recap</p>
+  <h2>Where we are, and what today adds</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Week 11</b> gave you the <b>instrument</b>: a written specification, requirement IDs, and <code>certify.py</code> — PASS or FAIL against a fixed bar, the same bar for every student, on a vehicle that is <b>yours alone</b>.</li>
+    <li><b>Week 12</b> gave you the <b>method</b>: the finite-horizon OCP, the QP, the hard/soft split, and a controller that plans instead of reacting.</li>
+    <li><b>Today</b> is neither. Today is the <b>argument</b>: how you turn two certification reports into a claim an examiner has to accept.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why this is a whole week.</span>
+  Because a controller that works is worth nothing you can defend until somebody else can reproduce the reason it works.<br/><br/>Every year, students arrive at the viva with a green report and no ability to say <i>why</i> the number moved. They lose marks not for the engineering but for the evidence — which is the cheaper half to get right.</div>
+    </div>
+  </div>
+  <p class="small muted"><b>Certification is binary. Your claim is comparative.</b> Today is entirely about the second one.</p>
+
+  <aside class="notes">Sixty seconds of orientation; the instrument / method / argument split frames the whole session.</aside>
+</section>
+
+<!-- 4 OUTCOMES -->
+<section>
+  <p class="eyebrow">Orientation</p>
+  <h2>By the end of today you can…</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>State the five conditions that make a comparison <b>controlled</b>, and check your own harness against them.</li>
+    <li>Explain why a <b>fully deterministic</b> controller produces a different verdict on a different seed — and quantify it.</li>
+    <li>Report a result as a <b>sample</b>, not a fact: graded number, spread, worst case, in one honest sentence.</li>
+    <li>Perform a <b>requirements review</b> — decide whether a requirement is verifiable <i>at all</i> before writing a test for it.</li>
+    <li>Write a <b>failure</b> up so that it scores.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env defn"><span class="eh">Definition <em>(controlled comparison)</em>.</span>
+  A comparison in which <b>exactly one thing differs</b> between the two runs — the controller — and every other condition (mission, <b>vehicle</b>, disturbance sequence, limits, metric code, duration, start state) is provably identical.<br/><br/>Provably, not "we think so": one shared config object, one metric module, seeds written down, <b>one student ID on both runs</b>.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Read the definition aloud slowly — 'exactly one thing differs' is the entire week compressed.</aside>
+</section>
+
+<!-- 5 QUIZ A -->
+<section>
+  <p class="eyebrow">Opening quiz · 00:00</p>
+  <h2>Two from last week, before we build on them</h2>
+  <div class="quiz">
+    <div class="q">Q1 — Your MPC and your cascade PID give nearly identical trajectories on your mission. Is the MPC broken?</div>
+    <p class="fragment"><span class="ok">Almost certainly not — check the activation plot first.</span> <span class="why">Unconstrained, linear, quadratic ⇒ MPC <i>reduces to</i> LQR-like behaviour; they <b>should</b> coincide when no constraint is active. "MPC ≈ PID" is a statement about the mission, not about your code. What it does mean is that your report cannot claim the constraint handling mattered — so either harden the mission or make the claim humbler.</span></p>
+    <div class="q fragment">Q2 — On M3 the mass steps from 0.65 to 0.45 kg at \( t = 5 \) s and the controller is never told. Name the mechanism by which MPC recovers faster than the PID.</div>
+    <p class="fragment"><span class="ok">It rations thrust over the horizon instead of reacting after the error has grown.</span> <span class="why">The optimiser plans \( N \) steps of input against the measured state; when the aircraft starts climbing, the whole plan is rebuilt from the new state and the correction is distributed across the horizon rather than delivered as one clipped burst. <b>That sentence — with your own numbers in it — is item 3 of your report.</b></span></p>
+  </div>
+
+  <aside class="notes">Q2's answer is literally the paragraph they must write; say that out loud.</aside>
+</section>
+
+<!-- 6 THE SENTENCE -->
+<section class="dense">
+  <p class="eyebrow">Block A · 00:10</p>
+  <h2>The sentence your report has to earn</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">The claim.</span>
+  <i>"My frozen baseline fails <b>REQ-M3-1</b> at <b>0.540 m</b> against a 0.50 m bar. My MPC submission certifies at <b>0.473 m</b> on the same mission, same seed, <b>same vehicle</b>, same harness — because the planner rations the post-drop thrust correction over a 1 s horizon instead of delivering it after the error has grown."</i></div>
+  <p class="small">Five parts: <b>a number that failed</b> · <b>a number that passed</b> · <b>proof they are comparable</b> · <b>a mechanism</b> — and it is <b>your</b> claim about <b>your</b> aircraft. Miss any one and the sentence stops being evidence.</p>
+  <p class="small muted">0.540 / 0.473 are the <b>course-default</b> vehicle. Substitute your own two numbers, from <code>--student &lt;your ID&gt;</code>.</p>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Which part do students miss?</span>
+  Never the first two — <code>certify.py</code> hands those to you.<br/><br/><b>Part three</b> is missed silently: the two runs differed in something nobody wrote down.<br/><br/><b>Part four</b> is missed loudly: "it got better" or "MPC is more advanced". That is a vibe, not a mechanism.<br/><br/>Blocks A and B fix part three. Block D fixes part four.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Everything in the session hangs off this slide; return to it at the close.</aside>
+</section>
+
+<!-- 7 SCOPE -->
+<section class="dense">
+  <p class="eyebrow">Block A · scope check</p>
+  <h2>The final project is exactly this big — no bigger</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th></th><th>Your project — <b>individual, start to finish</b></th></tr>
+    <tr class="hl"><td>Mission</td><td><b>M3 — payload drop</b>, and only M3. The mass steps <b>down</b> at \( t = 5 \) s; the controller is <b>never told</b>; 15 s.</td></tr>
+    <tr class="hl"><td>The vehicle</td><td><b>yours alone</b> — derived from your student ID. <code>python -m quadsim.student_params &lt;your ID&gt;</code></td></tr>
+    <tr><td>The command</td><td><code>python certify.py --controller &lt;yours&gt; --student &lt;your ID&gt; --mission M3</code></td></tr>
+    <tr><td>Graded on</td><td><b>seed 0</b>, on <b>your</b> vehicle. One run, one number.</td></tr>
+    <tr><td>Report</td><td><b>three items</b>, ≤ 6 pages. Plus a one-page <b>engineering log</b>.</td></tr>
+    <tr><td>Then</td><td>a 5-minute individual viva in Week 15.</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The three required items — all of them.</span>
+  <b>(a)</b> The <b>two certification reports, pasted verbatim</b> — frozen baseline and final submission. Not paraphrased, not retyped. Costs you nothing but the command.<br/>
+  <b>(b)</b> <b>What you changed, written as engineering</b> — the MPC formulation in plain terms: model, horizon, cost, constraints, hard or soft.<br/>
+  <b>(c)</b> <b>One figure and one paragraph</b> explaining the mechanism.<br/><br/>
+  Plus <b>one honest sentence</b> on the across-seed spread, and <b>one paragraph</b> on what you would do with another month.</div>
+    </div>
+  </div>
+  <div class="box warn" style="font-size:.72em"><b>Say this clearly, because today teaches more than the project requires:</b> activation plots, timing histograms and ablation tables are <b>optional stretch work</b>. They are not needed for full marks on the three items above. Learn them today as craft; attempt them only once the three required items are genuinely finished.</div>
+
+  <aside class="notes">Do not let anyone leave believing the optional craft is mandatory. Say the word 'optional' out loud twice.</aside>
+</section>
+
+<!-- 8 FIVE CONDITIONS -->
+<section class="dense">
+  <p class="eyebrow">Block A</p>
+  <h2>What makes a comparison controlled — five conditions</h2>
+  <table class="data">
+    <tr><th>#</th><th>Condition</th><th>How it is broken, in practice</th><th>The mechanical fix</th></tr>
+    <tr><td>1</td><td><b>One arena</b> — same mission, same start state, same duration, same disturbance model</td><td>baseline run on last week's trajectory</td><td>one mission function, imported by both</td></tr>
+    <tr class="hl"><td>2</td><td><b>Frozen baseline</b> — the number was recorded before you knew what you needed it to be</td><td>baseline "re-tuned" after the MPC result came in</td><td>tag it; changes need a signed note</td></tr>
+    <tr class="hl"><td>3</td><td><b>Recorded seeds</b> — the disturbance history is written down and reproducible</td><td>seed left at whatever the last run used</td><td>seed in the config, printed in the report</td></tr>
+    <tr><td>4</td><td><b>Identical conditions</b> — same limits, same metric code, same estimator</td><td>MPC gets a 20° tilt clamp, PID keeps 12°</td><td>one shared config object; swap the controller only</td></tr>
+    <tr class="hl"><td><b>5</b></td><td><b>Same vehicle</b> — both runs on the aircraft your student ID derives</td><td><b>quoting a classmate's baseline number</b>, or forgetting <code>--student</code> on one of the two runs</td><td><code>--student &lt;your ID&gt;</code> on <b>both</b> runs; the ID in the README</td></tr>
+  </table>
+  <p class="small muted">Note what is <i>not</i> on this list: fairness of effort, elegance, how long you spent tuning. Those are not conditions of a controlled comparison — they are excuses offered after one fails.</p>
+
+  <aside class="notes">Row 5 is new this year and it is the one that will bite. Rows 2 and 3 get broken by accident; row 5 gets broken by helpfulness — a classmate hands over a baseline number and it looks like a favour.</aside>
+</section>
+
+<!-- 8b CONDITION 5 -->
+<section class="dense">
+  <p class="eyebrow">Block A · condition 5 · new this year</p>
+  <h2>Your classmate's baseline is not your baseline</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Every student's vehicle differs: mass, arm length, \( k_\tau \), inertia — all derived from the student ID, all fixed forever for that ID.</li>
+    <li>So <b>"same vehicle" joins "same seed", "same script" and "frozen baseline" as a condition of a controlled comparison.</b> It is not an extra rule; it is the same rule, on a quantity that used to be constant.</li>
+    <li>Comparing your MPC's number against a classmate's baseline number is <b>not a weak comparison. It is not a comparison at all</b> — two things differ, and one of them is the aircraft.</li>
+  </ul>
+  <div class="box warn" style="font-size:.78em"><b>The mechanical check:</b> both certification reports print the student ID. Open both, read the two IDs, confirm they are yours. Ten seconds; it closes the whole failure mode.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What you <i>can</i> share, and should.</span>
+  Theory. Derivations. Why a slack penalty is computed rather than searched. What a solver error means. Reading each other's code is <b>allowed and encouraged</b> — this is a course, not a sealed exam.<br/><br/>What does not transfer is the <b>result</b>. A horizon and a weight matrix tuned against my aircraft do not certify yours; you have to make the decision for your own numbers, which is precisely the thing being examined.</div>
+  <div class="env rmk" style="font-size:.8em"><span class="eh">And the flip side.</span>
+  Nobody can tell you your number is wrong by comparing it to theirs. <b>The only instrument that can judge your controller is <code>certify.py</code> on your own ID</b> — which is a cleaner position to be in than it sounds.</div>
+    </div>
+  </div>
+  <aside class="notes">Expect at least one student to have already borrowed a classmate's baseline figure. Say the "not a weak comparison — not a comparison at all" line slowly.</aside>
+</section>
+
+<!-- 9 ARENA -->
+<section class="dense">
+  <p class="eyebrow">Block A · the analogy that already worked</p>
+  <h2>One plant — you have done this before, in Week 10</h2>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">The same discipline, in software.</span>
+  Week 10 was already a controlled comparison: <b>same controller, same estimator, same seed, two plants</b> — and everything in the difference was the plant, because nothing else moved. <code>certify.py</code> is that discipline made permanent: the mission function is the arena, the seed is the wind on the day, <b>your student ID is the aircraft you walked in with.</b><br/><br/><b>In software you can hold the wind fixed</b> — so if you do not, you have thrown away an advantage the physical world never offers.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why the Week-10 analogy is worth the slide.</span>
+  Because it makes the failure mode obvious. Nobody in a debrief would have accepted "our realistic column is better because we changed <code>kp_pos</code> between the two flights" — that is exactly the undocumented change the workshop forbade. In the project the equivalent happens constantly and invisibly, because changing the conditions costs one edited line, and changing the aircraft costs one forgotten <code>--student</code>.</div>
+    </div>
+  </div>
+  <div class="box warn">Five conditions, one sentence each: same mission · same estimator · same seed(s) · same vehicle (<code>--student</code>) · the baseline frozen at a git hash. Week 10 gave you four of the five for free; the fifth is this week's first job.</div>
+
+  <aside class="notes">Point back at the two-column table from the workshop — the physical version of a shared config object.</aside>
+</section>
+
+<!-- 10 FREEZE -->
+<section>
+  <p class="eyebrow">Block A · condition 2</p>
+  <h2>The frozen baseline — what freezing actually means</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Run your Week-9 classical controller on <b>M3</b>, through <code>certify.py</code>, <b>with <code>--student &lt;your ID&gt;</code></b>, from estimated state.</li>
+    <li>Save the report <b>verbatim</b> — the text, not a summary of it — as <code>baseline-M3.txt</code>.</li>
+    <li>Record alongside it: <b>student ID</b>, git hash, aircraft params, seed, date, and the exact command line.</li>
+    <li>Commit the controller <i>and</i> the report together. Tag it <code>baseline-v1</code>.</li>
+    <li>Paste the report into the report skeleton <b>now</b>. It is item (a); it is already finished.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Frozen means "changes leave a trace".</span>
+  Not "we promise not to touch it". A baseline that improves quietly between Week 12 and Week 15 turns your central claim into self-marking homework — and the viva finds it in the first question, because the numbers in the report will not reproduce.<br/><br/>If you genuinely must re-run the baseline (a bug fix, not a tuning improvement), say so in the report, in one sentence, with both numbers. <b>That is a stronger paper than a silent edit.</b></div>
+    </div>
+  </div>
+  <p class="small muted">This was Week 12's gate. If you have not done it, it is the first thing you do in the lab hour — before any MPC work.</p>
+
+  <aside class="notes">Ask for a show of hands on who has baseline-v1 tagged; chase the ones who do not during the lab.</aside>
+</section>
+
+<!-- 11 ACCIDENT -->
+<section>
+  <p class="eyebrow">Block A · condition 4</p>
+  <h2>The unfair comparison that happens by accident</h2>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">A true story, most years.</span>
+  A student gives the MPC a tilt limit of 20° — because it handles the limit gracefully and the constraint is expressible inside the optimiser. The baseline keeps 12°, because that is what it was tuned with in Week 9.<br/><br/>The MPC "wins" by 40%.<br/><br/><b>Nobody intended to cheat.</b> But the comparison now measures the clamp, not the method — and an examiner who asks "what tilt limit did the baseline have?" collapses the whole result in one question.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The fix is mechanical, not moral.</span>
+  Write the harness so that swapping controllers is <b>a one-line change</b>: one config object, one mission call, one metric module, and the controller passed in as an argument.<br/><br/>If it is harder than one line, the comparison <i>will</i> drift — and drift always flatters whichever controller you worked on last. That is not cynicism; it is just where attention goes.</div>
+    </div>
+  </div>
+  <p class="small muted">The course harness already enforces this: <code>certify.py --controller module:Class --student &lt;your ID&gt; --mission M3</code> — the controller is one argument, the vehicle is another, and both runs carry the same ID. <b>Use it for the baseline too.</b> Every hand-rolled comparison script is a chance to break condition 4 or 5.</p>
+
+  <aside class="notes">'Drift always flatters whichever controller you worked on last' — say it slowly; it lands.</aside>
+</section>
+
+<!-- 12 PROTOCOL -->
+<section class="dense">
+  <p class="eyebrow">Block A · write it down</p>
+  <h2>The evaluation protocol, as a paragraph in your report</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Same mission function</b>, same start state, same duration — named, with its parameters.</li>
+    <li><b>Same vehicle</b> — <code>--student &lt;your ID&gt;</code> on both runs; the ID stated in the report.</li>
+    <li><b>Same limits</b> — the baseline gets the identical tilt and thrust clamps.</li>
+    <li><b>Same estimator</b> — both controllers close the loop on estimated state (the Week-8 rule: no ground-truth shortcut).</li>
+    <li><b>Same seeds</b>, listed explicitly in the report.</li>
+    <li><b>Same metric code</b> — imported, never re-implemented.</li>
+    <li><b>Both raw reports kept</b>, pasted verbatim, not summarised.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What it reads like, finished.</span>
+  <i>"Both controllers were run through <code>certify.py</code> on mission M3 (hover at [0,0,1.5]; the mass step at t = 5 s; 15 s), from estimated state, on the vehicle derived from student ID <b>&lt;my ID&gt;</b> (mass ___ → ___ kg, arm ___ m) with estimator seed 0, using the requirement thresholds as implemented in the harness. Only the <code>--controller</code> argument differed. Both reports are reproduced in full in §2."</i><br/><br/><b>Five lines. Written once. It closes the entire family of "but was it fair?" questions.</b></div>
+    </div>
+  </div>
+  <p class="small muted">This paragraph is worth more marks per minute of writing than anything else in the report, because it is the paragraph that makes the other numbers mean something.</p>
+
+  <aside class="notes">Tell them to draft this paragraph during the lab hour while the details are in front of them.</aside>
+</section>
+
+<!-- 13 CQ1 -->
+<section class="vdense">
+  <p class="eyebrow">Concept check · 00:40</p>
+  <h2>Four comparisons — which ones survive?</h2>
+  <div class="quiz">
+    <div class="q">Q1 — Student A reports: baseline RMSE 0.46 m (from their Week-9 notes), MPC RMSE 0.26 m (run today). Verdict?</div>
+    <p class="fragment"><span class="ok">Not a comparison.</span> <span class="why">The baseline number predates a fortnight of changes to the simulator, the estimator wrapper and possibly the metric code. Re-run the baseline today, through the same harness. It costs one command and it is the difference between evidence and an anecdote.</span></p>
+    <div class="q fragment">Q2 — Student B ran both controllers today, same harness, same command — but did not record the seed. Verdict?</div>
+    <p class="fragment"><span class="ok">Salvageable, but currently unverifiable.</span> <span class="why">If both ran with the harness default (seed 0) it is fine — but nobody can confirm that from the report. Re-run with <code>--seed 0</code> stated explicitly. <b>Block B shows the verdict itself can flip on the seed.</b></span></p>
+    <div class="q fragment">Q3 — Student C's MPC beats the baseline by 3%. Both runs are impeccably controlled. Is that a result?</div>
+    <p class="fragment"><span class="ok">It is an honest result, and it may not be a significant one.</span> <span class="why">3% is well inside the across-seed spread you are about to see. Do not hide it or inflate it — say so: "the improvement is 3% on seed 0, smaller than this mission's seed-to-seed variation; I do not claim a robust improvement." <b>That sentence scores. Claiming a 3% victory does not.</b></span></p>
+    <div class="q fragment">Q4 — Student D reports her own MPC number, and the baseline number her classmate measured. Verdict?</div>
+    <p class="fragment"><span class="ok">Not a comparison at all — and the fix is one command.</span> <span class="why">Two things differ: the controller <i>and</i> the aircraft. The classmate's baseline was measured on a different mass, arm and inertia, so the gap is partly her MPC and partly two different quadcopters. Re-run the frozen baseline with <code>--student &lt;her own ID&gt;</code>. <b>Condition 5 — sixty seconds to satisfy.</b></span></p>
+  </div>
+
+  <aside class="notes">Q3 sets up Block B; Q4 is the new one and the one to dwell on. Let each answer hang for a moment before advancing.</aside>
+</section>
+
+<!-- 14 ESTIMATED STATE -->
+<section class="vdense">
+  <p class="eyebrow">Block B · 00:50</p>
+  <h2>Your controller does not fly on the truth</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Every mission in <code>certify.py</code> closes the loop on the <b>estimated</b> state — <code>EstimatedStateController</code> wraps your submission.</li>
+    <li>That estimate comes from <b>simulated sensors</b>, driven by a seeded noise generator.</li>
+    <li>Change the seed and you change the sensor-noise sequence — and therefore the estimate, and therefore every command your controller issued, from the first millisecond onward.</li>
+    <li><b>The disturbance history is part of the experimental condition.</b> It is not a cosmetic knob.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env defn"><span class="eh">The consequence, stated plainly.</span>
+  <b>One run is one sample.</b><br/><br/>Not a measurement of your controller. A measurement of your controller <i>on one draw of the noise</i>.<br/><br/>Everything in this block follows from that single sentence.</div>
+    </div>
+  </div>
+  <div class="fig plain" data-diagram="fusion"><p class="cap">Week 8's estimator, back for one last appearance — this time not as a design problem but as the reason your results have variance.</p></div>
+
+  <aside class="notes">This is the causal chain: seed → noise → estimate → command → trajectory → verdict. Walk it once, slowly.</aside>
+</section>
+
+<!-- 15 SEED CLAIM -->
+<section>
+  <p class="eyebrow">Block B</p>
+  <h2>"But my controller has no randomness in it"</h2>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">Correct — and irrelevant.</span>
+  A cascade PID is fully deterministic given its input. Feed it the same numbers and it produces the same numbers, every time, forever.<br/><br/><b>But it is not fed the same numbers.</b> It is fed an estimate, and the estimate is a function of the seed. Determinism of the controller says nothing whatever about determinism of the <i>closed loop</i>.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why this matters more than it sounds.</span>
+  The usual student intuition is that run-to-run variance is a problem of stochastic methods — learned controllers, sampling-based planners — and that a classical controller is exempt.<br/><br/>The next slide is the course's own reference <code>CascadePID</code>. No learning. No sampling. No randomness anywhere in the controller. <b>Watch what happens.</b></div>
+    </div>
+  </div>
+  <p class="small muted">Read the numbers on the next slide before you decide how many seeds your own report needs.</p>
+
+  <aside class="notes">Deliberately set up the surprise; do not preview the numbers.</aside>
+</section>
+
+<!-- 16 SEED TABLE -->
+<section class="dense">
+  <p class="eyebrow">Block B · real measured data</p>
+  <h2>The same controller, eight seeds, one mission</h2>
+  <p class="small"><code>python certify.py --controller quadsim.controllers.cascade_pid:CascadePID --mission M3 --seeds 0,1,2,3,4,5,6,7</code> <span class="muted">— course-default vehicle, no <code>--student</code></span></p>
+  <table class="data">
+    <tr><th>Seed</th><th>REQ-M3-1 · max deviation (bar &lt; 0.50 m)</th><th>Verdict</th></tr>
+    <tr class="hl"><td><b>0</b> <span class="muted">(the graded seed)</span></td><td><b>0.540 m</b></td><td><b>NOT CERTIFIED</b></td></tr>
+    <tr class="hl"><td>1</td><td>0.721 m</td><td><b>NOT CERTIFIED</b></td></tr>
+    <tr><td>2</td><td>0.211 m</td><td>CERTIFIED</td></tr>
+    <tr><td>3</td><td>0.278 m</td><td>CERTIFIED</td></tr>
+    <tr><td>4</td><td>0.255 m</td><td>CERTIFIED</td></tr>
+    <tr><td>5</td><td>0.388 m</td><td>CERTIFIED</td></tr>
+    <tr><td>6</td><td>0.277 m</td><td>CERTIFIED</td></tr>
+    <tr><td>7</td><td>0.306 m</td><td>CERTIFIED</td></tr>
+  </table>
+  <p class="small"><b>Same controller. Same mission. Same vehicle. Same threshold. Same code, unmodified.</b> Fails on two seeds, passes on six. The other two requirements (REQ-M3-2, REQ-M3-3) pass on all eight. <span class="muted">Run the same sweep on your own ID and the numbers move — the phenomenon does not.</span></p>
+
+  <aside class="notes">Let this sit on screen in silence for ten seconds. It is the most persuasive slide in the course.</aside>
+</section>
+
+<!-- 17 THREE LESSONS -->
+<section class="dense">
+  <p class="eyebrow">Block B · read the table properly</p>
+  <h2>Three lessons and one warning</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>The verdict flips.</b> Seed 1 misses the bar by 44%; seed 2 passes with room to spare. <b>Anyone reporting a single run has reported a coin toss.</b></li>
+    <li><b>The spread is 3.4×.</b> 0.211 m to 0.721 m, from a controller with no randomness in it at all. A controller is characterised by a <i>distribution</i>, not by a number.</li>
+    <li><b>The graded seed is not the typical seed.</b> Seed 0 (0.540 m) sits in the worst quartile of the eight. That is luck, not design — and it cuts both ways.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The warning.</span>
+  Do <b>not</b> read this as "the grading is unfair, so the number does not matter".<br/><br/>Every student is graded on <b>seed 0</b>, on the same mission, against the same three bars, with the same tool. The <i>instrument</i> is identical for everyone; only the aircraft is yours — which is why you compare your number to <b>your own baseline</b> and to nobody else's.<br/><br/><b>What the table forbids is a different thing: claiming more than one run can support.</b> You are graded on seed 0. You are expected to know, and to say, what the other seeds did.</div>
+    </div>
+  </div>
+  <p class="small muted">And notice the sharpest consequence: a student could "fix" nothing, re-roll the seed, and produce a green report. That is why the seed is fixed at 0 — and why silently choosing a favourable seed, or a favourable student ID, is academic misconduct rather than clever engineering.</p>
+
+  <aside class="notes">Say the misconduct sentence plainly once. It removes the temptation before it forms.</aside>
+</section>
+
+<!-- 18 MECHANISM -->
+<section class="dense">
+  <p class="eyebrow">Block B · why, mechanically</p>
+  <h2>Where a 3.4× spread comes from, in a deterministic loop</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>The estimator's position error is a random process; at \( t = 5^- \) s the state estimate is off by some \( \boldsymbol\varepsilon \) that depends on the seed.</span>
+      <span class="dwhy"><b>The initial condition of the recovery is random.</b> Not the controller — the situation it starts from.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>The mass steps 0.65 → 0.45 kg. Thrust is unchanged for one sample, so the aircraft is suddenly over-thrusted by \( (0.65-0.45)\,g \approx 2 \) N and begins to climb.</span>
+      <span class="dwhy">The disturbance itself is deterministic — the same 2 N every time. <b>It is not the disturbance that varies.</b></span></div>
+    <div class="dstep fragment key"><span><span class="dnum">3</span>The controller responds to \( \hat{\mathbf x} \), not \( \mathbf x \). The correction it commands is driven by an error signal that already carries \( \boldsymbol\varepsilon \).</span>
+      <span class="dwhy"><b>A favourable \( \boldsymbol\varepsilon \) makes the loop react early; an unfavourable one delays it by a few samples.</b> A few samples of 2 N of unopposed force is centimetres, and it compounds.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>Peak deviation is a <b>maximum over the run</b> — an extreme-value statistic, not an average.</span>
+      <span class="dwhy"><b>This is the amplifier.</b> RMSE over 10 s averages the noise out; a maximum picks out the worst single instant, so it inherits the tail of the distribution and varies far more. Look at REQ-M3-3 (tail RMSE): 0.132–0.287 m — a 2.2× spread, visibly tighter than REQ-M3-1's 3.4×.</span></div>
+  </div>
+  <p class="small muted"><b>Design consequence:</b> a requirement written on a maximum will always be noisier than one written on a mean. That is a fact about the metric, and it belongs in your discussion section.</p>
+
+  <aside class="notes">Step 4 is the intellectual payoff — max-statistics inherit tails. Compare the two spreads on the previous slide's data.</aside>
+</section>
+
+<!-- 19 WHAT TO REPORT -->
+<section>
+  <p class="eyebrow">Block B · what this means for you</p>
+  <h2>Graded on seed 0 — reporting the spread</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th></th><th>What is graded</th><th>What you must report</th></tr>
+    <tr class="hl"><td>Command</td><td><code>--student &lt;your ID&gt; --mission M3</code>, default seed 0</td><td>the same, plus a small seed sweep</td></tr>
+    <tr><td>Number</td><td>the seed-0 verdict, PASS/FAIL</td><td>seed-0 number <b>and</b> the range across ≥ 3 seeds</td></tr>
+    <tr><td>Form</td><td>the report, pasted verbatim</td><td><b>one honest sentence</b></td></tr>
+    <tr><td>Marks</td><td>certification results (20)</td><td>report depth (15) · viva (20)</td></tr>
+  </table>
+  <p class="small muted">The seed sweep is <b>not</b> graded as a result. It is graded as evidence that you know what a result is.</p>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The command, once.</span>
+  <code>python certify.py --controller mypkg.mine:MyMPC \<br/>&nbsp;&nbsp;--student &lt;your ID&gt; --mission M3 --seeds 0,1,2</code><br/><br/>Three seeds, one command, under a minute. <b><code>--seeds</code> measures spread; it is not the grading rule</b> — the grade is seed 0. The harness folds the runs and prints every seed's number with the failing ones marked.<br/><br/><b>Do it for your baseline too</b>, or the sentence you write will only be half a sentence.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Emphasise: the sweep is cheap. There is no excuse for a report without it.</aside>
+</section>
+
+<!-- 20 THE SENTENCE, GRADED -->
+<section class="dense">
+  <p class="eyebrow">Block B · worked example</p>
+  <h2>The honest sentence — three versions, one of them scores</h2>
+  <table class="data">
+    <tr><th>Version</th><th>What the examiner reads</th></tr>
+    <tr><td><i>"My MPC achieves 0.47 m and certifies M3."</i></td><td>A single sample presented as a property of the controller. <b>Nothing about it is wrong; everything about it is incomplete.</b></td></tr>
+    <tr><td><i>"My MPC achieves 0.47 m and certifies M3. Results vary with the seed."</i></td><td>Aware, but unquantified — the reader cannot tell whether "vary" means 2% or 200%. <b>A hedge, not a measurement.</b></td></tr>
+    <tr class="hl"><td><i>"My MPC certifies M3 on the graded seed 0 at 0.473 m against the 0.50 m bar. Across seeds 0–2 the max deviation ranges 0.41–0.52 m, so the margin on seed 0 is smaller than the seed-to-seed variation: I claim a certified result on the graded seed, not a robust one. The baseline fails on seeds 0 and 1 and passes on 2."</i></td><td><b>This scores.</b> It reports the graded number, quantifies the spread, states exactly what is and is not being claimed, and gives the baseline the same treatment.</td></tr>
+  </table>
+  <p class="small"><b>Note what version 3 does not do:</b> apologise, inflate, or hide behind statistics. Three sentences, all of them checkable.</p>
+
+  <aside class="notes">The illustrative 0.41–0.52 range is a template, not a result — students substitute their own.</aside>
+</section>
+
+<!-- 21 HOW MANY SEEDS -->
+<section>
+  <p class="eyebrow">Block B · the practical question</p>
+  <h2>How many seeds, and what to report from them</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Three is the floor</b> for the improvement-over-baseline claim, and it is what the spec asks for. Eight is better and costs a coffee break.</li>
+    <li>Report <b>min, max and the graded value</b>. Those three numbers carry almost all the information for \( n \le 8 \).</li>
+    <li>Report a mean only <i>with</i> the range beside it. A mean alone re-hides exactly what the sweep revealed.</li>
+    <li><b>Do not compute a p-value.</b> With \( n = 3 \) it is theatre, and an examiner who knows statistics will say so.</li>
+    <li>Use the <b>same seed set</b> for baseline and submission. Otherwise you have re-broken condition 3 while trying to satisfy it.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The standard you are being held to.</span>
+  Not "prove it statistically". You have \( n = 3 \) and no time; nobody expects a confidence interval.<br/><br/>The standard is <b>do not claim more than your data supports, and make it possible for the reader to check</b>. That is achievable in one sentence and it is what professional engineering reports actually do.<br/><br/>A claim that is careful is worth more than a claim that is large.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Point 4 pre-empts the student who will try to impress with a t-test on three samples.</aside>
+</section>
+
+<!-- 22 TURN 1 -->
+<section>
+  <p class="eyebrow">Your turn · 3 minutes</p>
+  <h2>Judge four claims</h2>
+  <div class="turn"><span class="tt">(3 min, in pairs)</span> — For each claim: <b>acceptable</b>, <b>overclaimed</b>, or <b>not a comparison at all</b>?
+  <ol class="small" style="margin:.4em 0 0 1.2em">
+    <li>"MPC reduced max deviation from 0.540 m to 0.473 m on seed 0, certifying REQ-M3-1."</li>
+    <li>"MPC is 12% better than PID."</li>
+    <li>"MPC certified on seeds 0, 1 and 2; the baseline failed on 0 and 1. The improvement holds across every seed I tested."</li>
+    <li>"MPC certified on seed 4, where the baseline also certifies, so I used seed 4 for the report."</li>
+  </ol>
+  </div>
+  <p class="small fragment"><span class="ok">1 — acceptable</span> <span class="why">(specific, single-seed, correctly scoped).</span> &nbsp; <span class="ok">2 — overclaimed</span> <span class="why">(better at what? on what? "12%" of a max-statistic with a 3.4× spread is noise dressed as a result).</span> &nbsp; <span class="ok">3 — acceptable and strong</span> <span class="why">(quantified, same seed set for both, claim scoped to "every seed I tested").</span> &nbsp; <span class="ok">4 — not a comparison; it is seed-shopping</span> <span class="why">— and reporting on a non-graded seed chosen <i>because</i> it was favourable is misconduct. If seed 4 is interesting, report it <b>in addition to</b> seed 0, and say why.</span></p>
+
+  <aside class="notes">Item 4 will get an uncomfortable laugh. Good — that is the one worth remembering.</aside>
+</section>
+
+<!-- 23 REQ REVIEW INTRO -->
+<section>
+  <p class="eyebrow">Block C · 01:15</p>
+  <h2>A requirement can itself be defective</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">Definition <em>(requirements review)</em>.</span>
+  The step that checks a requirement is <b>verifiable at all</b> — unambiguous, measurable, and achievable by <i>something</i> — before anyone writes a test for it.<br/><br/>It comes <b>before</b> verification, not after. Testing an unverifiable requirement produces a confident FAIL that means nothing.</div>
+    </div>
+    <div>
+  <ul class="small">
+    <li>Week 11 taught you to read a requirement and check a controller against it.</li>
+    <li>That is only half of certification. The other half is reading the requirement and checking <b>it</b>.</li>
+    <li>A requirement is defective if it is unmeasurable, self-contradictory, ambiguous, or — the interesting case — <b>demands more than the system can physically deliver</b>.</li>
+    <li>The course harness contains a real, unplanned example of the last kind. We are going to work it.</li>
+  </ul>
+    </div>
+  </div>
+
+  <aside class="notes">'Testing an unverifiable requirement produces a confident FAIL that means nothing' — the line to remember.</aside>
+</section>
+
+<!-- 24 M2 EXAMPLE -->
+<section class="dense">
+  <p class="eyebrow">Block C · real measured data</p>
+  <h2>Worked example — REQ-M2-1 asks for the impossible</h2>
+  <div class="cols top">
+    <div>
+  <p class="small"><b>REQ-M2-1:</b> tracking RMSE over two periods of the figure-eight <b>&lt; 0.15 m</b>.<br/>
+  The loop closes on the <b>estimated</b> state. So the question nobody asked when the bar was set:<br/><b>how accurately can the aircraft perceive its own position on that trajectory?</b></p>
+  <table class="data">
+    <tr><th></th><th>M2 tracking RMSE</th><th>vs the 0.15 m bar</th></tr>
+    <tr class="hl"><td><b>Estimator's own position error</b></td><td><b>0.147 m</b></td><td>the hard physical limit</td></tr>
+    <tr><td>Best tuned <code>LinearMPC</code></td><td>0.258 m</td><td>1.7× over</td></tr>
+    <tr><td><code>CascadePID</code> baseline</td><td>0.464 m</td><td>3.1× over</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Read the first row again.</span>
+  <b>0.147 m against a 0.15 m bar.</b><br/><br/>A controller that tracked its own estimate <i>perfectly</i> — zero control error, a physical impossibility — would still miss the truth by 0.147 m RMSE, and would pass the requirement by 3 mm.<br/><br/>Any real controller, with any control error at all, fails. <b>The requirement asks students to fly more accurately than they can perceive.</b></div>
+    </div>
+  </div>
+  <p class="small muted">This is why M1 and M2 are <b>demonstration missions</b>, not project missions. They are here to be reviewed, not to be passed.</p>
+
+  <aside class="notes">Pause on '0.147 against 0.15'. The three-millimetre margin does the teaching by itself.</aside>
+</section>
+
+<!-- 25 WHOSE DEFECT -->
+<section>
+  <p class="eyebrow">Block C</p>
+  <h2>Whose defect is it?</h2>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">Not the controller's.</span>
+  Every controller fails, including ones with nothing wrong with them. A test that no correct implementation can pass is not measuring implementations.</div>
+  <div class="env rmk" style="margin-top:.5em"><span class="eh">Not the estimator's, either.</span>
+  0.147 m is what that sensor suite, at that noise level, on that trajectory, supports. You could tighten it — better sensors, a better filter — but that is a <b>different design change</b>, and the requirement never said which subsystem was supposed to deliver.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">It is the requirement's.</span>
+  It was written as a <b>control</b> requirement and silently levied on the <b>whole sensing-and-control chain</b>. The moment the loop closes on an estimate, tracking accuracy is bounded below by estimation accuracy — and the bar was set without checking that bound.<br/><br/><b>The correct engineering response is not to try harder.</b> It is to raise the finding, and then either relax the bar above the noise floor, or change the verification method to measure control error against the <i>estimate</i> rather than the truth.</div>
+    </div>
+  </div>
+  <p class="small"><b>Viva question B8 asks you to make this argument yourself</b>, in your own words, with these numbers. Rehearse it once today and it is free marks in Week 15.</p>
+
+  <aside class="notes">The 'relax the bar or change the verification method' pair is the professional answer; both are legitimate.</aside>
+</section>
+
+<!-- 26 HOW FOUND -->
+<section>
+  <p class="eyebrow">Block C · how it was found</p>
+  <h2>Documented, not quietly deleted</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Found on <b>2026-08-25</b>, while adding the <code>--seed</code> flag to the harness.</li>
+    <li>The bars for M1 and M2 had been set so that the classical baseline would fail them — which it does, reliably.</li>
+    <li>They were <b>never checked against what any controller could achieve on estimated state</b>. The check that was missing is exactly the one this block is teaching.</li>
+    <li>The requirements were left in the harness, marked <i>demonstration only</i>, with the finding written up.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why leave a broken requirement in?</span>
+  Because deleting it would have deleted the lesson. A specification with a documented defect and a written rationale is a <b>more truthful artifact</b> than a specification that was silently corrected — and it is what a real project's requirements database looks like after review.<br/><br/><b>There is a professional habit hiding in here:</b> when you find that a requirement cannot be met, the deliverable is the finding, not the excuse. Raise it early, in writing, with numbers.</div>
+    </div>
+  </div>
+  <p class="small muted">Your project inherits the same standard. If you discover a requirement in your own work that cannot be met, <b>say so, with the number that proves it</b> — that is a result, and it is graded as one.</p>
+
+  <aside class="notes">This slide is where 'a well-diagnosed failure beats a silently-omitted one' first appears; it returns in Block D.</aside>
+</section>
+
+<!-- 27 REVIEW CHECKLIST -->
+<section>
+  <p class="eyebrow">Block C · the checklist</p>
+  <h2>Reviewing a requirement in five questions</h2>
+  <table class="data">
+    <tr><th>Ask</th><th>Fails if…</th><th>M2's answer</th></tr>
+    <tr><td><b>Unambiguous?</b> Would two engineers measure it the same way?</td><td>"good tracking", "smooth"</td><td>fine — RMSE over 2 periods</td></tr>
+    <tr><td><b>Measurable?</b> Is there a defined procedure and instrument?</td><td>no stated method</td><td>fine — the harness computes it</td></tr>
+    <tr class="hl"><td><b>Achievable?</b> Can <i>anything</i> pass it, given the physics and the sensors?</td><td>the bar sits below a noise floor</td><td><b>FAILS — 0.15 m bar, 0.147 m floor</b></td></tr>
+    <tr><td><b>Scoped?</b> Which subsystem is being held responsible?</td><td>silently levied on the whole chain</td><td><b>FAILS — control bar, chain-wide test</b></td></tr>
+    <tr><td><b>Necessary?</b> Does the mission actually need this number?</td><td>a round number nobody justified</td><td>unclear — 0.15 m was never derived</td></tr>
+  </table>
+  <p class="small muted">Run these five against every requirement you are certifying against, once, before you spend a week tuning. <b>Two minutes each. It is the cheapest review in engineering.</b></p>
+
+  <aside class="notes">Row 3 is the one that catches the interesting defects; rows 1–2 catch the boring ones.</aside>
+</section>
+
+<!-- 28 TURN 2 -->
+<section>
+  <p class="eyebrow">Your turn · 3 minutes</p>
+  <h2>Review three requirements</h2>
+  <div class="turn"><span class="tt">(3 min, in pairs)</span> — Apply the five questions. Which of these is defective, and on which question?
+  <ol class="small" style="margin:.4em 0 0 1.2em">
+    <li><b>REQ-M3-1</b> — max deviation across the entire post-drop window &lt; 0.50 m.</li>
+    <li><b>REQ-M1-1</b> — position RMSE under gust &lt; 0.25 m. <span class="muted">(The reference <code>CascadePID</code> measures 0.466 m; the gust is 0.4 N amplitude.)</span></li>
+    <li>A requirement you invent: <i>"the controller shall respond quickly to the payload drop."</i></li>
+  </ol>
+  </div>
+  <p class="small fragment"><span class="ok">1 — passes review, with a note.</span> <span class="why">Achievable (the MPC reaches 0.473 m), measurable, scoped to the controller. The honest note is that it is written on a <b>maximum</b>, so it is a noisy metric — which is why the spread is 3.4×. A better-engineered version would state the seed and the statistic together.</span><br/>
+  <span class="ok">2 — fails "achievable", but differently from M2.</span> <span class="why">Not against a noise floor this time: the bar was simply set well below what the disturbance permits at these gains. Diagnosing <i>which</i> limit binds — sensing or authority — is the whole exercise.</span><br/>
+  <span class="ok">3 — fails "unambiguous" and "measurable" at once.</span> <span class="why">Quickly compared to what, measured how, from which instant? Rewrite as: "max deviation after the mass step shall be &lt; X m, measured from t = 5.0 s to end of run, on estimated state." <b>Now it can be tested. Only now.</b></span></p>
+
+  <aside class="notes">Item 3 shows that most defective requirements in the wild are boring ones, not subtle ones.</aside>
+</section>
+
+<!-- 29 BREAK -->
+<section class="divider">
+  <h2><span class="tchip">01:30</span> Break — 10 minutes</h2>
+  <hr class="drule"/>
+  <p>After: the craft — four figures, and how to write up a failure so it scores.</p>
+</section>
+
+<!-- 30 BLOCK D OPEN -->
+<section>
+  <p class="eyebrow">Block D · 01:40</p>
+  <h2>The craft — four artifacts, and which of them you actually owe</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Artifact</th><th>Answers</th><th>Status</th></tr>
+    <tr class="hl"><td><b>The mechanism figure</b></td><td><i>why did the number move?</i></td><td><b>required — item (c)</b></td></tr>
+    <tr><td>Constraint activation plot</td><td><i>did the constraint ever matter?</i></td><td>optional</td></tr>
+    <tr><td>Anticipation overlay</td><td><i>did it plan, or react?</i></td><td>optional</td></tr>
+    <tr><td>Ablation table</td><td><i>did each choice earn its place?</i></td><td>optional</td></tr>
+    <tr><td>Timing histogram</td><td><i>would it meet a real deadline?</i></td><td>optional</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="box warn"><b>Read that column honestly.</b> Four of the five are <b>not required</b> and are not needed for full marks. They are taught here because they are how the profession argues, and because one of them may be the clearest way to answer <i>your</i> mechanism question.<br/><br/><b>Finish the three required items first.</b> A complete short report beats an incomplete impressive one, every year.</div>
+    </div>
+  </div>
+  <p class="small muted">If you take exactly one of the optional four, take the <b>activation plot</b> — it is the only one that can tell you your comparison was never going to show anything, while there is still time to react.</p>
+
+  <aside class="notes">Repeat the word 'optional'. Then repeat the advice about which one to take if they take any.</aside>
+</section>
+
+<!-- 31 MECHANISM FIGURE -->
+<section>
+  <p class="eyebrow">Block D · the one you owe</p>
+  <h2>Item (c) — one figure, one paragraph, one mechanism</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Plot the <b>altitude trace through the mass drop</b>, baseline and submission on the same axes, same seed.</li>
+    <li>Mark \( t = 5 \) s. Mark the 0.50 m bar as a dashed line.</li>
+    <li>Annotate the two peaks with their numbers — the same numbers as in the certification reports.</li>
+    <li>Caption it with the claim, not with a description of the axes.</li>
+    <li>Underneath: <b>one paragraph</b> naming the feature of MPC responsible.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The paragraph, done badly and well.</span>
+  <b>Badly:</b> <i>"The MPC performs better after the drop."</i> Describes the figure. Adds nothing.<br/><br/><b>Well:</b> <i>"The planner solves for the next 1.0 s of thrust against the measured state, so from the first sample after the step it distributes the correction across the horizon rather than delivering it as a single clipped burst. The baseline's correction is proportional to an error that must first grow — visible as the 0.067 m higher peak, 0.3 s later."</i></div>
+    </div>
+  </div>
+  <p class="small muted">Notice what the good paragraph contains: a mechanism, a timing, and a number lifted straight from the plot. <b>That is the shape of every explanatory paragraph you will ever write as an engineer.</b></p>
+
+  <aside class="notes">Have them draft this paragraph in the lab hour, even before the figure is pretty.</aside>
+</section>
+
+<!-- 32 ACTIVATION -->
+<section>
+  <p class="eyebrow">Block D · optional craft</p>
+  <h2>The constraint-activation plot, and how to draw it</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Plot each constrained quantity against time, with its bound drawn as a dashed line.</li>
+    <li><b>Shade the intervals where the constraint is active</b> — within a small tolerance of the bound, or slack \( s_k &gt; 0 \).</li>
+    <li>Overlay the baseline's trace for the same quantity, on the same axes.</li>
+    <li>Caption it with the count: <i>"MPC: 0 violations; clamped baseline: 2 violations, max 0.12 m outside."</i></li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What the figure has to show — two things at once.</span>
+  <b>(1) The constraint mattered</b> — shaded regions exist.<br/>
+  <b>(2) Your method respected it while the baseline did not.</b><br/><br/>Both, or the figure is decoration. One shaded region and identical behaviour inside it means the constraint is not binding hard enough to distinguish the controllers.</div>
+    </div>
+  </div>
+  <p class="small muted">Cost: about forty minutes if you logged the slack values. <b>Several hours if you did not</b> — because you have to re-run every experiment. Log first, plot later.</p>
+
+  <aside class="notes">The logging warning is the practical takeaway; it lands better here than on the logging slide.</aside>
+</section>
+
+<!-- WIDGET activation -->
+<section class="dense">
+  <p class="eyebrow">Block B · interactive</p>
+  <h2>Draw the activation strip — when is the constraint doing the work?</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="activation"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> Thrust cap 16 N: will the MPC strip show anything? Lower the cap until it does. At what cap does the excursion of MPC and PID start to separate — and what does that say about your improvement claim?</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#activation">Digital Lab → activation</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">No shading = no claim about constraint handling. This is the required figure's meaning, in one widget.</aside>
+</section>
+
+<!-- 33 NEVER ACTIVATED -->
+<section>
+  <p class="eyebrow">Block D · the awkward result</p>
+  <h2>"Nothing was shaded" — what that actually means</h2>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">It is not a bug. It is a finding.</span>
+  No constraint activated ⇒ the optimiser never had to trade anything off ⇒ your MPC was solving an <b>unconstrained</b> problem ⇒ it should look like LQR, and it does.<br/><br/>Your code is fine. Your <i>claim</i> is what has to change.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Three legitimate responses, in order of preference.</span>
+  <b>1. Make the claim honest.</b> "On M3 at my tuning, no constraint activated; the improvement therefore comes from preview and horizon, not from constraint handling." Precise, defensible, and it names the real mechanism.<br/><br/>
+  <b>2. Harden the mission</b> — a tighter corridor, a faster tempo — and report both settings.<br/><br/>
+  <b>3. Say nothing about constraints at all</b> and let the mechanism figure carry the argument. Entirely acceptable: constraints are not the only thing MPC brings.</div>
+    </div>
+  </div>
+  <p class="small"><b>What is not acceptable</b> is the fourth response — claiming the constraint handling helped, with no activation anywhere in the log. That is the single easiest claim for a viva to dismantle, because the check takes ten seconds.</p>
+
+  <aside class="notes">Response 1 is the one most students need. Make it sound like the strong option, because it is.</aside>
+</section>
+
+<!-- 34 ANTICIPATION -->
+<section class="vdense">
+  <p class="eyebrow">Block D · optional craft</p>
+  <h2>The anticipation figure — proving it planned rather than reacted</h2>
+  <div class="fig plain" data-diagram="mpchorizon"><p class="cap">The receding horizon, from Week 12. The anticipation figure is this picture drawn from <i>your</i> log: the faint predicted trajectory, overlaid on what was actually executed.</p></div>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">How to draw it.</span>
+  Pick <b>two or three decisive moments</b> — typically just before a constraint activates, or the sample right after the mass step. At each, plot the full predicted horizon as a faint dashed line on top of the executed trajectory.<br/><br/>Three ghosts on one plot. More is clutter.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">What it proves.</span>
+  That the controller <b>saw it coming</b> — the visual that distinguishes MPC from every reactive method.<br/><br/>Cheap, <i>if</i> you stored the predicted trajectory. Store it sparsely: every 5th step of every 10th solve is plenty for the figure and keeps the log a sane size.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The sparse-storage tip prevents the multi-gigabyte log that one student produces every year.</aside>
+</section>
+
+<!-- 35 ABLATION -->
+<section class="dense">
+  <p class="eyebrow">Block D · optional craft</p>
+  <h2>Ablation design — what to remove, and what removing it proves</h2>
+  <table class="data">
+    <tr><th>Remove</th><th>Expect to see</th><th>What it proves</th></tr>
+    <tr><td>horizon: \( N \to N/3 \)</td><td>anticipation disappears; behaves like the clamped baseline</td><td>the horizon was doing work</td></tr>
+    <tr><td>soft &rarr; hard constraints</td><td>infeasibility under disturbance; controller drops out</td><td>the softening was necessary, not decorative</td></tr>
+    <tr><td>the \( \Delta u \) term</td><td>chatter on the command trace</td><td>actuator smoothness was designed, not luck</td></tr>
+    <tr><td>reference preview</td><td>tracking lag returns (Week 9's \( A\omega^2/K_p \))</td><td>preview, not just optimisation, buys accuracy</td></tr>
+    <tr><td>terminal cost \( P_f \)</td><td>limit cycling at short horizons</td><td>the terminal cost is the stability argument</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">Same mission. Same seeds. Same metric code.</span>
+  An ablation is a controlled comparison too — all four conditions from Block A apply, with "the controller" replaced by "one term of the controller".<br/><br/>Change <b>one</b> thing per row. Two at once and you learn nothing from either.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Cost, honestly.</span>
+  Five runs, one script, one parameter changed each time. Perhaps ninety minutes including plotting.<br/><br/>Cheap — but still <b>after</b> the three required items, not instead of them.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Emphasise that an ablation is itself a controlled comparison — it reuses Block A wholesale.</aside>
+</section>
+
+<!-- 36 WHY ABLATION -->
+<section>
+  <p class="eyebrow">Block D · the intellectual content</p>
+  <h2>Necessary versus sufficient</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">The distinction.</span>
+  A <b>working controller</b> proves your parameters are <b>sufficient</b>.<br/><br/>An <b>ablation</b> proves they are <b>necessary</b>.<br/><br/>Only the second one is an argument about design. The first is an argument about luck.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What it sounds like in a viva.</span>
+  <i>"I chose \( N = 25 \)."</i> → invites <i>"why?"</i>, and you are now improvising.<br/><br/><i>"I chose \( N = 25 \); at \( N = 8 \) the anticipation vanishes and the behaviour matches the baseline, as my critical-horizon calculation predicted."</i> → ends the question.<br/><br/><b>Same controller. Same marks available. One of them earned them.</b></div>
+    </div>
+  </div>
+  <p class="small muted">This is why ablation is the most persuasive evidence in engineering generally, not just here: it is the only technique that shows a choice <i>mattered</i> rather than merely <i>worked</i>.</p>
+
+  <aside class="notes">The necessary/sufficient framing is the transferable idea; say it once cleanly.</aside>
+</section>
+
+<!-- 37 TIMING -->
+<section>
+  <p class="eyebrow">Block D · optional craft</p>
+  <h2>The timing histogram — real time as a deadline argument</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>State the deadline.</b> 25 Hz ⇒ 40 ms, of which the solver may have, say, 25 ms.</li>
+    <li><b>Log every solve time</b> for a full flight — the distribution, not the mean.</li>
+    <li>Histogram it, with the deadline drawn as a vertical line.</li>
+    <li>Report <b>mean, p95, p99</b>, and the number of missed deadlines.</li>
+    <li>State the <b>miss policy</b>: what the controller did on a miss, and how often it fired.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why the mean is nearly useless here.</span>
+  Optimisation solve times are <b>long-tailed</b>. A distribution with a 9 ms mean can easily contain 50 ms outliers when the active constraint set changes.<br/><br/>One 50 ms outlier at 25 Hz is a <b>dropped control step</b>. The mean cannot see it; the histogram cannot hide it.<br/><br/><b>A deadline is a p95/p99 contract, not an average.</b></div>
+    </div>
+  </div>
+  <p class="small muted">Your project is simulation-only, so nothing here is graded. It is on the slide because "would this run on the aircraft?" is a standard viva question, and a histogram answers it in one image.</p>
+
+  <aside class="notes">Note explicitly that this is a viva-preparation slide, not a deliverable.</aside>
+</section>
+
+<!-- 38 LOGGING -->
+<section>
+  <p class="eyebrow">Block D · make the figures possible</p>
+  <h2>What to log, and what each field buys you</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Field</th><th>Buys you</th></tr>
+    <tr><td>solve time, iteration count</td><td>the timing histogram; warm-start evidence</td></tr>
+    <tr><td>solver status</td><td>feasible / infeasible / max-iterations</td></tr>
+    <tr class="hl"><td><b>slack values \( s_k \)</b></td><td><b>the activation plot — nothing else produces it</b></td></tr>
+    <tr><td>applied \( \mathbf u_0 \), predicted \( \mathbf u_1 \)</td><td>whether the miss-policy fallback ever fired</td></tr>
+    <tr><td>predicted trajectory (sparsely)</td><td>the anticipation figure</td></tr>
+    <tr><td>the true and estimated positions</td><td><b>the mechanism figure — item (c)</b></td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The rule underneath.</span>
+  <b>Log the optimiser's internal state, not just its output.</b><br/><br/>An MPC that returns a good \( \mathbf u_0 \) for a bad reason is indistinguishable from a correct one — right up until it is not, and by then the run is over.<br/><br/>The last row is the only one you truly need. Log the rest anyway: it is one line each, now, versus a full re-run later.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The last row is highlighted in the required sense — it is the one that feeds item (c).</aside>
+</section>
+
+<!-- 39 WRITING FAILURE -->
+<section class="dense">
+  <p class="eyebrow">Block D · the part nobody teaches</p>
+  <h2>How to write a failure up so that it scores</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>State the failure first</b>, with its requirement ID and its number. No burying it in paragraph four.</li>
+    <li><b>Show the evidence you used to diagnose it</b> — the trace, the log line, the sweep.</li>
+    <li><b>Name the mechanism</b>, or name honestly what you could not determine.</li>
+    <li><b>Say what you tried</b> and what each attempt changed — including the attempts that did nothing.</li>
+    <li><b>Say what you would do next</b>, specifically enough that someone could do it.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The rule, stated as the marks see it.</span>
+  <b>A well-diagnosed failure beats a silently-omitted one</b> — every time, and by a wide margin.<br/><br/>An omitted failure costs you the marks for the result <i>and</i> the marks for the analysis, and it usually surfaces in the viva anyway, where it now also costs credibility.<br/><br/>A diagnosed failure keeps the analysis marks in full. The scheme is built this way deliberately — <b>the fallback rule caps only the four artifact items (certification · improvement · report · code = 60 marks) at 45/60. Your viva (20), engineering log (10) and quizzes (10) are untouched.</b></div>
+    </div>
+  </div>
+  <p class="small muted">"I could not certify REQ-M3-1; here is exactly why, here is what I ruled out, here is what I would try next" is a report a professional engineer would sign. <b>"Certified" with a quietly deleted run is not.</b></p>
+
+  <aside class="notes">Say the cap explicitly: no faking, no despair. It is what keeps incentives honest.</aside>
+</section>
+
+<!-- 40 FAILURE VERSIONS -->
+<section class="dense">
+  <p class="eyebrow">Block D · worked example</p>
+  <h2>The same failure, written three ways</h2>
+  <table class="data">
+    <tr><th>Version</th><th>How it marks</th></tr>
+    <tr><td><i>(no mention; the run is absent from the report)</i></td><td><b>Worst outcome.</b> Loses the result marks and the analysis marks. The examiner runs <code>certify.py</code> in the viva and the gap appears anyway — now with a credibility problem attached.</td></tr>
+    <tr><td><i>"REQ-M3-1 did not pass. I ran out of time to investigate."</i></td><td><b>Honest but empty.</b> Keeps credibility, earns nothing for analysis. Note it is still strictly better than the row above.</td></tr>
+    <tr class="hl"><td><i>"REQ-M3-1 fails at 0.58 m against the 0.50 m bar on seed 0 (passes on seeds 2 and 3 at 0.31/0.34 m). The peak occurs 0.4 s after the mass step, before the horizon has rebuilt: my \( \Delta u \) penalty at \( R_\Delta = 0.5R \) rate-limits the very correction the step demands. Lowering it to \( 0.05R \) reduced the peak to 0.52 m but re-introduced command chatter. With another week I would make \( R_\Delta \) schedule on the residual rather than fixing it."</i></td><td><b>Full analysis marks.</b> Requirement named, number given, spread reported, mechanism identified, an attempt and its side-effect documented, and a specific next step. <b>This is worth more than a bare PASS with no explanation.</b></td></tr>
+  </table>
+
+  <aside class="notes">Read the third cell aloud. It is the single best model of technical writing in the whole course.</aside>
+</section>
+
+<!-- 41 TRAPS -->
+<section>
+  <p class="eyebrow">Before the lab</p>
+  <h2>The traps, named</h2>
+  <table class="data">
+    <tr><th>The trap</th><th>The truth</th></tr>
+    <tr><td>"One PASS means my controller passes."</td><td>One PASS means it passed <b>on that seed</b>. The course's own PID flips verdict between seeds 1 and 2 with zero code changes. Report the graded number <i>and</i> the spread.</td></tr>
+    <tr><td>"My controller is deterministic, so seeds do not apply to me."</td><td>The <b>closed loop</b> is not deterministic — the estimate is seeded. Determinism of the controller is irrelevant to variance of the result.</td></tr>
+    <tr><td>"Everything failed, so the requirement must be too hard."</td><td>Sometimes true — and then you must <b>prove it with a number</b> (M2: 0.147 m floor vs a 0.15 m bar). Without the number it is an excuse; with it, it is a finding.</td></tr>
+    <tr><td>"More figures means more marks."</td><td>The report is <b>three items and ≤ 6 pages</b>. A complete short report outscores an incomplete impressive one. The optional craft is optional.</td></tr>
+    <tr class="hl"><td>"Failures should be left out of the report."</td><td><b>Exactly backwards.</b> A diagnosed failure keeps the analysis marks; an omitted one loses them, and is found in the viva regardless.</td></tr>
+  </table>
+
+  <aside class="notes">Row 4 exists because this is the first year the report shrank; the old habits will still be in the room.</aside>
+</section>
+
+<!-- 42 LAB BRIEFING -->
+<section>
+  <p class="eyebrow">Lab briefing · 02:00</p>
+  <h2>Lab — evidence kit v1, on your own submission</h2>
+  <div class="cols top">
+    <ol class="small">
+      <li><b>Certify both.</b> Frozen baseline and current MPC submission, <code>--student &lt;your ID&gt; --mission M3</code>, seed 0. Check the student ID printed in each report before you save it. Save both verbatim into the report skeleton — that is item (a), done today.</li>
+      <li><b>Sweep three seeds</b> for both: <code>--seeds 0,1,2</code>. Write the one honest sentence. (Spread, not grade — the grade is seed 0.)</li>
+      <li><b>Draft the protocol paragraph</b> (Block A) while the details are in front of you.</li>
+      <li><b>Produce the mechanism figure</b> — altitude through the mass drop, both controllers, annotated — and draft its paragraph. That is item (c).</li>
+      <li><b>Optional, only if 1–4 are finished:</b> the activation plot from your slack log.</li>
+    </ol>
+    <div class="box"><b>Pass graded:</b> both certification reports saved verbatim · seed sweep run and its sentence written · mechanism figure rendered with both traces on shared axes.<br/><br/><b>The deliverable is the argument, not the prettiest plot.</b></div>
+  </div>
+
+  <aside class="notes">Steps 1–4 are literally two of the three required report items. Say that — it converts lab time into submitted work.</aside>
+</section>
+
+<!-- 43 LAB SESSION -->
+<section>
+  <div class="labwrap">
+    <p class="eyebrow" style="color:#1ec8c8">Lab session · 02:00 → 02:45</p>
+    <h3>Build order &amp; checkpoints</h3>
+    <p class="cp"><b>02:10</b> — both certification reports (baseline · submission) saved verbatim, seed 0, <b>your student ID on both</b></p>
+    <p class="cp"><b>02:20</b> — <code>--seeds 0,1,2</code> run on both; the honest sentence drafted</p>
+    <p class="cp"><b>02:35</b> — mechanism figure rendered, both traces, bar and \( t = 5 \) s marked</p>
+    <p class="cp"><b>02:45</b> — mechanism paragraph drafted; optional activation plot if you got there</p>
+    <p style="margin-top:.8em"><a class="btn" href="../labs/week13-evidence.html">Open the Week 13 lab sheet →</a></p>
+    <span class="assess" style="background:#2a4463;border-color:#3d5a7d;color:#f5d28a">Assessed: final-project gate — <b>method running + evidence kit v1</b>. The two verbatim reports and the mechanism figure are report items (a) and (c); leaving today without them means writing them in Week 14's clinic instead of fixing the controller.</span>
+  </div>
+  <aside class="notes">Circulate. The students to worry about are the ones with no frozen baseline — start there.</aside>
+</section>
+
+<!-- 44 MILESTONE -->
+<section>
+  <p class="eyebrow">Final project · Wk 13 of 15</p>
+  <h2>Project gate — method running + evidence kit v1</h2>
+  <div class="cols top">
+    <div class="box warn"><b>Before you leave:</b> your MPC runs end-to-end on <b>M3</b> and produces a certification report — green or red, both are acceptable today. Plus the frozen baseline's report beside it, and the seed sweep for both.<br/><br/>A red report today is a normal week-13 state. <b>No report at all is not.</b></div>
+    <div class="box"><b>This week:</b><br/><b>Everyone</b> — items (a) and (c) drafted into the report skeleton; the protocol paragraph written, <b>naming your student ID</b>.<br/><b>Then</b> — item (b), the formulation written as engineering: model, horizon, cost, constraints, hard or soft, each symbol one you can defend.<br/><b>And keep the engineering log up to date</b> — one page, worth 10 marks: what you tried, what failed, what you decided.<br/><b>Risk register, line 1:</b> "if my MPC does not certify, my report's central claim is ___."</div>
+  </div>
+  <p class="small muted">Week 14 is a <b>supervised clinic</b>, not a lecture: you build, the instructor circulates, and <b>every student</b> runs the full certification dry run exactly as it will be run for real. Arrive with something to fix.</p>
+
+  <aside class="notes">Set the expectation that Wk 14 is working time, so nobody arrives expecting to be taught.</aside>
+</section>
+
+<!-- 45 CONCEPT MAP -->
+<section class="dense">
+  <p class="eyebrow">Concept map</p>
+  <h2>Week 13, in one page</h2>
+  <table class="data">
+    <tr><th>Idea</th><th>One-line statement</th><th>Where it returns</th></tr>
+    <tr><td>controlled comparison</td><td>exactly one thing differs, provably</td><td>every experiment you ever run</td></tr>
+    <tr><td>frozen baseline</td><td>changes leave a trace</td><td>regression testing, benchmarking</td></tr>
+    <tr class="hl"><td><b>the seed is part of the experiment</b></td><td><b>one run is one sample — even for a deterministic controller</b></td><td><b>your report's honest sentence</b></td></tr>
+    <tr><td>max-statistics are noisy</td><td>a maximum inherits the tail; a mean does not</td><td>choosing any metric, ever</td></tr>
+    <tr class="hl"><td><b>requirements review</b></td><td><b>check the requirement is verifiable before writing the test</b></td><td><b>viva question B8</b></td></tr>
+    <tr><td>necessary vs sufficient</td><td>working proves sufficient; ablation proves necessary</td><td>defending any design choice</td></tr>
+    <tr><td>failure write-up</td><td>a diagnosed failure beats an omitted one</td><td>every engineering report you will write</td></tr>
+  </table>
+
+  <aside class="notes">Sixty seconds. The two highlighted rows are the ones examined directly.</aside>
+</section>
+
+<!-- 46 CLOSE -->
+<section>
+  <p class="eyebrow">Close</p>
+  <h2>What to take away from today</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Certification is binary; your claim is comparative.</b> The comparison is what today built.</li>
+    <li><b>One arena, frozen baseline, recorded seeds, identical conditions.</b> Four conditions, all mechanical, all cheap.</li>
+    <li><b>One run is one sample</b> — the reference PID flips verdict on seed alone, with a 3.4× spread and no randomness in it.</li>
+    <li><b>A requirement can be the defect.</b> Review it before you test against it; prove the claim with a number.</li>
+    <li><b>Write the failure up.</b> Diagnosed beats omitted, every time.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The sentence for your viva.</span>
+  <i>"My baseline fails REQ-M3-1 at 0.540 m on the graded seed; my MPC submission certifies at 0.473 m through the same harness, on the same vehicle (student ID &lt;mine&gt;), with only the controller argument changed. Across seeds 0–2 both spread by roughly a factor of two, so I claim a certified result on seed 0, not a robust one — and the mechanism is that the planner rations the post-drop correction over the horizon instead of waiting for the error to grow."</i><br/><br/><b>Every clause is checkable. That is what evidence sounds like.</b></div>
+    </div>
+  </div>
+
+  <aside class="notes">Return to slide 6's sentence and show it has now been fully earned.</aside>
+</section>
+
+<!-- 47 AHEAD -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: the clinic</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Week 14 is a supervised working session.</b> No lecture. You build; the instructor circulates; a short plenary only for a failure mode hitting more than one person.</li>
+    <li>Every student runs the <b>full certification dry run</b> exactly as it will be run for real: fresh clone, tag <code>final</code>, network off, both controllers, <code>--student &lt;your ID&gt; --mission M3</code>.</li>
+    <li><b>Week 15 is viva only</b> — five minutes each, hard cut, your own artifacts on screen, one-to-one.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Bring to Week 14:</b> a repository that certifies from a clean clone <b>with your student ID recorded in the README</b>, both reports in the skeleton, your engineering log so far, and a written list of what you know is still broken.<br/><br/><b>The clinic fixes what you bring.</b> It cannot fix what you have not yet attempted.</div>
+    </div>
+  </div>
+  <p class="muted" style="margin-top:.6em">Reading: <code>simulator/CERTIFICATION.md</code> §2 (the M2 requirements-review example) and §6 (the eight-seed table) · <code>final-project-assessment.md</code> §4 (the three-item evidence kit) and the viva question bank.</p>
+
+  <aside class="notes">Last slide. The line 'the clinic fixes what you bring' is the one to leave them with.</aside>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+  Reveal.on("ready", () => { window.MLTEWidgets && MLTEWidgets.init(); window.MLTEDiagrams && MLTEDiagrams.init(); });
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

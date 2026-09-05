@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 12 — Model Predictive Control · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 12 · MPC<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1 TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Model Predictive Control</h1>
+    <p class="tp-sub">模型預測控制</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 12 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. The session plan follows; keep this up while people settle.</aside>
+</section>
+
+<!-- 2 AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan</h2>
+  <table class="agenda">
+    <tr><th>Clock</th><th>Segment</th><th></th></tr>
+    <tr><td class="t">00:00</td><td><b>Quiz Q-Wk12</b> (on Week 11: repair an unverifiable requirement) · then recap: the requirement CascadePID misses</td><td>10′</td></tr>
+    <tr><td class="t">00:10</td><td><b>Block A</b> — the finite-horizon OCP, piece by piece · receding horizon · the QP</td><td>40′</td></tr>
+    <tr><td class="t">00:50</td><td>Concept check + the wall, live</td><td>10′</td></tr>
+    <tr><td class="t">01:00</td><td><b>Block B</b> — implementation: model, solver, real-time contract, tuning</td><td>30′</td></tr>
+    <tr class="break"><td class="t">01:30</td><td>Break</td><td>10′</td></tr>
+    <tr><td class="t">01:40</td><td>Lab briefing</td><td>10′</td></tr>
+    <tr class="lab"><td class="t">01:50</td><td><b>Lab session</b>: read <code>mpc.py</code>, plan around a thrust limit, tune it</td><td>60′</td></tr>
+    <tr><td class="t">02:50</td><td>Debrief + <b>baseline freeze</b></td><td>10′</td></tr>
+  </table>
+</section>
+
+<!-- 3 RECAP -->
+<section class="dense">
+  <p class="eyebrow">Recap → today</p>
+  <h2>Where the classical stack runs out of road</h2>
+  <div class="cols">
+    <ul>
+      <li>Wk 7's LQR scorecard had two highlighted rows: <b>input limits: not represented</b> · <b>valid near hover only</b>.</li>
+      <li>Wk 11 turned that from an opinion into a <b>certificate</b>: on mission M3, the reference <code>CascadePID</code> <b>fails REQ-M3-1</b> — max deviation <b>0.540 m</b> against a 0.50 m bar.</li>
+      <li>Nothing is wrong with the tuning. The controller simply has no way to know a limit exists until it has crossed it.</li>
+    </ul>
+    <div class="box warn"><b>Today's move:</b> stop hiding constraints in clamps and folklore. Write them into the optimization itself — and re-solve that optimization <i>every control step</i>, from wherever you actually are. The reference <code>LinearMPC</code> does exactly that and certifies at <b>0.473 m</b>. That before/after <i>is</i> your final project.</div>
+  </div>
+  <p class="small muted"><b>0.540 m and 0.473 m are the course-default vehicle</b> — the shared lecture example, run with no <code>--student</code> argument. <b>Your own vehicle's numbers will differ.</b> The <i>pattern</i> does not: on every student vehicle the baseline fails REQ-M3-1 and the reference MPC certifies.</p>
+  <aside class="notes">Put the two numbers on the board and leave them there: 0.540 fails, 0.473 passes, same mission, same seed, course-default vehicle. Say the caveat once — their own numbers differ, the pattern does not. Everything today is the mechanism behind that gap.</aside>
+</section>
+
+<!-- 4 OBJECTIVES -->
+<section>
+  <p class="eyebrow">Learning objectives</p>
+  <h2>By the end of today you can…</h2>
+  <ul>
+    <li>Write the <b>finite-horizon OCP</b>: prediction model, stage cost, terminal cost, constraint sets — and defend each choice.</li>
+    <li>Explain <b>receding horizon</b>: why solve for \(N\) moves and apply one.</li>
+    <li>Recognize the problem as a <b>QP</b>, and say why convexity is the whole ballgame.</li>
+    <li>Reason about <b>horizon length, feasibility, and stability</b> (terminal ingredients) at an engineer's level.</li>
+    <li>Choose a <b>prediction model</b> and a <b>solver</b>, and state the <b>real-time contract</b> (p95 solve time, warm start, miss policy) your controller runs under.</li>
+    <li>Diagnose the standard <b>tuning pathologies</b> and turn the right knob, in the right order.</li>
+    <li><span class="pill">Lab</span> Read <code>mpc.py</code> end to end and make <code>LinearMPC</code> plan around a thrust limit instead of clipping into it.</li>
+  </ul>
+</section>
+
+<!-- 4c. CHESS -->
+<section class="dense">
+  <p class="eyebrow">Mental picture first</p>
+  <h2>You already run a receding horizon — at the chessboard</h2>
+  <div class="cols">
+    <figure class="photo"><img src="../assets/img/chess.jpg" alt="" style="max-height:290px"/><figcaption>World Championship 2021. A grandmaster calculates a deep line, plays one move, and — after the reply — calculates again from the new position. Nobody plays the whole game open-loop. <span class="cr">Photo: V. Barskij, Wikimedia Commons, CC BY-SA 3.0.</span></figcaption></figure>
+    <ul class="small">
+      <li><b>Plan deep, commit one move, replan:</b> that is the entire receding-horizon idea. Feedback enters through the opponent's reply — for us, through the measured state.</li>
+      <li>Depth costs time (the clock = our control period); shallow search misses tactics (our critical horizon at the wall).</li>
+      <li>Rules constrain every candidate line <i>during</i> search, not by vetoing after — exactly where MPC parts ways with clamped LQR.</li>
+    </ul>
+  </div>
+  <aside class="notes">One minute. Each mapped element returns formally within 30 minutes: horizon = depth, period = clock, constraints in-search, replan = feedback. Refer back to the photo each time.</aside>
+</section>
+
+<!-- MP 11 -->
+<section>
+  <p class="eyebrow">Mental picture first</p>
+  <h2>Braking before a wall: the whole method in one problem</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>You are moving at 1.3 m/s toward a wall 1 m away. Your brakes give at most 1 m/s&sup2;. When do you start braking?</li>
+    <li><b>A reactive controller</b> brakes in proportion to how close you are &mdash; and with a bounded brake, it starts too late and hits the wall.</li>
+    <li><b>You</b> do not do this. You compute, roughly, that stopping takes 1.3 s and 0.85 m, and you begin braking <i>before</i> the error is large.</li>
+    <li>That is the entire difference. <b>Anticipation requires prediction; prediction requires a model.</b></li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why this problem and not a quadrotor.</span>
+  Because it strips the idea to one dimension and one constraint, and you can compute the answer in your head. Every complication in the rest of the lecture &mdash; horizons, feasibility, terminal costs &mdash; is machinery for doing <i>this</i>, reliably, on a twelve-state aircraft, sixty times a second.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(90 s)</span> — Before any mathematics: at what distance <i>must</i> you begin braking? <span class="muted">(\( d = v^2/2a = 0.85 \) m &mdash; so you have 0.15 m of slack, and any controller that has not started by then hits the wall no matter how it is tuned.)</span></div>
+
+  <aside class="notes">Lead with the everyday version and the hand calculation; the widget then confirms what they already reasoned.</aside>
+</section>
+
+<!-- CQ 11 -->
+<section class="dense">
+  <p class="eyebrow">Concept check</p>
+  <h2>Three questions before the lab</h2>
+  <div class="quiz">
+    <div class="q">Q1 &mdash; Your MPC and your LQR produce identical trajectories on the mission. Is something broken?</div>
+    <p class="fragment"><span class="ok">Almost certainly not &mdash; it means no constraint activated.</span> <span class="why">Unconstrained, linear, quadratic \( \Rightarrow \) MPC provably reduces to LQR with preview. Check the activation plot; if nothing is shaded, the mission is not exercising the method.</span></p>
+    <div class="q fragment">Q2 &mdash; A classmate proposes hard constraints on tilt, corridor and thrust, with \( N = 8 \) at 50 Hz, for a gusty mission. Name two problems.</div>
+    <p class="fragment"><span class="ok">(1) Hard state constraints plus gusts give mid-flight infeasibility. (2) \( N\Delta t = 0.16 \) s is shorter than the gust response.</span> <span class="why">Soften tilt and corridor, keep thrust hard, and lengthen the horizon in seconds &mdash; coarsening \( \Delta t \) if the solve does not fit.</span></p>
+    <div class="q fragment">Q3 &mdash; Why use the LQR solution as terminal cost rather than simply a large \( Q \)?</div>
+    <p class="fragment"><span class="ok">Because \( P_f = P_{LQR} \) encodes the true cost of everything beyond the horizon.</span> <span class="why">A large \( Q \) only says &ldquo;be near zero at the end&rdquo;, which the optimiser can satisfy by arriving fast and badly. The LQR bowl says &ldquo;be somewhere from which the future is cheap&rdquo; &mdash; a different and correct instruction.</span></p>
+  </div>
+
+  <aside class="notes">Q3 distinguishes students who understood the terminal cost from those who copied it.</aside>
+</section>
+
+<!-- 5 OCP -->
+<section>
+  <p class="eyebrow">Block A · 00:10</p>
+  <h2>The problem MPC solves — every single step</h2>
+  \[ \min_{\mathbf{u}_0,\dots,\mathbf{u}_{N-1}} \;\; \sum_{k=0}^{N-1} \Big( \lVert \mathbf{x}_k-\mathbf{x}_k^{\text{ref}} \rVert_Q^2 + \lVert \mathbf{u}_k \rVert_R^2 \Big) \;+\; \lVert \mathbf{x}_N-\mathbf{x}_N^{\text{ref}} \rVert_{P_f}^2 \]
+  \[ \text{s.t.}\quad \mathbf{x}_{k+1}=A_d\mathbf{x}_k+B_d\mathbf{u}_k, \qquad \mathbf{x}_0=\hat{\mathbf{x}}(t), \qquad \mathbf{u}_k\in\mathcal{U},\;\; \mathbf{x}_k\in\mathcal{X} \]
+  <table class="data" style="margin-top:.3em">
+    <tr><th>Piece</th><th>What it is</th><th>Quad example</th></tr>
+    <tr><td>\(A_d,B_d\)</td><td>discrete prediction model (Wk-4's linearization, ZOH)</td><td>hover model @ 50 Hz</td></tr>
+    <tr><td>\(Q,R\)</td><td>your Wk-7 preferences, unchanged</td><td>Bryson's rule still applies</td></tr>
+    <tr><td>\(\mathcal{U}\)</td><td>input set</td><td>\( 0\le f_i\le 4\,\text{N} \), slew limits</td></tr>
+    <tr><td>\(\mathcal{X}\)</td><td>state set</td><td>tilt ≤ 20°, corridor \( |y|\le 0.5 \) m</td></tr>
+    <tr><td>\(P_f\)</td><td>terminal cost — "the future after my horizon"</td><td>the LQR \(P\)! (that's not a coincidence — Block B)</td></tr>
+    <tr><td>\( \mathbf{x}_0=\hat{\mathbf{x}} \)</td><td>feedback enters <i>here</i></td><td>Wk-8's estimate, every step</td></tr>
+  </table>
+</section>
+
+<!-- FP 11 -->
+<section>
+  <p class="eyebrow">First principles</p>
+  <h2>Three ways to use a model, and only one of them plans</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Use</th><th>What it does</th><th>Method</th><th>Week</th></tr>
+    <tr><td><b>Analyse</b></td><td>find poles, check controllability</td><td>eigenvalues</td><td>4</td></tr>
+    <tr><td><b>Design once</b></td><td>solve for a fixed gain matrix</td><td>LQR</td><td>7</td></tr>
+    <tr class="hl"><td><b>Predict, repeatedly</b></td><td>simulate the future, choose the best action, act, repeat</td><td><b>MPC</b></td><td>12</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The escalation.</span>
+  Each row uses the model harder and costs more computation. LQR consults the model <i>once, offline</i>, and then never again &mdash; the gain matrix is a frozen summary of everything the model knew.<br/><br/>MPC keeps the model <b>live</b>. It re-consults it every control period, from the state it is actually in, with the limits it actually faces. That is the whole difference, and everything else today is machinery for affording it.</div>
+    </div>
+  </div>
+  <p class="small muted">So the honest one-line definition: <b>MPC is LQR that refuses to summarise.</b> It pays computation to keep the model's full advice available at every instant, including advice about constraints that a gain matrix cannot express.</p>
+
+  <aside class="notes">'LQR that refuses to summarise' is the sharpest one-line contrast available; use it and then unpack it.</aside>
+</section>
+
+<!-- ING 11 -->
+<section>
+  <p class="eyebrow">Term by term</p>
+  <h2>The five ingredients of an optimal control problem</h2>
+  <table class="data">
+    <tr><th>Ingredient</th><th>Symbol</th><th>What it encodes</th><th>How you choose it</th></tr>
+    <tr><td>prediction model</td><td>\( A_d, B_d \)</td><td>what the aircraft will do</td><td>Week 4's linearisation, discretised</td></tr>
+    <tr><td>horizon</td><td>\( N \)</td><td>how far you look</td><td>long enough to see the constraint coming</td></tr>
+    <tr><td>stage cost</td><td>\( Q, R \)</td><td>what you want, moment to moment</td><td><b>Bryson's rule &mdash; unchanged from Week 7</b></td></tr>
+    <tr><td>terminal cost</td><td>\( P_f \)</td><td>'and after that?'</td><td>the LQR \( P \); it is what makes it stable</td></tr>
+    <tr class="hl"><td>constraint sets</td><td>\( \mathcal U, \mathcal X \)</td><td><b>what you are not allowed to do</b></td><td>physics (hard) vs preference (soft)</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Notice what is <i>not</i> new.</span>
+  Four of the five ingredients you already own. \( Q \) and \( R \) are Week 7's; \( A_d, B_d \) are Week 4's; \( P_f \) is Week 7's Riccati solution.<br/><br/><b>Only the constraint sets are new</b> &mdash; and they are the entire reason for the method's existence.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The design question this reframes.</span>
+  In LQR you asked: <i>how much do I dislike error versus effort?</i><br/>In MPC you also ask: <i>what must never happen, and what would I merely prefer to avoid?</i><br/><br/>That second question has an answer in engineering terms &mdash; walls, motor limits, tilt caps &mdash; which is why practitioners find MPC natural to specify.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Emphasising that 4 of 5 ingredients are already owned makes MPC feel like an extension rather than a new subject.</aside>
+</section>
+
+<!-- HS 11 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Hard vs soft: the most consequential design decision</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th></th><th>Hard constraint</th><th>Soft constraint</th></tr>
+    <tr><td>Written as</td><td>\( g(\mathbf x, \mathbf u) \le 0 \)</td><td>\( g \le s \), \( s \ge 0 \), penalise \( \rho s \)</td></tr>
+    <tr class="hl"><td>If violated</td><td><b>problem is infeasible &mdash; no solution returned</b></td><td>solution exists, violation is priced</td></tr>
+    <tr><td>Use for</td><td>what physics enforces anyway</td><td>what you would prefer</td></tr>
+    <tr><td>Example</td><td>\( 0 \le f_i \le f_{max} \)</td><td>tilt \( \le 20^\circ \), corridor width</td></tr>
+    <tr class="hl"><td>Failure mode</td><td>controller outputs nothing, mid-flight</td><td>gradual, graceful degradation</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why the motors stay hard.</span>
+  Because a solution that commands 5 N from a 4 N motor is not a solution &mdash; it is a fiction the mixer will silently edit (Week 3). Better that the optimiser knows the limit and plans around it.<br/><br/><b>Why tilt goes soft:</b> a gust can put you at 22&deg; whether you like it or not. A hard tilt constraint would make the problem infeasible <i>precisely when you most need a command</i>. Softening it means the controller says 'I am 2&deg; over, and I am correcting' instead of saying nothing at all.</div>
+    </div>
+  </div>
+  <p class="small">Get this split wrong and your MPC works beautifully in still air and dies in the first gust. It is the most common project failure, and it is a <b>design</b> error, not a tuning one.</p>
+
+  <aside class="notes">This is the single most important practical slide of the MPC weeks; spend time on the gust argument.</aside>
+</section>
+
+<!-- 6 RECEDING -->
+<section>
+  <p class="eyebrow">Block A</p>
+  <h2>Receding horizon: plan like a chess player, act like one too</h2>
+
+  <div class="fig plain" data-diagram="mpchorizon" style="max-width:640px;margin:0 auto"><p class="cap">Solve for N moves, keep one, slide, repeat. The dashed plan is discarded every step — on purpose.</p></div>
+  <ul>
+    <li class="small">Solving once and playing the whole tape = open loop — one gust and the plan is fiction.</li>
+    <li class="small">Re-solving from the <i>measured</i> state closes the loop: <b>MPC is feedback via optimization</b>.</li>
+    <li class="small">Wk-9's slogan upgraded: FF flies the plan, FB flies the surprises — replanning shrinks the surprise budget to one step.</li>
+  </ul>
+  <p class="small muted">Cost of admission: an optimization solved within one control period, forever — Block B after the break pays that bill.</p>
+</section>
+
+<!-- 6b. HERITAGE + CRITICAL N -->
+<section class="dense">
+  <p class="eyebrow">Where MPC grew up · and a number you can compute</p>
+  <h2>Forty years of industrial service before it flew</h2>
+  <div class="cols top">
+    <div>
+      <figure class="photo"><img src="../assets/img/refinery.jpg" alt=""/><figcaption>Distillation columns. MPC was born here in the late 1970s (Richalet's IDCOM, Shell's DMC): many coupled variables, hard limits, minutes-long dynamics — constraints as the product. <span class="cr">Photo: C. Valenzuela, Wikimedia Commons, CC BY-SA 4.0.</span></figcaption></figure>
+    </div>
+    <div>
+      <p class="small">Refinery MPC re-solves every few <i>minutes</i>; quadrotor MPC every 20–40 <i>ms</i>. Same mathematics — three orders of magnitude in tempo, bought by convex solvers + cheap compute. That migration (process → automotive → aerospace) is the reason this lecture exists.</p>
+      <div class="env exm"><span class="eh">Worked example <em>(the critical horizon, before the widget)</em>.</span>
+      Braking case: \( v_0 = 1.3 \) m/s, \( |u| \le 1 \) m/s², \( \Delta t = 0.1 \) s.
+      Stopping needs \( t_{stop} = v_0/u_{max} = 1.3 \) s over \( d = v_0^2/2u_{max} = 0.85 \) m.
+      The plan must <i>contain</i> the stop ⇒ \( N \ge t_{stop}/\Delta t = 13 \). <b>Predict: the widget should fail near N ≈ 13.</b> Now go find out.</div>
+    </div>
+  </div>
+  <aside class="notes">Prediction-before-widget is the participation ritual; the arithmetic is exam-grade. History beat: Richalet/DMC one sentence each, no more.</aside>
+</section>
+
+<!-- 7 QUIZ A + WIDGET -->
+<section>
+  <p class="eyebrow">Concept check · 00:50</p>
+  <h2>The wall, revisited — predict first</h2>
+  <div class="quiz" style="font-size:.85em">
+    <div class="q">Braking problem: v = 1.3 m/s toward a wall, \(|u| \le 1\) m/s². Clamped LQR vs MPC with horizon \(N\). What happens as \(N\) shrinks?</div>
+    <p class="fragment"><span class="ok">MPC degrades into clamped-LQR.</span> <span class="why">Below the horizon that "sees" the wall (\(N\Delta t \lesssim v/u_{\max}\)), MPC can't anticipate what it can't predict. Anticipation is the product; horizon is the price.</span></p>
+  </div>
+  <aside class="notes">Collect predictions first — the previous slide computed N ≈ 13 by hand.</aside>
+</section>
+
+<!-- 7c. WIDGET -->
+<section class="dense">
+  <p class="eyebrow">Interactive · test your prediction</p>
+  <h2>The wall, live</h2>
+  <div class="widget" data-widget="mpc"></div>
+  <aside class="notes">Let them find the critical N themselves (~ stopping time / dt ≈ 13 steps). The violet ghost = the plan at t=0.4s; emphasize it gets thrown away and re-made every step.</aside>
+</section>
+
+<!-- 7b. DERIVE CONDENSE -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill cyan">interactive</span></p>
+  <h2>How an OCP becomes a QP (condensing)</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>stack the unknowns: \( U = [\mathbf u_0; \mathbf u_1; \dots; \mathbf u_{N-1}] \)</span>
+      <span class="dwhy"><b>One vector to optimize.</b> For our quad @ N=25: 4×25 = 100 numbers.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>unroll dynamics: \( \mathbf x_k = A_d^k \mathbf x_0 + \sum_{j&lt;k} A_d^{k-1-j} B_d \mathbf u_j \)</span>
+      <span class="dwhy"><b>Every future state is LINEAR in U</b> — just repeated substitution of x⁺=Ax+Bu. The dynamics constraint disappears into the algebra.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">3</span>so \( X = S_x \mathbf x_0 + S_u U \) for known matrices \( S_x, S_u \)</span>
+      <span class="dwhy"><b>Prediction as a matrix.</b> S_u's block-lower-triangular shape *is* causality: u_j only touches later states.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">4</span>substitute into the cost ⇒ \( J = \tfrac12 U^\top H U + g^\top U + \text{const} \)</span>
+      <span class="dwhy"><b>Quadratic in U, with H ≻ 0</b> built from Q, R, S_u. Convex bowl — one global optimum, no initialization luck.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">5</span>limits become \( G U \le h \) — a QP a laptop solves in milliseconds</span>
+      <span class="dwhy"><b>Box bounds on u are rows of G; state limits ride through S_u.</b> This exact object is what <code>mpc.py</code> hands to its solver — open it in the lab and find H.</span></div>
+  </div>
+  <aside class="notes">Skip the S_x/S_u element formulas on the board — shape and linearity are the learning targets. Lab checkpoint 1 is literally "find these matrices in mpc.py".</aside>
+</section>
+
+<!-- NOT 11 -->
+<section class="dense">
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Notation for the week, fixed now</h2>
+  <table class="data">
+    <tr><th>Symbol</th><th>Meaning</th><th>Careful</th></tr>
+    <tr><td>\( \hat{\mathbf x}(t) \)</td><td>the <b>measured</b> state at the current instant</td><td>this is where feedback enters; nowhere else</td></tr>
+    <tr><td>\( \mathbf x_k \)</td><td>the model's <b>prediction</b>, \( k \) steps into the plan</td><td>not a measurement &mdash; a hypothesis</td></tr>
+    <tr><td>\( \mathbf u_k \)</td><td>planned input at step \( k \)</td><td>only \( \mathbf u_0 \) is ever applied</td></tr>
+    <tr><td>\( N \)</td><td>horizon length in <b>steps</b></td><td>the physical horizon is \( N\Delta t \), in seconds</td></tr>
+    <tr><td>\( U \)</td><td>the whole stacked plan</td><td>the optimisation variable</td></tr>
+    <tr><td>\( s \)</td><td>slack on a soft constraint</td><td>\( \ge 0 \), penalised, never free</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">The distinction that causes most confusion.</span>
+  \( \hat{\mathbf x}(t) \) versus \( \mathbf x_k \). One is reality entering the problem; the others are the model's imagination about the future.<br/><br/>Students who blur them end up believing MPC 'knows' the future. It does not &mdash; it <b>assumes</b> a future, acts on the first step of that assumption, and then measures reality again and rebuilds the assumption from scratch.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Say it precisely in the viva.</span>
+  <i>'Feedback enters only through \( \mathbf x_0 = \hat{\mathbf x}(t) \); everything else in the problem is open-loop prediction, discarded and rebuilt every period.'</i> That sentence demonstrates you understand where the closed loop actually is.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Fixing this notation early prevents the single most common conceptual error about MPC.</aside>
+</section>
+
+<!-- CTYPE 11 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Constraint types you will actually write</h2>
+  <table class="data">
+    <tr><th>Constraint</th><th>Form</th><th>Hard or soft?</th><th>Note</th></tr>
+    <tr class="hl"><td>motor thrust</td><td>\( 0 \le f_i \le f_{max} \)</td><td><b>hard</b></td><td>physics; box constraint, cheapest kind</td></tr>
+    <tr><td>tilt angle</td><td>\( \phi^2 + \theta^2 \le \eta_{max}^2 \)</td><td>soft</td><td>quadratic &mdash; keeps the problem convex</td></tr>
+    <tr><td>corridor</td><td>\( |y| \le w \)</td><td>soft</td><td>two linear rows per step</td></tr>
+    <tr><td>velocity</td><td>\( \lVert \mathbf v \rVert \le v_{max} \)</td><td>soft</td><td>norm; use a polytope if you need linearity</td></tr>
+    <tr class="hl"><td>slew rate</td><td>\( |\mathbf u_k - \mathbf u_{k-1}| \le \Delta u_{max} \)</td><td>hard</td><td>actuator physics; couples adjacent steps</td></tr>
+    <tr><td>terminal set</td><td>\( \mathbf x_N \in \mathcal X_f \)</td><td>hard</td><td>the feasibility guarantee, if you use one</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Counting rows, because size matters.</span>
+  Per step: 8 rows for motor bounds, 2 for a corridor, 1 for tilt, 8 for slew. Over \( N = 25 \) that is roughly 475 inequality rows against 100 variables.<br/><br/><b>That is a small QP.</b> Modern solvers handle it in single-digit milliseconds. Knowing the size before you build it tells you immediately whether the design is realistic.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The cheapest constraints.</span>
+  <b>Box constraints on inputs</b> are essentially free &mdash; most solvers handle them specially. State constraints are more expensive because they couple through the prediction. If you can express a requirement as an input bound instead of a state bound, do.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Row counting is a practical skill that lets students size a design before implementing it.</aside>
+</section>
+
+<!-- 8 QP -->
+<section>
+  <p class="eyebrow">Block B · 01:00</p>
+  <h2>What the solver actually sees: a QP</h2>
+  <div class="cols top">
+    <div>
+      <p class="small">Stack the horizon: \( U=[\mathbf{u}_0;\dots;\mathbf{u}_{N-1}] \). The dynamics make every \( \mathbf{x}_k \) linear in \(U\) ("condensing"), so:</p>
+      \[ \min_U \; \tfrac12 U^\top H U + g^\top U \quad \text{s.t.} \quad G U \le h \]
+      <ul class="small">
+        <li>\(H \succ 0\) from \(Q,R\): <b>convex</b> — one global optimum, no luck involved.</li>
+        <li>Linear model + box/polytope constraints + quadratic cost = the entire recipe for convexity. Break any one → NMPC territory (Block B).</li>
+      </ul>
+    </div>
+    <div class="box"><b>Why convexity is the ballgame:</b> solvable in milliseconds, certifiably, warm-startable (yesterday's plan seeds today's — the horizon only slid one step). Solvers you'll meet: <b>OSQP</b>, qpOASES (embedded QP); <b>CasADi/IPOPT</b> when the model goes nonlinear. In the lab you'll write your own projected-gradient loop <i>once</i>, so no solver is ever a black box to you again.</div>
+  </div>
+</section>
+
+<!-- HOR 11 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Choosing the horizon: three competing pressures</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Pressure</th><th>Wants \( N \)</th><th>Because</th></tr>
+    <tr class="hl"><td>see the constraint coming</td><td><b>long</b></td><td>below the critical horizon MPC degrades to clamped LQR</td></tr>
+    <tr><td>compute in one period</td><td><b>short</b></td><td>cost grows roughly linearly in \( N \) (condensed QP)</td></tr>
+    <tr><td>trust the model</td><td><b>short</b></td><td>a hover linearisation is honest for ~1 s, not 5</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The practical recipe.</span>
+  1. Compute the <b>physical time</b> the manoeuvre needs: stopping time, gust settling time, corner duration.<br/>2. Set \( N\Delta t \) to about 1.5&times; that.<br/>3. Check the solve fits the period; if not, lengthen \( \Delta t \) rather than shortening the horizon.<br/><br/>For our quad: stopping from 1 m/s at 2 m/s&sup2; takes 0.5 s &rArr; horizon &asymp; 0.75 s &rArr; at \( \Delta t = 0.03 \) s, \( N \approx 25 \). <b>That is where the number in the code comes from.</b></div>
+    </div>
+  </div>
+  <p class="small muted">Note step 3: coarsening the time step preserves the <i>horizon in seconds</i> while cutting the problem size. Prediction accuracy far ahead matters less than horizon <b>reach</b> &mdash; a genuinely useful trade that beginners rarely find.</p>
+
+  <aside class="notes">The 'lengthen dt rather than shorten N' trick is real practitioner knowledge and answers a question every student hits.</aside>
+</section>
+
+<!-- FEAS 11 -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>Feasibility: what can go wrong, and the standard defences</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Infeasible at this step.</b> The state is outside anything the constraints allow. Cure: soften state constraints with slack.</li>
+    <li><b>Feasible now, infeasible later.</b> The plan is valid but drives you somewhere with no escape. Cure: <b>terminal set</b> &mdash; require the horizon to end somewhere provably recoverable.</li>
+    <li><b>Solver did not converge in time.</b> A budget problem, not a mathematics one. Cure: apply the previous plan's \( \mathbf u_1 \).</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env defn"><span class="eh">Recursive feasibility, informally.</span>
+  If a solution exists now, a solution exists at the next step too. It is not automatic &mdash; it is <i>engineered</i>, by the terminal cost and terminal set together.<br/><br/>The standard construction: end the horizon inside a region where the LQR controller is known to keep you feasible forever. Then the tail of every plan is guaranteed to be extendable.<br/><br/><b>That is the real job of \( P_f \)</b>: not to tidy up the cost, but to hand the optimiser a promise about everything beyond its own sight.</div>
+    </div>
+  </div>
+  <p class="small">For your final project you do not need to prove recursive feasibility. You do need to say, in one sentence, <b>what your controller does when the solver returns nothing</b> &mdash; because on an aircraft, that moment will arrive.</p>
+
+  <aside class="notes">Setting the expectation (understand it, do not prove it, but handle it) is the right level for a master's project.</aside>
+</section>
+
+<!-- PLUG 11 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>MPC and the cascade: where does it plug in?</h2>
+  <table class="data">
+    <tr><th>Option</th><th>MPC computes</th><th>Rate</th><th>Inner loop</th><th>Trade</th></tr>
+    <tr class="hl"><td><b>Outer-loop MPC</b></td><td>desired acceleration / tilt</td><td>20&ndash;50 Hz</td><td>classical PD attitude</td><td><b>cheap, robust, standard</b></td></tr>
+    <tr><td>Full-state MPC</td><td>motor thrusts directly</td><td>100&ndash;200 Hz</td><td>none &mdash; MPC is the whole controller</td><td>expensive; elegant</td></tr>
+    <tr><td>Cascaded MPC</td><td>outer MPC + inner MPC</td><td>two rates</td><td>MPC</td><td>research territory</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">What we do, and why.</span>
+  <b>Outer-loop MPC.</b> The constraints that matter for our missions &mdash; corridors, tilt caps, velocity limits &mdash; all live at the position level. Attitude tracking is already solved and does not need an optimiser.<br/><br/>It also means the aircraft still flies if the solver stalls: the inner loop holds the last commanded attitude, which is a far better failure mode than 'no command at all'.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The general principle.</span>
+  <b>Put the expensive method where the difficulty is, and keep the cheap reliable method underneath it.</b> This is how MPC ships on real vehicles &mdash; automotive, aerospace, process &mdash; and it is a pattern worth carrying beyond this course.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The layered-deployment argument is both practically correct and philosophically the right lesson about method selection.</aside>
+</section>
+
+<!-- WEX 11 -->
+<section>
+  <p class="eyebrow">Worked example &middot; by hand</p>
+  <h2>Specify an MPC for the corridor mission</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Model:</b> per-axis double integrator (position, velocity), input = commanded acceleration. Discretise at \( \Delta t = 0.04 \) s.</li>
+    <li><b>Horizon:</b> gust settling takes ~1 s &rArr; \( N\Delta t \approx 1.5 \) s &rArr; \( N \approx 38 \). Too big? Take \( \Delta t = 0.06 \), \( N = 25 \).</li>
+    <li><b>Stage cost:</b> Bryson &mdash; tolerate 0.2 m and 0.5 m/s &rArr; \( Q = \mathrm{diag}(25, 4) \); acceleration budget 2 m/s&sup2; &rArr; \( R = 0.25 \).</li>
+    <li><b>Terminal:</b> \( P_f \) from the LQR solution with the same \( Q, R \).</li>
+    <li><b>Constraints:</b> \( |a| \le 2.08 \) m/s&sup2; <b>hard</b> (it is the tilt clamp, i.e. physics); \( |y| \le 0.5 \) m <b>soft</b>, \( \rho = 10^3 \).</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Sanity-check the horizon against the constraint.</span>
+  Can this controller stop before the corridor edge? From 1 m/s at 2.08 m/s&sup2;, braking distance is 0.24 m &mdash; comfortably inside 0.5 m, and the 1.5 s horizon covers the 0.5 s manoeuvre with margin.<br/><br/><b>If those two numbers had not fitted, no amount of tuning would have helped.</b> The check took one line and it is the difference between a design and an attempt.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(3 min)</span> — Recompute for a corridor of \( \pm 0.15 \) m at the same speed. Feasible? <span class="muted">(Braking distance 0.24 m exceeds the half-width, so the aircraft cannot guarantee staying inside at 1 m/s. Either slow to 0.79 m/s, or accept that the soft constraint will be violated and price it. <b>The arithmetic tells you which conversation to have.</b>)</span></div>
+
+  <aside class="notes">A full specification in five steps, with the feasibility check that makes it engineering. The exercise result is a genuine design decision.</aside>
+</section>
+
+<!-- PREV 11 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Reference preview: MPC's quiet superpower</h2>
+  <div class="cols top">
+    <div>
+  <p>Replace the regulation target \( \mathbf 0 \) with the <i>future</i> reference over the horizon:</p>
+  \[ \sum_{k=0}^{N-1} \lVert \mathbf x_k - \mathbf x^{ref}_{k} \rVert_Q^2, \qquad \mathbf x^{ref}_k = \mathbf p_r(t + k\Delta t) \]
+  <ul class="small">
+    <li>The optimiser now <b>sees the corner coming</b> and begins turning before the error appears.</li>
+    <li>This is feed-forward (Week 9) &mdash; but derived rather than added, and automatically consistent with the constraints.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why it beats hand-built feed-forward.</span>
+  Classical feed-forward computes \( \ddot{\mathbf p}_r \) and hands it over, <i>whether or not the aircraft can deliver it</i>. If the reference demands 4 m/s&sup2; and you have 2, the feed-forward term simply saturates and the tracking degrades unpredictably.<br/><br/>MPC with preview sees the same demand, knows the limit, and <b>starts early</b> &mdash; trading a small early error for a much smaller peak error. That behaviour is not programmed; it falls out of the optimisation.</div>
+    </div>
+  </div>
+  <p class="small muted">This is the cleanest demonstration of what optimisation-based control buys: <b>the controller does something sensible that nobody explicitly told it to do</b>, because the constraints and the objective together imply it.</p>
+
+  <aside class="notes">The 'starts early because it must' behaviour is the most persuasive single demonstration of MPC; make sure they look for it in the lab.</aside>
+</section>
+
+<!-- 10 DELTA-U + TRACKING -->
+<section>
+  <p class="eyebrow">Block B</p>
+  <h2>Two formulation upgrades you'll actually use</h2>
+  <div class="cols top">
+    <div class="box"><b>Track a trajectory, not the origin:</b> replace \( \mathbf{x}^{\text{ref}}_k \) with Wk-9's \( \mathbf{p}_r(t+k\Delta t) \) — MPC previews the <i>future</i> reference over the horizon. Feedforward isn't bolted on; it's what the optimizer does natively when handed the future.</div>
+    <div class="box"><b>Penalize \( \Delta\mathbf{u} \), not just \( \mathbf{u} \):</b> cost on \( \lVert\mathbf{u}_k-\mathbf{u}_{k-1}\rVert^2 \) → smooth actuation (motors hate steps), and — augmented properly — offset-free tracking under constant disturbance: <b>integral action, MPC-style</b>. The seven fixes' anti-windup? A constrained optimizer never winds up: saturation is <i>inside</i> the plan, not a surprise to it.</div>
+  </div>
+  <div class="quiz" style="margin-top:.4em;font-size:.8em">
+    <div class="q">Quick check — MPC with preview vs your Wk-9 FF cascade on the same smooth figure-eight, no disturbances, no active constraints. Who wins?</div>
+    <p class="fragment"><span class="ok">Roughly a tie.</span> <span class="why">Unconstrained + linear + quadratic ⇒ MPC ≈ LQR-with-preview; the classical FF stack is nearly that already. <b>MPC earns its complexity only when constraints activate.</b> M3's payload drop is built so that they do: the mass step throws the aircraft outside the 0.50 m deviation bar unless the controller plans against its thrust budget.</span></p>
+  </div>
+</section>
+
+<!-- MODEL 12 -->
+<section class="dense">
+  <p class="eyebrow">Block B · 01:00 · first decision</p>
+  <h2>Which model goes inside the optimiser?</h2>
+  <table class="data">
+    <tr><th>Model</th><th>Size</th><th>Fidelity</th><th>Solve cost</th><th>Use when</th></tr>
+    <tr><td>per-axis double integrator</td><td>2 states/axis</td><td>ignores attitude dynamics</td><td>tiny QP</td><td>gentle missions; outer-loop MPC</td></tr>
+    <tr class="hl"><td><b>hover-linearised 12-state</b></td><td>12</td><td>good to ~20&deg;</td><td>moderate QP</td><td><b>M3, the payload drop &mdash; our default</b></td></tr>
+    <tr><td>reduced nonlinear</td><td>6&ndash;8</td><td>captures tilt coupling</td><td>NLP, ~10&times;</td><td>manoeuvres approaching the tilt limit</td></tr>
+    <tr><td>full nonlinear (CasADi)</td><td>12</td><td>valid far from hover</td><td>NLP, 10&ndash;100&times;</td><td>aggressive flight, research</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">The argument that decides it.</span>
+  The model only has to be right <b>over one horizon</b> &mdash; about 1 second. Over 1 second, at tilts inside your clamp, the hover linearisation is accurate to a few percent (Week 4's ladder).<br/><br/>Errors beyond that are absorbed by <b>replanning</b>: you are never executing a plan for longer than 20&ndash;40 ms before rebuilding it from a fresh measurement.<br/><br/><b>That is why linear MPC works far better than the word 'linear' suggests.</b></div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">And it is why M3 is survivable at all.</span>
+  The payload drop changes the <i>mass</i> mid-flight &mdash; 0.65 kg to 0.45 kg &mdash; and the controller is never told. Your prediction model is therefore <b>wrong by 30% in one parameter</b> for the rest of the flight.<br/><br/>Replanning from the measured state is what absorbs that. State the model choice and its validity region in your report; it pre-empts the obvious viva question.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The 'right over one horizon' argument is the key insight that makes linear MPC defensible; then land it on M3's mass step, which is the mismatch they will actually meet.</aside>
+</section>
+
+<!-- SOLVER 12 -->
+<section class="dense">
+  <p class="eyebrow">Second decision</p>
+  <h2>Which solver, and what each one is good at</h2>
+  <table class="data">
+    <tr><th>Family</th><th>Representative</th><th>Strength</th><th>Weakness</th><th>Warm start?</th></tr>
+    <tr><td>Active set</td><td>qpOASES</td><td>excellent warm-started; small problems</td><td>worst case can be slow</td><td><b>excellent</b></td></tr>
+    <tr><td>Interior point</td><td>ECOS, OSQP-IP</td><td>reliable, polynomial worst case</td><td>hard to warm start well</td><td>poor</td></tr>
+    <tr class="hl"><td>First-order / ADMM</td><td><b>OSQP</b></td><td>cheap iterations; simple; embeddable</td><td>modest accuracy</td><td><b>good</b></td></tr>
+    <tr><td>Nonlinear (SQP/IP)</td><td>IPOPT via CasADi</td><td>handles NLP</td><td>10&ndash;100&times; slower; local minima</td><td>fair</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">What our course code does.</span>
+  <code>quadsim/controllers/mpc.py</code> builds a small dense QP and solves it directly &mdash; deliberately, so that <b>nothing is hidden</b>. You can read every line of the optimisation, which no production solver permits.<br/><br/>For your project that is enough: the reference <code>LinearMPC</code> certifies M3 with it. Reach for OSQP or do-mpc only when the problem size or the nonlinearity forces it &mdash; and say in the report which forced it.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The practical selection rule.</span>
+  <b>Modest accuracy is fine in MPC</b>, because you are going to throw the answer away and re-solve in 20&ndash;40 ms. That single fact is why first-order solvers dominate embedded MPC: they get you 90% of the way in a tenth of the time, and the remaining 10% would have been discarded anyway.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The 'modest accuracy is fine because you re-solve' argument explains an otherwise puzzling industry preference.</aside>
+</section>
+
+<!-- SOFT 12 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Constraint softening: the three ways to do it</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Form</th><th>Penalty</th><th>Behaviour</th><th>Use</th></tr>
+    <tr><td>\( \ell_2 \): \( \rho s^2 \)</td><td>quadratic</td><td>gentle near zero; violations creep</td><td><b>default; keeps the QP</b></td></tr>
+    <tr class="hl"><td>\( \ell_1 \): \( \rho s \)</td><td>linear</td><td><b>exact penalty</b> &mdash; zero violation if \( \rho \) large enough</td><td>when you want it treated as hard-unless-necessary</td></tr>
+    <tr><td>mixed: \( \rho_1 s + \rho_2 s^2 \)</td><td>both</td><td>exactness plus smoothness</td><td>practical compromise</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What 'exact penalty' means, and why it matters.</span>
+  With an \( \ell_1 \) penalty and \( \rho \) above a computable threshold, the solution is <b>identical to the hard-constrained one whenever that is feasible</b>, and degrades gracefully only when it is not.<br/><br/>That is exactly the behaviour you want from a safety corridor: never violate it unnecessarily, but never become infeasible either. \( \ell_2 \) softening cannot promise this &mdash; a small violation is always slightly cheaper than the effort to avoid it.</div>
+    </div>
+  </div>
+  <p class="small muted">For your project, \( \ell_2 \) is fine and simplest. Mentioning that you know why \( \ell_1 \) is theoretically preferable &mdash; and choosing \( \ell_2 \) deliberately &mdash; is exactly the kind of remark that distinguishes a considered design.</p>
+
+  <aside class="notes">The exact-penalty property is a genuinely useful piece of MPC theory that is rarely taught at this level.</aside>
+</section>
+
+<!-- WIDGET softqp -->
+<section class="dense">
+  <p class="eyebrow">Block B · interactive</p>
+  <h2>Soft vs hard, and what N costs — live</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="softqp"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> Corridor HARD, push 0.9 m: what does the QP return? Then soft at log ρ = 0 — how much corridor does it rent? And by what factor does solve time grow when N doubles?</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#softqp">Digital Lab → softqp</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">Infeasibility is the whole argument for softening states. Keep thrust hard. Read the ms/step line aloud as N changes.</aside>
+</section>
+
+<!-- RHO 12 -->
+<section>
+  <p class="eyebrow">Worked example &middot; read the numbers</p>
+  <h2>Sizing \( \rho \) properly, once</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Typical position error during the mission: 0.2 m. With \( Q_{11} = 25 \), the stage cost is \( 25 \times 0.04 = 1.0 \) per step.</li>
+    <li>Tolerable deviation overshoot: 5 cm, i.e. \( s = 0.05 \).</li>
+    <li>Decide the violation should cost <b>20&times;</b> a typical step: target penalty \( = 20 \).</li>
+    <li>Quadratic slack penalty: \( \rho s^2 = 20 \Rightarrow \rho = 20/0.0025 = 8000 \).</li>
+    <li>Round to \( \rho = 10^4 \) and check behaviour.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Sanity-check both extremes.</span>
+  \( \rho = 10^2 \): a 5 cm violation costs 0.25 &mdash; a quarter of a typical step. The optimiser will cheerfully drift outside the corridor. Too cheap.<br/><br/>\( \rho = 10^9 \): a 1 mm violation costs \( 10^3 \) &mdash; a thousand typical steps. The controller will sacrifice the entire mission to avoid a millimetre, and the QP becomes badly conditioned. <b>You have re-invented a hard constraint, with numerical problems attached.</b></div>
+    </div>
+  </div>
+  <p class="small muted">Two minutes of arithmetic replaces an afternoon of bisection, and it gives you a sentence for the report: <i>'\( \rho = 10^4 \) prices a 5 cm violation at twenty times a typical stage cost.'</i></p>
+
+  <aside class="notes">This computation is directly reusable and is exactly what distinguishes a designed parameter from a searched one.</aside>
+</section>
+
+<!-- RT 12 -->
+<section>
+  <p class="eyebrow">Third decision</p>
+  <h2>The real-time contract, written as an engineer would</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>State the deadline.</b> 25 Hz &rArr; 40 ms, of which the solver may have, say, 25 ms.</li>
+    <li><b>Measure the distribution</b>, not the mean. Log every solve time for a full flight.</li>
+    <li><b>Check the p95 and p99</b> against the budget. One 60 ms outlier at 25 Hz is a dropped control step.</li>
+    <li><b>Define the miss policy</b> before it happens: apply the previous plan's \( \mathbf u_1 \), which was computed for exactly this instant.</li>
+    <li><b>Bound the iterations</b> as a hard cap, so a pathological case degrades gracefully rather than blocking.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why the previous plan's \( \mathbf u_1 \) is the right fallback.</span>
+  Because it is not a guess. At the last step you computed a whole sequence, and \( \mathbf u_1 \) was that sequence's intention for <i>now</i>. The world has changed by one step's worth of disturbance, which is small.<br/><br/><b>One line of code, and a missed deadline becomes a slightly stale command instead of no command.</b> Every serious MPC implementation has this line.</div>
+    </div>
+  </div>
+  <p class="small muted">Report the timing histogram with the deadline drawn on it &mdash; that figure belongs to Week 13's evidence kit, but the contract it documents is a decision you make <b>today</b>.</p>
+
+  <aside class="notes">The fallback-to-u1 line is the most practically valuable thing in the whole real-time discussion.</aside>
+</section>
+
+<!-- FIT 12 -->
+<section class="dense">
+  <p class="eyebrow">When the solve does not fit</p>
+  <h2>Plan slowly with constraints; track fast with the classical loop</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Warm start.</b> Free, and typically 3&ndash;10&times; fewer iterations. Always first.</li>
+    <li><b>Loosen the solver tolerance.</b> Free here &mdash; you discard the answer in 20 ms anyway.</li>
+    <li><b>Coarsen \( \Delta t \)</b>, keeping the horizon the same length <i>in seconds</i>.</li>
+    <li><b>Drop the MPC rate</b> to 25 Hz and let the classical inner loop hold attitude at 200 Hz.</li>
+    <li><b>Shrink \( N \)</b> &mdash; <b>last</b>, because it is the only one that costs anticipation.</li>
+  </ol>
+  <p class="small muted">Most students try 5 first. It is the only one that damages the controller.</p>
+    </div>
+    <div>
+  <div class="fig plain" data-diagram="layered"><p class="cap">Layered deployment &mdash; the answer to almost everything: MPC plans slowly with the constraints; the classical inner loop tracks fast.</p></div>
+    </div>
+  </div>
+  <div class="env rmk" style="font-size:.78em"><span class="eh">The trap seen every year.</span>
+  A student's MPC misses deadlines and they spend two days tuning the solver. The culprit is a <code>print()</code> or a string-formatted log line inside the control loop, costing 8 ms. <b>Profile before optimising</b> &mdash; solver iterations are 70&ndash;85% of a healthy budget, and naive logging is 5&ndash;15% of an unhealthy one.</div>
+
+  <aside class="notes">The ordering (warm start first, shrink horizon last) is the single most useful piece of tuning advice this week; the logging anecdote is true and lands.</aside>
+</section>
+
+<!-- TUNE 12 -->
+<section class="dense">
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Tuning MPC: what to turn, and in what order</h2>
+  <table class="data">
+    <tr><th>Symptom</th><th>Turn this</th><th>Direction</th><th>Why</th></tr>
+    <tr><td>sluggish tracking</td><td>\( Q \) on position</td><td>up</td><td>you tolerate less error</td></tr>
+    <tr><td>motors chattering</td><td>\( R \) or the \( \Delta u \) term</td><td>up</td><td>effort or its rate is underpriced</td></tr>
+    <tr class="hl"><td>violates the soft constraint often</td><td>\( \rho \)</td><td>up</td><td>violation is too cheap</td></tr>
+    <tr class="hl"><td>sluggish <i>because</i> it hugs the constraint</td><td>\( \rho \)</td><td><b>down</b></td><td>violation is priced above the mission</td></tr>
+    <tr><td>hits the limit without anticipating</td><td>\( N \)</td><td>up</td><td>horizon does not reach the constraint</td></tr>
+    <tr><td>misses deadlines</td><td>\( \Delta t \) then \( N \)</td><td>see the previous slide</td><td>compute, not control</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">Rows 3 and 4 are the same knob, opposite directions.</span>
+  Which is why \( \rho \) should be <b>computed</b> (the recipe two slides back) rather than searched. Searching a parameter whose two failure modes look similar is how afternoons disappear.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The discipline that saves you.</span>
+  Change <b>one</b> parameter, re-run the <i>same</i> scenario with the <i>same</i> seed, on the <i>same</i> vehicle, and record the metric. Two changes at once and you learn nothing from either.<br/><br/>Your grade is decided on <b>seed 0</b> of M3, <b>on your own vehicle</b> (<code>--student &lt;your ID&gt;</code>) &mdash; so tune against that fixed seed and that fixed vehicle, and keep a spread of seeds for honesty, never the reverse.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The rho-both-directions point explains why so many students get stuck; give them the computed value instead.</aside>
+</section>
+
+<!-- FAIL 11 -->
+<section>
+  <p class="eyebrow">Common failure gallery</p>
+  <h2>Five ways an MPC design goes wrong</h2>
+  <table class="data">
+    <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+    <tr class="hl"><td>Behaves exactly like clamped LQR</td><td><b>no constraint ever activates</b></td><td>harder mission, or humbler claim</td></tr>
+    <tr class="hl"><td>Occasional 'infeasible', then nothing</td><td>hard state constraints + disturbance</td><td>soften them; keep inputs hard</td></tr>
+    <tr><td>Chatters along a constraint boundary</td><td>no \( \Delta u \) penalty; horizon barely long enough</td><td>add <code>rterm</code>; lengthen \( N \)</td></tr>
+    <tr><td>Sluggish everywhere</td><td>slack penalty enormous (\( \rho = 10^9 \))</td><td>compute \( \rho \) from the stage cost</td></tr>
+    <tr><td>Great offline, misses deadlines live</td><td>optimised for beauty, not for the contract</td><td>shrink \( N \) or coarsen \( \Delta t \) until p95 fits</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Row 1 is the one to internalise.</span>
+  It is not a bug. Unconstrained, linear, quadratic &rArr; MPC <i>provably</i> reduces to LQR-with-preview. Seeing that in your results is a <b>correct</b> outcome that tells you your mission is too easy.<br/><br/>Check the activation plot first, always. If nothing is shaded, no amount of tuning will produce an interesting comparison.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Row 2 is the one that crashes aircraft.</span>
+  And it is a design error made weeks earlier, surfacing at the worst moment. Decide hard-versus-soft deliberately, write the reason in the decision log, and test it with an injected gust before you trust it.</div>
+    </div>
+  </div>
+
+  <aside class="notes">These five cover essentially every MPC support request; pre-empting them saves office hours.</aside>
+</section>
+
+<!-- TH 11 -->
+<section class="dense">
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems &mdash; solutions posted Friday</h2>
+  <ol class="small">
+    <li>Write out the condensed matrices \( S_x, S_u \) explicitly for \( N = 3 \) on the double integrator, and verify \( X = S_x\mathbf x_0 + S_u U \) numerically.</li>
+    <li>Show that with no constraints and \( P_f \) equal to the LQR solution, MPC's first move equals the LQR action. (Prove it for \( N = 1 \); argue the general case.)</li>
+    <li>For the braking problem, derive the critical horizon analytically as a function of \( v_0 \), \( u_{max} \), \( \Delta t \). Verify against the widget.</li>
+    <li>Take the corridor example from the lecture and compute \( \rho \) so that a 5 cm violation costs ten times a typical stage cost. Show your working.</li>
+    <li>Implement a soft constraint by hand (add the slack variable and the penalty) on the 1-D problem, inject a gust, and plot the graceful violation.</li>
+    <li>Run <code>python certify.py --controller CascadePID --student &lt;your ID&gt; --mission M3</code> and read the report: which requirement fails, by how much, and at which instant of the flight?</li>
+  </ol>
+  <div class="box warn">Question 6 is the one to do first, and it must carry <b>your own student ID</b> — that is what selects <i>your</i> vehicle. The failing number it prints is the problem statement of <b>your</b> final project, and every design decision on these slides exists to close that gap.<br/><br/><span class="muted">On the course-default vehicle (no <code>--student</code>) the number is <b>0.540 m against a 0.50 m bar</b>. Yours will differ; it will still fail REQ-M3-1.</span></div>
+
+  <aside class="notes">Q2 is the theoretical anchor; Q6 makes sure every student has actually run certify.py on their OWN vehicle before the clinic.</aside>
+</section>
+
+<!-- MAP 11 -->
+<section class="dense">
+  <p class="eyebrow">Concept map</p>
+  <h2>Week 12, in one page</h2>
+  <div class="fig plain" data-diagram="mpchorizon"><p class="cap">Plan N steps, apply one, slide, repeat &mdash; from the measured state, with the constraints inside the problem.</p></div>
+  <table class="data">
+    <tr><th>Concept</th><th>One-line statement</th><th>Where it returns</th></tr>
+    <tr><td>finite-horizon OCP</td><td>the five ingredients, four of them already yours</td><td>your controller, this week</td></tr>
+    <tr><td>receding horizon</td><td>feedback = replanning from reality</td><td>the real-time contract</td></tr>
+    <tr><td>condensing &rarr; QP</td><td>convex, certifiable, warm-startable</td><td>every MPC you will ever run</td></tr>
+    <tr class="hl"><td>hard vs soft</td><td>physics vs preference; gusts decide it</td><td><b>the most consequential choice</b></td></tr>
+    <tr><td>terminal cost \( P_f \)</td><td>the LQR bowl capping your tunnel</td><td>stability; and an ablation row in Wk 13</td></tr>
+    <tr><td>critical horizon</td><td>below it, MPC becomes clamped LQR</td><td>Wk 13's ablation figure</td></tr>
+  </table>
+
+  <aside class="notes">Sixty seconds; the highlighted row is what most affects whether their project flies.</aside>
+</section>
+
+<!-- AHEAD 11 -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: making it prove itself</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Today you built the controller. <b>Week 13 builds the evidence</b>: the activation plot, the ablation table, the timing histogram, and the evaluation protocol that makes a comparison fair.</li>
+    <li>A working controller shows your parameters are <i>sufficient</i>; an ablation shows they are <b>necessary</b>. Week 13 is where you earn that distinction.</li>
+    <li>Week 14 is the supervised clinic: bring a controller that runs, and leave with one that certifies.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Before you leave today:</b> the <b>baseline freeze</b> &mdash; metrics script, seeds and <b>your student ID</b> committed.<br/><b>Before Week 13:</b> run <code>certify.py --student &lt;your ID&gt; --mission M3</code> with <i>your</i> MPC and with <code>CascadePID</code>, and bring both reports. Log the slack values \( s_k \) and the solve times from the start &mdash; forget them and Week 13 means re-running every experiment.<br/><b>Week 13 opens with a 10-minute quiz</b> on reading activation plots and real-time reasoning.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Telling them to log slacks and solve times now is the single instruction that saves the most Week-13 rework.</aside>
+</section>
+
+<!-- QPREAD 11 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Reading the QP the solver actually receives</h2>
+  <div class="cols top">
+    <div>
+  <p>After condensing, everything about your design lives in four objects:</p>
+  \[ \min_U\; \tfrac12 U^\top H U + g^\top U \quad \text{s.t.}\quad GU \le h \]
+  <table class="data">
+    <tr><th>Object</th><th>Built from</th><th>Changes when?</th></tr>
+    <tr class="hl"><td>\( H \)</td><td>\( Q, R, P_f, S_u \)</td><td>only if you retune &mdash; <b>constant at runtime</b></td></tr>
+    <tr><td>\( g \)</td><td>\( \hat{\mathbf x}(t) \), the reference</td><td><b>every step</b></td></tr>
+    <tr><td>\( G \)</td><td>constraint geometry</td><td>constant</td></tr>
+    <tr><td>\( h \)</td><td>limits, current state</td><td>every step (state-dependent rows)</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why that table is practically important.</span>
+  \( H \) and \( G \) are <b>constant</b>. So you factorise \( H \) <i>once, offline</i>, and each step only rebuilds two vectors.<br/><br/>That single observation is most of what makes embedded MPC feasible: the expensive linear algebra happens at compile time, and the online cost collapses to a handful of matrix-vector products plus the constraint iteration.<br/><br/><b>Look for this structure in <code>mpc.py</code> during the lab.</b></div>
+    </div>
+  </div>
+
+  <aside class="notes">The constant-H insight is what turns MPC from 'too slow for embedded' into shipping technology; make them find it in the code.</aside>
+</section>
+
+<!-- WARM 11 -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>Warm starting: reusing yesterday's plan</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>At step \( k \) you solved for \( [\mathbf u_0, \mathbf u_1, \dots, \mathbf u_{N-1}] \).</li>
+    <li>At step \( k+1 \), the horizon has slid by one. The old \( \mathbf u_1 \) is now the natural guess for the new \( \mathbf u_0 \).</li>
+    <li>So shift the whole sequence left and append something sensible at the end &mdash; usually the LQR action at the terminal state.</li>
+    <li>Hand that to the solver as the starting point.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What it buys, measured.</span>
+  Typical iteration counts on our problem: <b>cold start 30&ndash;60; warm start 4&ndash;10</b>. A 3&ndash;10&times; reduction, for four lines of bookkeeping.<br/><br/>And the reason it works is physical: the world changed by one time step, so the optimal plan changed by about one time step's worth. <b>Warm starting is the algorithmic expression of 'nothing much happened in 20 ms'.</b></div>
+    </div>
+  </div>
+  <p class="small muted">The iteration histogram with and without warm starting is one of Week 13's evidence figures. It is cheap to make, and it demonstrates that you understand where the compute goes.</p>
+
+  <aside class="notes">The physical explanation of why warm starting works is more memorable than the mechanics.</aside>
+</section>
+
+<!-- NOTFIX 11 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>What MPC does <i>not</i> fix</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Problem</th><th>Does MPC help?</th><th>What actually helps</th></tr>
+    <tr><td>Bad state estimate</td><td><b>no</b> &mdash; garbage in, garbage planned</td><td>Week 8: better fusion, latency handling</td></tr>
+    <tr><td>Wrong model</td><td>no &mdash; it plans confidently in the wrong world</td><td>identification; or robust/adaptive MPC</td></tr>
+    <tr><td>Insufficient actuator authority</td><td>no &mdash; it just tells you sooner</td><td>a bigger aircraft, or a gentler mission</td></tr>
+    <tr><td>Unmodelled disturbance</td><td>partly &mdash; replanning absorbs some</td><td>disturbance observer, integral action</td></tr>
+    <tr class="hl"><td>Constraints binding</td><td><b>yes &mdash; this is the one</b></td><td>MPC</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why this slide exists.</span>
+  Because the commonest way a final project goes wrong is applying a sophisticated method to a problem it does not address, and then tuning it forever.<br/><br/><b>Diagnose first, choose method second.</b> If today's flight data says your aircraft's problem is estimation drift, no amount of optimisation over a horizon will help &mdash; you are optimising over a fiction.</div>
+    </div>
+  </div>
+  <p class="small muted">This is the same discipline as Week 6's debugging tree: identify which layer owns the failure before deploying effort. <b>The method is a tool, not a strategy.</b></p>
+
+  <aside class="notes">An honest 'what this does not fix' slide builds credibility and prevents wasted project effort.</aside>
+</section>
+
+<!-- F570 11 -->
+<section>
+  <p class="eyebrow">The instructor's aircraft</p>
+  <h2>Where MPC would sit on the F570</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>The F570 ships with two controllers: a cascade PID and an LQR set, both per-axis, both at 200 Hz on an STM32F405.</li>
+    <li>Neither knows about limits. The vendor handles saturation the way Week 3 described &mdash; by clamping in the mixer and hoping.</li>
+    <li><b>An MPC upgrade would replace the outer position loop only</b>, at 25&ndash;50 Hz, leaving the attitude loops untouched.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Would it fit on the hardware?.</span>
+  Rough sizing: per-axis double integrator, \( N = 20 \), condensed &rArr; a 20-variable QP with 40 inequality rows. On a 168 MHz Cortex-M4 with a fixed \( H \) factorisation and warm starting, that is a few hundred microseconds &mdash; <b>comfortably inside a 20 ms period</b>.<br/><br/>Which is to say: the thing you are learning this week is not exotic. It would run, today, on the aircraft on the bench.</div>
+    </div>
+  </div>
+  <p class="small muted">What it would buy: a tethered aircraft has a genuine hard constraint &mdash; <b>the cable</b>. Fly beyond ~2 m and the tether goes taut, which is exactly a position corridor. A constrained controller would respect it by planning; the current one discovers it by tugging.</p>
+
+  <aside class="notes">The tether-as-constraint observation is a lovely, concrete MPC use case on hardware the students can see.</aside>
+</section>
+
+<!-- CHECK 11 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>The complete design checklist for your controller</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Model:</b> which linearisation, at which operating point, valid to what tilt?</li>
+    <li><b>Discretisation:</b> \( \Delta t \), and why that rate.</li>
+    <li><b>Horizon:</b> \( N\Delta t \) in seconds, justified against the manoeuvre's physical timescale.</li>
+    <li><b>Stage cost:</b> \( Q, R \) from stated tolerances (Bryson).</li>
+    <li><b>Terminal:</b> \( P_f \) from LQR with the same \( Q, R \).</li>
+    <li><b>Constraints:</b> the hard/soft split, with \( \rho \) computed rather than guessed.</li>
+    <li><b>Real time:</b> measured p95 solve time against the period; the miss policy.</li>
+    <li><b>Failure:</b> what happens on infeasibility, and on solver timeout.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Use this as the report's spine.</span>
+  Eight lines, each answerable in one or two sentences. Together they <i>are</i> the design section of your final-project report, and they are exactly what the viva walks down.<br/><br/>A student who can answer all eight without hesitation has understood the method. One who can answer five has configured a library. <b>The viva asks these, one-to-one.</b></div>
+    </div>
+  </div>
+  <div class="box warn">Write these eight answers <b>this week</b>, right after today's baseline freeze. They will not change much afterwards, and having them early makes every later decision &mdash; and every viva answer in Week 15 &mdash; easier to justify.</div>
+
+  <aside class="notes">Giving the report spine as a checklist is enormously practical and raises the floor of submitted work.</aside>
+</section>
+
+<!-- CLOSE 11 -->
+<section>
+  <p class="eyebrow">Close</p>
+  <h2>What to take away from today</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>MPC is prediction plus optimisation plus replanning.</b> Remove any one and it becomes something else you already know.</li>
+    <li><b>Constraints are the reason it exists.</b> Everything else &mdash; horizons, terminal costs, feasibility &mdash; is machinery for handling them honestly.</li>
+    <li><b>The five ingredients are mostly yours already.</b> Only the constraint sets are new.</li>
+    <li><b>Convexity is what makes it deployable</b>, and staying convex is a design decision worth defending.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The sentence to remember.</span>
+  <i>MPC solves, at every control step, the finite-horizon optimal control problem starting from the measured state, applies the first move, and discards the rest.</i><br/><br/>Everything else today is a footnote to that sentence. If you can say it precisely and explain each clause, you have answered half of the Week-15 viva already.</div>
+    </div>
+  </div>
+
+  <aside class="notes">End with the one-sentence definition and tell them explicitly it is the exam answer.</aside>
+</section>
+
+<!-- CODE 12 -->
+<section>
+  <p class="eyebrow">Straight into the lab</p>
+  <h2>Reading <code>mpc.py</code> &mdash; a guided tour</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Setup (once):</b> build \( A_d, B_d \) from the model; build \( S_x, S_u \) by unrolling; assemble \( H \) from \( Q, R, P_f \); factorise \( H \).</li>
+    <li><b>Per step:</b> read \( \hat{\mathbf x} \); build \( g \) from state and reference; build the state-dependent rows of \( h \).</li>
+    <li><b>Solve:</b> iterate, projecting onto the constraint set; stop on tolerance or iteration cap.</li>
+    <li><b>Apply:</b> extract \( \mathbf u_0 \); store the shifted plan for the next warm start; log everything.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Four things to find in the source.</span>
+  <b>(a)</b> Where \( S_u \) is built &mdash; note its block-lower-triangular shape, which <i>is</i> causality.<br/><b>(b)</b> Where \( H \) is assembled and why it never changes.<br/><b>(c)</b> Where \( \hat{\mathbf x} \) enters &mdash; exactly one place, and that place is the entire feedback path.<br/><b>(d)</b> The warm-start shift.<br/><br/><b>Lab checkpoint 1 is finding all four.</b></div>
+    </div>
+  </div>
+  <p class="small muted">Roughly 150 lines of NumPy. Nothing in it is beyond what you have seen &mdash; and having read one optimiser end to end, no MPC library will ever be a black box to you again.</p>
+
+  <aside class="notes">Making 'find these four things' the first lab checkpoint guarantees they actually read the code.</aside>
+</section>
+
+<!-- 11 BREAK -->
+<section class="divider">
+  <h2><span class="tchip">01:30</span> Break — 10 minutes</h2>
+  <hr class="drule"/>
+  <p>After: <code>mpc.py</code> in your own hands &mdash; plan around a thrust limit instead of clipping into it.</p>
+</section>
+
+<!-- 12 LAB BRIEFING -->
+<section>
+  <p class="eyebrow">Lab briefing · 01:40</p>
+  <h2>Lab graded — <code>LinearMPC</code> plans around a thrust limit</h2>
+  <div class="cols top">
+    <ol class="small">
+      <li>Open <code>quadsim/controllers/mpc.py</code> — today's OCP, condensed to a QP, in course code. Find the four objects from the guided tour before running anything.</li>
+      <li>Command a step climb with only a <b>small thrust margin above hover</b> available (the lab sheet's scenario).</li>
+      <li>Watch the planner ration thrust over the horizon — compare against the clamped cascade on the same step.</li>
+      <li>Sweep the horizon \(N\): find where anticipation degrades into clipping (the widget's lesson, now on the quad).</li>
+      <li>Write the short note: the roles of the <b>horizon</b> and the <b>terminal cost</b>, in your own words — plus your controller's real-time contract (period, measured p95, miss policy).</li>
+    </ol>
+    <div class="box"><b>Pass graded:</b> the constrained climb reaches the target with every motor inside its limit — <i>planned around</i>, not clipped — plus the N-sweep observation and the horizon/terminal note.<br/><br/><b>Extension:</b> shrink the thrust margin until even MPC cannot climb — what does infeasibility look like, and what should a flight controller do then?</div>
+  </div>
+</section>
+
+<!-- 13 LAB SESSION -->
+<section>
+  <div class="labwrap">
+    <p class="eyebrow" style="color:#1ec8c8">Lab session · 01:50 → 02:50</p>
+    <h3>Build order &amp; checkpoints</h3>
+    <p class="cp"><b>02:05</b> — <code>mpc.py</code> read and mapped onto the OCP anatomy (annotated printout or comments)</p>
+    <p class="cp"><b>02:20</b> — thrust-capped climb runs; motor traces show rationing, not clipping graded</p>
+    <p class="cp"><b>02:35</b> — clamped-cascade twin run compared, same step, same limits</p>
+    <p class="cp"><b>02:50</b> — N-sweep observation + the horizon/terminal-cost note drafted</p>
+    <p style="margin-top:.8em"><a class="btn" href="../labs/week12-mpc.html">Open the Week 12 lab sheet →</a></p>
+    <span class="assess" style="background:#2a4463;border-color:#3d5a7d;color:#f5d28a">Assessed: final-project gate — <b>baseline freeze</b> before you leave (metrics script + seeds + your student ID committed) + this lab's constrained climb is the first draft of <b>your own</b> M3 controller. The final project is individual: your vehicle, your certification, your viva. Wk-13 opens with a 10-min concept quiz on activation plots and real-time reasoning (10 marks).</span>
+  </div>
+  <aside class="notes">The learning target is the receding-horizon loop and the N-threshold, not solver internals. Students who finish early start the slack extension and then point the same controller at their own M3 — that is exactly the final project.</aside>
+</section>
+
+<!-- 13b YOUR VEHICLE -->
+<section class="dense">
+  <p class="eyebrow">Final project · the one change you must not miss</p>
+  <h2>The project is individual — and so is the aircraft</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>The final project is <b>yours alone</b>: you build it, you certify it, you defend it in a five-minute viva. There is no team block and no contribution note.</li>
+    <li><b>Every student certifies against a different quadcopter.</b> <code>certify.py --student &lt;your ID&gt;</code> derives mass, arm length, \( k_\tau \) and inertia deterministically from your student ID.</li>
+    <li><b>Deterministic, not random</b> — the same ID gives the same vehicle on any machine, forever. It is a seeded derivation, not a save file.</li>
+    <li>Discuss theory freely, read each other's code freely. But a controller tuned to close REQ-M3-1 on <i>my</i> vehicle will not simply pass on <i>yours</i>.</li>
+  </ul>
+  <p class="small">See your own numbers, right now:</p>
+  <pre><code class="language-bash">python -m quadsim.student_params &lt;your ID&gt;</code></pre>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why this is a better assessment, not a harder one.</span>
+  Because the thing being examined is <b>the design reasoning</b>, not the parameter set. Copying a horizon and a weight matrix from a classmate no longer produces a certificate — it produces a number you cannot explain.<br/><br/>Every design decision on today's slides is still exactly the right decision. You just have to make it <b>for your own aircraft</b>, from your own measurements.</div>
+  <div class="box warn" style="font-size:.78em"><b>Record your student ID in your README.</b> A certification run made with the wrong ID is a run on somebody else's aircraft, and it does not count.</div>
+    </div>
+  </div>
+  <aside class="notes">This is the slide to say out loud twice. Have every student run student_params on their own ID before the lab ends and write the four numbers down.</aside>
+</section>
+
+<!-- 14 MILESTONE -->
+<section class="dense">
+  <p class="eyebrow">Final project · Wk 12 of 15</p>
+  <h2>Project gate — baseline freeze</h2>
+  <div class="cols top">
+    <div class="box ok"><b>The mission, restated ✓</b><br/>One mission for every student: <b>M3, the payload drop</b> — the mass steps <b>down</b> mid-flight and <b>the controller is never told</b>; 15 s. Graded on estimator <b>seed 0</b>, on <b>your own vehicle</b>, one command:<br/><code>python certify.py --controller &lt;yours&gt; --student &lt;your ID&gt; --mission M3</code><br/><span class="muted">On the course-default vehicle: <code>CascadePID</code> <b>fails REQ-M3-1</b> at 0.540 m (0.50 m bar), passes the other two; <code>LinearMPC</code> <b>passes</b> at 0.473 m. Your numbers differ — the pattern does not.</span></div>
+    <div class="box warn"><b>Before you leave today — the freeze:</b><br/>1. Run <code>CascadePID</code> on M3 <b>with your student ID</b>, seed 0 plus four others.<br/>2. Write <code>baseline.json</code>: metric values, seeds, <b>student ID</b>, git hash, aircraft params, date.<br/>3. Commit the metrics script <i>and</i> the baseline file together; tag <code>baseline-v1</code>.<br/>4. From this moment those numbers change only with a signed note in the decision log.<br/>(Want do-mpc/CasADi for the nonlinear model: install now, never in Wk 14.)</div>
+  </div>
+  <p class="muted">The number you freeze today is the number your MPC will be judged against in Week 15. Freeze it honestly — and freeze it on <b>your</b> aircraft.</p>
+</section>
+
+<!-- MISCONCEPTIONS -->
+<section>
+  <p class="eyebrow">Before you leave</p>
+  <h2>The traps, named</h2>
+  <table class="data">
+    <tr><th>The trap</th><th>The truth</th></tr>
+    <tr><td>"MPC is open-loop planning."</td><td>The re-solve <i>from the measured state</i> is the feedback. Play the whole plan blind and one gust makes it fiction.</td></tr>
+    <tr><td>"Longer horizons are always better."</td><td>Past 'long enough' you buy compute, conditioning trouble and model-error exposure, for no closed-loop gain. The knee (critical N) is a computable number.</td></tr>
+    <tr><td>"Make everything a hard constraint — that's the point of MPC."</td><td>Hard state constraints + disturbances = mid-flight infeasibility. Physics-enforced limits stay hard; wish-list limits go soft with slack.</td></tr>
+    <tr><td>"The terminal cost is optional polish."</td><td>It is the stability argument (the LQR bowl capping your tunnel). Dropping it invites horizon-edge myopia — visible as limit cycles at small N.</td></tr>
+  </table>
+  <aside class="notes">Rows 1 and 3 are the two most common viva stumbles — tell them so, kindly.</aside>
+</section>
+
+<!-- 15 SUMMARY -->
+<section class="dense">
+  <p class="eyebrow">Wrap-up</p>
+  <h2>What to remember</h2>
+  <ul>
+    <li>MPC = <b>constrained finite-horizon optimization, re-solved from the measured state, first move applied</b>.</li>
+    <li>Feedback lives in the re-solve; feedforward lives in the preview; constraints live <i>in the problem</i>, not in clamps.</li>
+    <li>Convex QP ⇒ fast, certifiable, warm-startable. Terminal cost = LQR's bowl capping your tunnel.</li>
+    <li>Horizon buys anticipation; below the critical \(N\), MPC quietly becomes the clamped-LQR it replaced.</li>
+    <li>Implementation is three decisions: <b>which model</b> (right over one horizon), <b>which solver</b> (modest accuracy is fine), <b>what real-time contract</b> (p95, warm start, a written miss policy).</li>
+    <li><b>Next week:</b> Week 13 builds the evidence — activation, ablation, timing, and a fair evaluation protocol.</li>
+  </ul>
+  <p class="muted" style="margin-top:1em">Reading: Rawlings, Mayne &amp; Diehl Ch. 1–2 (free PDF) · OSQP and do-mpc "getting started" · quiz on activation plots and real-time reasoning opens Wk 13.</p>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+  Reveal.on("ready", () => { window.MLTEWidgets && MLTEWidgets.init(); window.MLTEDiagrams && MLTEDiagrams.init(); });
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

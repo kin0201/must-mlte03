@@ -1,0 +1,14 @@
+# Core simulator — the only hard dependency.
+numpy>=1.24
+
+# Plotting / animation (optional, used by quadsim.plotting and the examples).
+matplotlib>=3.6
+
+# Testing (optional).
+pytest>=7.0
+
+# --- Used only in the later "intelligent control" weeks (install when needed) ---
+# do-mpc>=4.6            # Week 13, Model Predictive Control
+# casadi>=3.6           # MPC backend for do-mpc
+# gym-pybullet-drones   # Week 14, reinforcement learning (see README)
+# stable-baselines3     # RL training algorithms

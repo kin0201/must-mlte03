@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 13 Lab — Building the Evidence · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css" />
+<!-- KaTeX for the bit of math in the recap -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+</head>
+<body data-lab="week13-evidence">
+
+<div class="lab-progress"><i></i></div>
+
+<!-- ============ HEADER ============ -->
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Week 13 · Lab (second half of session)</div>
+    <h1>Building the Evidence — make the claim checkable</h1>
+    <div class="sub">Run a genuinely controlled before-and-after on M3 &mdash; on <b>your own</b> vehicle &mdash; produce the one figure that shows <em>why</em> the number moved, and measure how much of your margin is luck.</div>
+    <div class="meta">
+      <span>⏱ <b>~45 min</b></span>
+      <span>🧩 Your own controller + <b>certify.py</b></span>
+      <span>📦 Deliverable: <b>evidence kit v1</b></span>
+      <span>🎯 <b>Gate: method running</b></span>
+    </div>
+    <p style="margin-top:14px"><a class="btn ghost" href="../slides/week13-evidence.html">← Back to the Week 13 slides</a>
+       <a class="btn ghost" href="../index.html">Course home</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Goal</span>
+  You have a baseline that fails <b>REQ-M3-1</b> and an MPC controller that should fix it. Today you turn that
+  into <b>evidence</b>: a comparison controlled tightly enough that the difference can only be your upgrade, a
+  figure that shows the <em>mechanism</em> rather than the outcome, and an honest measurement of how much of
+  your margin is the noise draw. This is required report item 3 — and the discipline behind items 1 and 2.
+  The final project is <b>individual</b>: your controller, your vehicle, your certification, your viva.
+</div>
+
+<div class="callout warn">
+  <span class="ttl">Condition 5 — same vehicle, and it is yours alone</span>
+  <code>certify.py --student &lt;your ID&gt;</code> derives your quadcopter's mass, arm length, \(k_\tau\) and inertia
+  <b>deterministically from your student ID</b>. So <b>"same vehicle" now joins "same seed", "same script" and
+  "frozen baseline" as a condition of a controlled comparison</b> — it is not a new rule, it is the same rule applied
+  to a quantity that used to be constant for everybody. <b>Comparing your MPC's number against a classmate's baseline
+  number is not a weak comparison; it is not a comparison at all</b>, because two things differ and one of them is the
+  aircraft. Discuss theory and read each other's code freely — but measure both of your own runs with your own ID,
+  and record that ID in your README.
+</div>
+
+<!-- ============ 1. RECAP ============ -->
+<h2>1 · The 5-minute recap</h2>
+<p>A comparison is <b>controlled</b> only when everything except the thing you are testing is held fixed. Five
+   conditions, all of which you can check:</p>
+<ol>
+  <li><b>One arena</b> — same mission, same simulator, same <code>QuadParams</code>.</li>
+  <li><b>Frozen baseline</b> — the Week-12 commit, not "the PID as it is today".</li>
+  <li><b>Recorded seeds</b> — stated, not remembered.</li>
+  <li><b>Same metrics script</b> — <code>certify.py</code> for both sides, not a bespoke plot for one.</li>
+  <li><b>Same vehicle</b> — <code>--student &lt;your ID&gt;</code> on <b>both</b> runs. New this year, and the one most likely to catch you out.</li>
+</ol>
+
+<p>And a claim you cannot falsify is not a result. Every figure you submit should answer: <em>what plot would
+   have shown me I was wrong?</em></p>
+
+<div class="callout warn">
+  <span class="ttl">The seed is part of the experiment</span>
+  Your loop closes on the <b>estimate</b>, so the sensor-noise sequence is one of the experiment's inputs. One
+  run is one sample. The reference <code>CascadePID</code> on M3 ranges <b>0.211 m to 0.721 m</b> on REQ-M3-1
+  across eight seeds — a 3.4&times; spread with the verdict flipping, on a controller with nothing random in it.
+</div>
+
+<!-- ============ 2. STEPS ============ -->
+<h2>2 · Do it</h2>
+
+<details class="step" open>
+  <summary><span class="num">1</span> Pin the comparison down <span class="tag">controlled</span></summary>
+  <div class="step-body">
+    <p>Before you measure anything, write down — literally, in your report draft — the five conditions and how
+       you are holding each one fixed. Then confirm the baseline you are comparing against is the frozen one:</p>
+    <div class="code"><pre>git log --oneline -1 <span class="cm"># the Week-12 freeze commit</span>
+git tag <span class="cm"># baseline tag should be here</span></pre></div>
+    <div class="callout warn">
+      <span class="ttl">The most common accidental cheat</span>
+      Tuning the baseline while developing the upgrade. If your PID has changed since Week 12, your "improvement"
+      is partly a comparison against a controller that no longer exists. Re-run the frozen one.
+    </div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">2</span> Run both sides on the graded seed <span class="tag">the headline</span></summary>
+  <div class="step-body">
+    <p>Same command, same mission, same seed — only the controller changes:</p>
+    <div class="code"><pre>python certify.py --controller &lt;your.baseline:Class&gt; --student &lt;your ID&gt; --mission M3 | tee baseline_M3.txt
+python certify.py --controller &lt;your.upgrade:Class&gt;  --student &lt;your ID&gt; --mission M3 | tee final_M3.txt</pre></div>
+    <p><b>The same <code>--student</code> ID on both lines.</b> Check the ID printed at the top of each saved report
+       before you go any further — a run with the wrong ID is a run on somebody else's aircraft and does not count.
+       Do not know your own numbers yet?</p>
+    <div class="code"><pre>python -m quadsim.student_params &lt;your ID&gt;</pre></div>
+    <p>For reference, the course's own controllers on the <b>course-default</b> vehicle (no <code>--student</code>)
+       give the shared lecture example. <b>Your two numbers will differ; the pattern will not</b> — the baseline
+       always fails REQ-M3-1, the reference MPC always certifies:</p>
+    <div class="code"><pre><span class="cm">CascadePID  NOT CERTIFIED   REQ-M3-1  max = 0.540 m   (REQ-M3-2, REQ-M3-3 pass)
+LinearMPC   CERTIFIED       REQ-M3-1  max = 0.473 m</span></pre></div>
+    <p>Keep both files. They are report item 1, and they go in <b>verbatim</b>.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">3</span> Measure how much is luck <span class="tag">required sentence</span></summary>
+  <div class="step-body">
+    <p>You are graded on seed 0, but you must report the spread. Run the sweep on <em>both</em> sides:</p>
+    <div class="code"><pre>python certify.py --controller &lt;your.upgrade:Class&gt; --student &lt;your ID&gt; --mission M3 --seeds 0,1,2</pre></div>
+    <p><code>--seeds</code> <b>measures the spread for one required sentence — it is not the grading rule.</b>
+       You are graded on seed 0.</p>
+    <p>It prints each seed's number per requirement and names any seed that failed. Write the one sentence now,
+       while the numbers are in front of you:</p>
+    <div class="code"><pre><span class="cm">"My margin on REQ-M3-1 is ___ m on the graded seed, but ranges
+ ___-___ m across seeds 0-2, so I would not claim a robust pass."</span></pre></div>
+    <p>If your upgrade wins on seed 0 but loses on seeds 1 and 2, that is a genuine and interesting result —
+       report it. It scores far better than pretending you did not look.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">4</span> Build the mechanism figure <span class="tag">report item 3</span></summary>
+  <div class="step-body">
+    <p>This is the required figure. It must show <b>why</b> the number moved, not merely <em>that</em> it moved.
+       For M3 the clearest choice is almost always the <b>altitude trace through the mass step</b>, both
+       controllers overlaid, with the drop marked:</p>
+    <div class="code"><pre><span class="cm"># after the two certify runs: t_base/z_base, t_mpc/z_mpc = log.t, log.position[:,2] of each</span>
+<span class="cm"># log.t, log.position[:,2] from each run; mark t = 5 s</span>
+plt.axvline(<span class="st">5.0</span>, ls=<span class="st">"--"</span>, c=<span class="st">"grey"</span>, label=<span class="st">"payload released"</span>)
+plt.axhline(<span class="st">1.5</span>, ls=<span class="st">":"</span>,  c=<span class="st">"grey"</span>)
+plt.plot(t_base, z_base, label=<span class="st">"baseline (cascade PID)"</span>)
+plt.plot(t_mpc,  z_mpc,  label=<span class="st">"upgrade (MPC)"</span>)
+plt.ylabel(<span class="st">"altitude z [m]"</span>); plt.xlabel(<span class="st">"t [s]"</span>); plt.legend()</pre></div>
+    <p>Then write the paragraph beside it. Name the <b>specific structural feature</b> of MPC that is doing the
+       work — not "MPC is better".</p>
+    <table class="data">
+      <tr><th>A paragraph that scores</th><th>A paragraph that does not</th></tr>
+      <tr>
+        <td>&ldquo;After release the PID loop is still commanding thrust sized for 0.65 kg and only corrects once
+            position error has accumulated, so it overshoots to 0.54 m. The MPC re-solves against a horizon and
+            rations thrust over the next \(N\) steps, so the excess is absorbed before the error grows —
+            peak 0.47 m.&rdquo;</td>
+        <td>&ldquo;MPC performs better than PID because it is an optimal control method.&rdquo;</td>
+      </tr>
+    </table>
+    <p>State the claim your figure supports in one sentence — and what plot would falsify it.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">5</span> Optional: the craft artifacts <span class="tag">stretch only</span></summary>
+  <div class="step-body">
+    <div class="callout warn">
+      <span class="ttl">Genuinely optional</span>
+      None of the following is required, and none is needed for full marks. Attempt them only once steps 1&ndash;4
+      are properly finished. A student with three solid required items scores better than one with six rushed ones.
+    </div>
+    <ul>
+      <li><b>Constraint-activation plot</b> — constrained quantities vs time, bounds drawn, active samples shaded.
+          If nothing is ever shaded, your MPC has degenerated to LQR-with-preview, and the report should say so.</li>
+      <li><b>Solve-time histogram</b> — distribution against your control-period deadline. Quote <b>p95</b>, not
+          the mean; a controller that meets its deadline on average still misses it every twentieth step.</li>
+      <li><b>Ablation table</b> — the same run under a shorter horizon, hard-only constraints, and no
+          \( \Delta u \) term. Shows each design choice earned its place.</li>
+    </ul>
+  </div>
+</details>
+
+<!-- ============ 3. DELIVERABLE ============ -->
+<h2>3 · What to hand in</h2>
+<div class="callout goal">
+  <span class="ttl">Evidence kit v1 — before you leave</span>
+  <ul>
+    <li>Both certification reports on the graded seed, <b>same student ID on both</b>, saved verbatim (<code>baseline_M3.txt</code>, <code>final_M3.txt</code>).</li>
+    <li>The one-sentence seed-spread statement, with real numbers from <code>--seeds 0,1,2</code>.</li>
+    <li>The mechanism figure, plus the paragraph naming what in MPC is doing the work.</li>
+    <li>One sentence stating the claim the figure supports, and one stating what would falsify it.</li>
+  </ul>
+</div>
+<p><b>Gate check:</b> your method must be <i>running</i> — an MPC controller that completes M3 without crashing,
+   whatever its numbers. If it does not run yet, that is the only thing you should work on today.</p>
+
+<!-- ============ 4. TROUBLESHOOTING ============ -->
+<h3>Self-check</h3>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="a"/><label>Baseline and submission were run with the <b>same</b> command, same <code>--student</code>, same seed; the baseline is at a frozen git tag.</label></li>
+  <li><input type="checkbox" data-id="b"/><label>The <code>--seeds 0,1,2</code> spread is reported as one sentence with real numbers, on both sides.</label></li>
+  <li><input type="checkbox" data-id="c"/><label>The mechanism figure (altitude through the mass step, both controllers) exists and its paragraph names <i>what in MPC</i> does the work.</label></li>
+  <li><input type="checkbox" data-id="d"/><label>I checked in the <a href="../digital-lab.html#activation">activation widget</a> whether my thrust bound is ever active — and my claim matches the answer.</label></li>
+</ul>
+
+<h2>4 · Common traps</h2>
+<table class="data">
+  <tr><th>Trap</th><th>Why it invalidates the evidence</th><th>Fix</th></tr>
+  <tr><td>Baseline re-tuned since Week 12</td><td>You are comparing against a controller that no longer exists</td><td>Re-run the frozen commit</td></tr>
+  <tr><td>Different seed for each side</td><td>The difference could be entirely the noise draw</td><td>Same seed both sides; then sweep both</td></tr>
+  <tr><td>A classmate's baseline number, or a missing <code>--student</code></td><td>Two things differ — the controller <b>and</b> the aircraft — so it is not a comparison at all</td><td><code>--student &lt;your ID&gt;</code> on both runs; read the ID in both reports</td></tr>
+  <tr><td>Reporting only the best of several runs</td><td>That is a demonstration, not a measurement</td><td>Report the graded seed and the spread</td></tr>
+  <tr><td>Retyping the certification report</td><td>A retyped report is not evidence — and typos look like edits</td><td><code>| tee</code> it and paste the file</td></tr>
+  <tr><td>A figure with no stated claim</td><td>The reader has to guess what it proves, so it proves nothing</td><td>One sentence under every figure</td></tr>
+</table>
+
+<p style="margin:30px 0;color:var(--muted)">Next week &rarr; <a href="../index.html#weeks">Week 14: the final-project clinic</a> — a supervised build
+   session, not a lecture. You will run the certification <b>dry run</b> exactly as it will be run for real:
+   fresh clone, tag <code>final</code>, network off, <code>--student &lt;your ID&gt;</code>. Bring whatever is not finished.</p>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<!-- KaTeX auto-render for the inline math -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Team Case Study — Reality Gap · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css" />
+</head>
+<body data-lab="week10-assignment">
+
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Assignment · Team Case Study (Week 10) · ⭐ graded</div>
+    <h1>Team Case Study — The Reality Gap</h1>
+    <div class="sub">Fly the autopilot you built in Labs 1–6 on your team's hidden <code>TeamPlant</code>; diagnose, from the data, why it no longer behaves; fix one thing.</div>
+    <div class="meta">
+      <span>⚖️ Weight: <b>20%</b> of the course</span>
+      <span>👥 Teams of <b>5</b> (T1–T7; the final project is individual)</span>
+      <span>📄 Report ≤ 8 pages + 5-min lightning debrief (Week 10 session)</span>
+    </div>
+    <p style="margin-top:14px">
+      <a class="btn ghost" href="../labs/week10-consolidation-kickoff.html">← Week 10 lab sheet</a>
+      <a class="btn ghost" href="final-project.html">Final project brief →</a>
+      <a class="btn ghost" href="../index.html#assign">All assignments</a> <a class="btn ghost" href="../pdf/MLTE03_Assignment_team-case-study.pdf">Download PDF</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Task</span>
+  As a team, take <b>one</b> controller + estimator stack from Labs 1–6 (no per-lab hacks left inside)
+  and fly the Week-10 mission — <b>take off → 2 m square → land</b>, on the <b>estimated</b> state —
+  twice with <code>examples/08_team_mission.py --team T&lt;n&gt;</code>: on the nominal model, and on your
+  team's hidden <code>TeamPlant</code> (motor lag, drag, gusts, GPS latency, unknown mass; parameters
+  derived from your team id and never shown to you). Then — the analytical heart of the assignment —
+  <b>explain the gap mechanistically</b>: three effects, each identified from the flight data with a
+  plot and a causal argument, and <b>one</b> corrective change with its before/after on both plants.
+  You are graded on the diagnosis, not on how small the gap is.
+</div>
+
+<h2>What to submit (one zip per team)</h2>
+<ul>
+  <li><b>Code</b> — your controller (<code>student.py</code>, or a note that you used <code>CascadePID</code>) plus a <code>gap.py</code> that reproduces both flights and every plot in the report with one command</li>
+  <li><b>Report (PDF, ≤ 8 pages)</b> — the two-column metrics table with the plant <b>fingerprint</b>; three mechanisms (effect → evidence plot → causal argument); the one change and its before/after on <b>both</b> plants; what you would try next and why</li>
+  <li><b>Debrief slides</b> — 2 pages for the 5-minute lightning debrief in the Week-10 session</li>
+  <li><b>Contribution statement</b> — half a page: who did what, signed by every member</li>
+</ul>
+
+<h2>Pass bar — expected results</h2>
+<ul>
+  <li>Both flights complete (no crash) with the <b>same</b> bare controller, same seed; the realistic flight lands within 1 m. Reference: nominal RMSE <b>0.226 m</b>; team plants <b>0.26–0.65 m</b>, max deviation 0.5–1.2 m (200-team sweep)</li>
+  <li>Each mechanism is <b>shown, not asserted</b> — a plot whose feature follows from the named effect (e.g. applied thrust trailing commanded thrust ⇒ motor lag)</li>
+  <li>The single change is attributable: one thing changed, both columns re-measured</li>
+  <li>One-command reproduction: <code>PYTHONPATH=. python gap.py --team T&lt;n&gt;</code></li>
+</ul>
+
+<h2>Assessment criteria</h2>
+<table class="rubric">
+<thead><tr><th>Criterion</th><th>Weight</th><th>What earns full marks</th></tr></thead>
+<tbody>
+<tr><td><b>Gap measurement</b></td><td style="text-align:center">20%</td><td>Both flights reproduced from the team's code; two-column table complete, fingerprint recorded, same controller and seed on both plants.</td></tr>
+<tr><td><b>Mechanistic diagnosis (×3)</b></td><td style="text-align:center">35%</td><td>Each mechanism names the effect, shows the evidence in the data, and argues <i>why</i> that evidence follows — and is consistent with the plant the instructor can reveal. A wrong but well-argued hypothesis scores; an unargued right one does not.</td></tr>
+<tr><td><b>One change, attributed</b></td><td style="text-align:center">20%</td><td>Exactly one change, motivated by the diagnosis, measured before/after on both plants, with the nominal-vs-robust trade stated honestly.</td></tr>
+<tr><td><b>Lightning debrief (5 min)</b></td><td style="text-align:center">10%</td><td>Two slides, the gap and its mechanisms, in time; answers the instructor's one "how do you know?" question.</td></tr>
+<tr><td><b>Report</b></td><td style="text-align:center">10%</td><td>≤ 8 pages, labelled figures, what you would try next and why.</td></tr>
+<tr><td><b>Contribution statement</b></td><td style="text-align:center">5%</td><td>Specific and credible; grades may be individually adjusted for grossly unequal contributions.</td></tr>
+</tbody></table>
+
+<h2>Rules</h2>
+<ul>
+  <li><b>Team work</b> — register your team (5 students, id T1–T7) by Week 5; <b>the team id string is your plant's seed</b> and cannot change. The final project is individual.</li>
+  <li><b>Peeking</b> — the plant parameters are hidden but not encrypted; reading them earns nothing (the report is marked on the diagnosis of an unmodified controller) and the instructor may re-run any submission with a different salt.</li>
+  <li>Cross-team idea exchange is fine; code and text stay within the team. AI-assistant policy as in the lab assignments: declare use, be able to explain every line.</li>
+  <li><b>Late submission:</b> −20% per day, not accepted after 3 days (the debrief slot cannot be made up — absence without cause scores 0 on the debrief criterion).</li>
+</ul>
+
+<div class="submit-box">
+  <h3>📤 Submit on the course platform</h3>
+  <div class="row">
+    <div>What</div><div>one zip per team (code + report + slides + contribution statement)</div>
+    <div>Filename</div><div><code>MLTE03_CaseStudy_T&lt;n&gt;.zip</code></div>
+    <div>Where</div><div>the <a href="https://course.ainrobotics.com/mlte03/">course platform</a> → <i>Team Case Study</i> upload box (log in at the Ken Sir course hub; every version you upload is kept)</div>
+    <div>Deadline</div><div><span class="tofill">date / time — TO FILL</span> (debrief in the Week 10 session; report before Week 11)</div>
+  </div>
+</div>
+
+</main>
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

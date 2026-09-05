@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 5 — Attitude Control · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+
+<style>
+  .reveal .attitude-demo { font-size: 15px; margin: 6px 0; }
+  .reveal .attitude-demo canvas { height: 180px; }
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 5 · Attitude Control<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1. TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Attitude Control</h1>
+    <p class="tp-sub">姿態控制</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 5 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. The session plan follows; keep this up while people settle.</aside>
+</section>
+
+
+
+<!-- 1b. AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan</h2>
+  <table class="agenda">
+    <tr><th>Clock</th><th>Segment</th><th></th></tr>
+    <tr><td class="t">00:00</td><td>Recap: the model is trusted — now close the first loop</td><td>10&#8242;</td></tr>
+    <tr><td class="t">00:10</td><td><b>Block A</b> — PID, the cascade, the inner-loop derivation</td><td>40&#8242;</td></tr>
+    <tr><td class="t">00:50</td><td>Second-order intuition + live tuning widget</td><td>15&#8242;</td></tr>
+    <tr><td class="t">01:05</td><td><b>Block B</b> — the hardware layer: two worlds, signs, seven fixes, tuning method</td><td>30&#8242;</td></tr>
+    <tr class="break"><td class="t">01:35</td><td>Break</td><td>10&#8242;</td></tr>
+    <tr><td class="t">01:45</td><td>Lab briefing — Lab 2 (&starf; graded)</td><td>10&#8242;</td></tr>
+    <tr class="lab"><td class="t">01:55</td><td><b>Lab session</b>: the inner attitude loop + two of the seven fixes</td><td>55&#8242;</td></tr>
+    <tr><td class="t">02:50</td><td>Debrief + milestone board</td><td>10&#8242;</td></tr>
+  </table>
+</section>
+
+<!-- 2. WHERE WE ARE -->
+<section>
+  <p class="eyebrow">Recap → today</p>
+  <h2>From a model to a flying machine</h2>
+  <div class="cols">
+    <ul>
+      <li><b>Wk 2–3:</b> the 12-state nonlinear model \( \dot{\mathbf{x}}=f(\mathbf{x},\mathbf{u}) \).</li>
+      <li><b>Wk 4:</b> hover trim &amp; the linearized \( (A,B) \) — and its <span class="accent">unstable poles</span>.</li>
+      <li><b>Today:</b> the first feedback loop that tames those poles — <b>attitude control</b>.</li>
+    </ul>
+    <div class="box warn">
+      <b>The whole course in one line:</b><br/>
+      open loop ⇒ the quad tips over. The job of control is to make the unstable plant track what we ask.
+    </div>
+  </div>
+  <aside class="notes">Tie back to example 01_open_loop.py from Week 1 — a torque bias and it diverges.</aside>
+</section>
+
+<!-- 3. OBJECTIVES -->
+<section>
+  <p class="eyebrow">Learning objectives</p>
+  <h2>By the end of today you can…</h2>
+  <ul>
+    <li>State the <b>PID</b> control law and what each term does — and its failure modes.</li>
+    <li>Explain the <b>cascade</b> architecture: slow outer position loop, fast inner attitude loop.</li>
+    <li>Derive the <b>inner attitude loop</b>: attitude error → body torques.</li>
+    <li>Predict response from gains via \( \omega_n,\ \zeta \) — and tune them.</li>
+    <li><span class="pill">Lab</span> Implement the inner loop in <code>StudentController</code> and stabilize a tilt.</li>
+  </ul>
+</section>
+
+<!-- HIST 5 -->
+<section>
+  <p class="eyebrow">History, in one minute</p>
+  <h2>PID is older than control theory</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>1911</b> — Elmer Sperry's gyroscopic ship autopilot: proportional plus a crude derivative, built from gears.</li>
+    <li><b>1922</b> — Nicolas Minorsky publishes the analysis, having watched helmsmen: they steer on error, on accumulated error, and on how fast the bow is swinging. <b>The three terms were reverse-engineered from human behaviour.</b></li>
+    <li><b>1942</b> — Ziegler and Nichols publish tuning rules, and PID becomes an industrial standard.</li>
+    <li><b>Today</b> — still the majority of deployed control loops worldwide, and the inner loop of nearly every drone in flight right now.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why the old thing survives.</span>
+  PID needs no model. Every method after it in this course buys performance with knowledge — LQR needs \( (A,B) \), MPC needs a predictive model. When you have neither, PID still flies the aircraft.<br/><br/>That is not a consolation prize. It is why your team's aircraft will fly on PID in Week 10, and why the intelligent methods must <i>earn</i> their place against it.</div>
+    </div>
+  </div>
+
+  <aside class="notes">A minute of history that frames PID as a serious baseline rather than the thing we outgrow. Minorsky's helmsman observation is a lovely story.</aside>
+</section>
+
+<!-- 4. UNDERACTUATION -->
+<section>
+  <p class="eyebrow">Why attitude first</p>
+  <h2>A quad is underactuated</h2>
+  <div class="cols">
+    <ul>
+      <li>4 motors → <b>4 controls</b>: total thrust \(T\) and 3 body torques \( \boldsymbol{\tau} \).</li>
+      <li>But <b>6 DOF</b> to place (position + attitude). You cannot push sideways directly…</li>
+      <li>…you <b>tilt</b>, then thrust. So <span class="accent">horizontal motion is a consequence of attitude</span>.</li>
+      <li>⇒ Attitude is the <b>inner</b>, fastest loop. Everything else rides on it.</li>
+    </ul>
+    <div class="box">
+      <b>Control wrench</b> (what your controller returns):
+      \[ \mathbf{u} = \begin{bmatrix} T \\ \tau_x \\ \tau_y \\ \tau_z \end{bmatrix} \]
+      The simulator mixes this into 4 motor thrusts and saturates them for you.
+    </div>
+  </div>
+  <aside class="notes">Hammer the "tilt then thrust" intuition — it's why we build inner-then-outer next week.</aside>
+</section>
+
+<!-- 4b. PENDULUM ANALOGY -->
+<section class="dense">
+  <p class="eyebrow">Mental picture first</p>
+  <h2>You already know this problem from a broomstick</h2>
+  <div class="cols">
+    <figure class="photo"><img src="../assets/img/cartpend.png" alt=""/><figcaption>The cart–pendulum: keep an unstable stick upright by moving its base. Replace the cart's force with rotor torques and the stick with the airframe — same problem, same medicine. <span class="cr">Diagram: Krishnavedala, Wikimedia Commons, CC0.</span></figcaption></figure>
+    <ul class="small">
+      <li>Balancing a broom on your palm: you watch the <b>angle</b>, and you react to the <b>rate</b> it's falling — congratulations, your hand runs PD control at ~10 Hz.</li>
+      <li>The quad's attitude problem is this, rotated: unstable equilibrium, one fast actuator, feedback or fall.</li>
+      <li>The JiangXie inverted-pendulum kit (teaching-resources) is literally this picture with an encoder — its two-loop solution is our Wk-5 + Wk-6 cascade in one dimension.</li>
+    </ul>
+  </div>
+  <aside class="notes">If a broom is at hand, balance it for 10 seconds. Ask what information the hand uses — angle AND rate falls out of the room, and PD is motivated before a single equation.</aside>
+</section>
+
+<!-- 5. PID -->
+<section>
+  <p class="eyebrow">The tool</p>
+  <h2>PID in one slide</h2>
+  \[ u(t) = \underbrace{K_p\, e(t)}_{\text{now}} \;+\; \underbrace{K_i\!\int_0^t\! e\,d\tau}_{\text{past}} \;+\; \underbrace{K_d\, \dot e(t)}_{\text{future}}, \qquad e = x_{\text{ref}} - x \]
+  <div class="cols" style="margin-top:.4em">
+    <ul class="muted" style="font-size:.85em">
+      <li><b>P</b> — stiffness; pulls toward the target. Too high ⇒ oscillation.</li>
+      <li><b>D</b> — damping; resists velocity. Tames overshoot; amplifies noise.</li>
+      <li><b>I</b> — kills steady-state bias (gravity, wind). Too high ⇒ windup.</li>
+    </ul>
+    <div class="box">
+      For attitude we use mostly <b>PD</b>: the rate term \(K_d\) <em>is</em> our damping, and
+      there's little steady bias on angle. Integral comes back on <b>altitude</b> next week.
+    </div>
+  </div>
+</section>
+
+<!-- 5b. PID FIG -->
+<section>
+  <p class="eyebrow">The tool · drawn</p>
+  <h2>PID as a machine, not a formula</h2>
+
+  <div class="fig" data-diagram="pid"><p class="cap">Three parallel views of the same error — present (P), accumulated past (I), predicted future (D) — summed into one actuator command.</p></div>
+  <div class="turn" style="margin-top:.5em"><span class="tt">Your turn (60 s)</span> — cover the diagram: which branch causes windup? which amplifies gyro noise? which fights steady bias? <span class="muted">(I · D · I — if any answer surprised you, re-read the box on the previous slide before the lab.)</span></div>
+</section>
+
+<!-- FB 1 -->
+<section class="dense">
+  <p class="eyebrow">First principles</p>
+  <h2>What a feedback loop is, before any letters</h2>
+  <div class="fig plain" data-diagram="pid"><p class="cap">Error in, correction out, physics closes the circle. Everything else this term is a different box in the middle.</p></div>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Measure</b> where you are. <b>Compare</b> with where you want to be. <b>Act</b> in proportion to the difference. <b>Repeat</b>, forever.</li>
+    <li>The loop does not need to understand the aircraft — it needs the <i>sign</i> to be right and the <i>speed</i> to be sufficient.</li>
+    <li>That is why feedback is robust: it corrects errors whose causes it never models. Wind, payload, a bent arm — all handled by the same mechanism.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The trade you are buying into.</span>
+  Feedback converts a <i>modelling</i> problem into a <i>stability</i> problem. You no longer need to know the disturbance — but you now have to keep the loop from fighting itself. Every difficulty from here to Week 12 is a version of that sentence.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Ninety seconds of orientation before PID. The 'converts modelling into stability' framing is the honest summary of what control engineering is.</aside>
+</section>
+
+<!-- P 1 -->
+<section>
+  <p class="eyebrow">Term by term</p>
+  <h2>P: the spring you install in software</h2>
+  <div class="cols top">
+    <div>
+  <p>\( \tau_P = K_p\, e \) — push back in proportion to how wrong you are.</p>
+  <ul class="small">
+    <li>Physically it is a <b>torsional spring</b>: the further you are pushed, the harder it pulls back.</li>
+    <li>Alone, on a double integrator, it produces \( \ddot\theta = -K_p\theta \) — pure oscillation that <b>never decays</b>. Stiffness without damping.</li>
+    <li>Raise \( K_p \) and the oscillation gets <i>faster</i>, not smaller. Gain alone cannot stabilise a second-order plant.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Do the experiment mentally.</span>
+  Set \( K_d = 0 \), \( K_p = 180 \). Poles at \( \pm j13.4 \): the aircraft ratchets back and forth 2.1 times a second, forever.<br/><br/>You will see exactly this in the widget in a few minutes — and on hardware it is the classic 'P-only wobble' that tells an experienced pilot the D-term is missing before any log is opened.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Isolating P and showing it CANNOT work is more instructive than presenting PID as a finished package.</aside>
+</section>
+
+<!-- D 1 -->
+<section>
+  <p class="eyebrow">Term by term</p>
+  <h2>D: the damper — and the noise it drags in</h2>
+  <div class="cols top">
+    <div>
+  <p>\( \tau_D = -K_d\,\dot\theta \) — resist motion, regardless of direction or error.</p>
+  <ul class="small">
+    <li>Physically a <b>viscous damper</b>: energy leaves the system whenever it moves.</li>
+    <li>It is what turns the P-only oscillation into a decaying response — the \( K_d s \) term in the characteristic polynomial.</li>
+    <li><b>We use measured rate, not \( de/dt \).</b> The gyro hands us \( \dot\theta \) directly: no numerical differentiation, no setpoint kick. Fix #4, free of charge.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why it has a ceiling.</span>
+  Differentiation amplifies high frequencies: noise at 100 Hz comes out 100× larger than noise at 1 Hz. Your gyro's hash — literally your propellers, arriving through the frame (Week 3) — is what limits \( K_d \) on hardware, long before stability does.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Connecting the D ceiling back to Wk-3's vibration slide is the moment the hardware and control tracks visibly fuse.</aside>
+</section>
+
+<!-- I 1 -->
+<section>
+  <p class="eyebrow">Term by term</p>
+  <h2>I: the term that remembers — and the one that bites</h2>
+  <div class="cols top">
+    <div>
+  <p>\( \tau_I = K_i \int e\,dt \) — keep pushing harder as long as an error persists.</p>
+  <ul class="small">
+    <li>It is the only term that can drive a <b>steady</b> error to zero: P needs an error to act, I does not.</li>
+    <li>Its job is to absorb <i>constant</i> biases: a CoM offset, a bent arm, a heavier battery than modelled.</li>
+    <li>Its danger: memory. When the actuator saturates, the integral keeps growing while nothing changes — <b>windup</b>.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why attitude usually needs little I.</span>
+  At hover the steady moment is nearly zero (gravity acts at the CoM — Week 2), so there is little bias to erase. Altitude is the opposite: gravity is a permanent, large bias, which is why Week 6's altitude loop is where I earns its keep.<br/><br/>On hardware, a <i>small clamped</i> attitude-I is used to trim CoM offset — the 0.006 N·m from your Week-2 payload example.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Explaining WHERE each term belongs (I on altitude, not attitude) is more useful than the generic PID recipe.</aside>
+</section>
+
+<!-- FIX 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>The seven fixes, one at a time — 1 to 3: taming the integral</h2>
+  <table class="data">
+    <tr><th>Fix</th><th>Mechanism</th><th>When you need it</th></tr>
+    <tr><td><b>Integral clamping</b></td><td>bound \( \int e\,dt \) (or the I-term) to \( \pm E_{max} \)</td><td>always, the moment I exists</td></tr>
+    <tr><td><b>Integral separation</b></td><td>only integrate when \( |e| &lt; e_{thresh} \)</td><td>large-step commands, take-off</td></tr>
+    <tr><td><b>Variable-rate integration</b></td><td>scale integration speed by a decreasing function of \( |e| \)</td><td>when a hard threshold leaves a residual offset</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Sizing the clamp properly.</span>
+  Choose \( E_{max} \) so the I-term alone can produce at most the authority you are willing to give it — say 20%:<br/>\( K_i E_{max} \le 0.2\,\tau_{max} \Rightarrow E_{max} \le 0.2(0.8)/K_i \).<br/><br/>With \( K_i = 5 \): \( E_{max} \approx 0.032 \). <b>A number, not a guess.</b></div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The one-line version.</span>
+  Conditional integration — <i>stop integrating whenever the output is saturated</i> — is three lines of code and catches most windup on its own. Do that first, then tune the clamp.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Sizing the clamp from an authority budget is the professional method and directly gradeable.</aside>
+</section>
+
+<!-- FIX 2 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>The seven fixes — 4 to 5: taming the derivative</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">Fix 4 · derivative on measurement.</span>
+  Replace \( K_d \frac{d}{dt}(r - y) \) with \( -K_d \frac{dy}{dt} \). When the setpoint \( r \) steps, the first form differentiates a step — an impulse. The second does not notice.<br/><br/><b>We got this free</b> by damping the gyro rate. Autopilots that damp the error do not.</div>
+    </div>
+    <div>
+  <div class="env defn"><span class="eh">Fix 5 · filtered derivative.</span>
+  Pass D through a first-order low-pass: \( D_k = \alpha D_{k-1} + (1-\alpha) K_d \dot y_k \).<br/><br/>Cut-off \( f_c \) is a real design choice: high enough to keep the damping (\( f_c \gtrsim 3\times \) loop bandwidth ≈ 6 Hz), low enough to reject rotor hash (≈127 Hz). <b>Anywhere in 15–40 Hz is defensible; state your choice and why.</b></div>
+    </div>
+  </div>
+  <p class="small">Filtering costs phase: a first-order filter at \( f_c \) removes \( \arctan(f_{loop}/f_c) \) degrees at the crossover. At \( f_c = 20 \) Hz and a 2 Hz loop that is 6° — cheap. At \( f_c = 5 \) Hz it is 22° — expensive. <b>Every filter is a loan against phase margin.</b></p>
+
+  <aside class="notes">The 'filters are a loan against phase margin' line is the most transferable sentence in the week.</aside>
+</section>
+
+<!-- FIX 3 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>The seven fixes — 6 to 7: telling the truth about the plant</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">Fix 6 · output bias (feed-forward).</span>
+  Add what you already know: \( u = u_{ff} + u_{fb} \). For altitude, \( u_{ff} = mg \); for attitude on a CoM-offset aircraft, a small constant trim.<br/><br/><b>Feed-forward what you know; feed back what you don't.</b> Making the integrator rediscover gravity on every arming is a design error, not a safety margin.</div>
+    </div>
+    <div>
+  <div class="env defn"><span class="eh">Fix 7 · input dead-band.</span>
+  Ignore \( |e| &lt; e_{db} \). Sized from your <i>sensor noise</i>, not from taste: if attitude estimate noise is \( 0.3^\circ \) RMS, a dead-band below \( \approx 0.3^\circ \) achieves nothing and above \( \approx 1^\circ \) creates visible slop.<br/><br/>Use sparingly: a dead-band is a deliberate steady-state error, traded for actuator peace.</div>
+    </div>
+  </div>
+  <p class="small muted">Notice the shape of all seven: each one <b>puts back a piece of reality</b> that the ideal PID equation assumed away — bounded actuators, noisy sensors, known biases, discrete steps. That is what 'engineering a controller' means.</p>
+
+  <aside class="notes">The closing observation unifies the seven fixes into a single idea rather than a list to memorise.</aside>
+</section>
+
+<!-- 6. CASCADE -->
+<section>
+  <p class="eyebrow">Architecture</p>
+  <h2>The cascade: two nested loops</h2>
+
+  <div class="fig plain" data-diagram="cascade"><p class="cap">Two nested loops, two feedback paths, two speeds. This week: the violet inner loop. Next week: the teal outer one.</p></div>
+  <ul class="muted" style="font-size:.8em">
+    <li><b>This week:</b> the inner loop (attitude → torques). <b>Next week:</b> the outer loop (position → desired tilt).</li>
+    <li>The mixer (Wk 3, <code>params.mixer_matrix()</code>) turns your wrench into 4 motor thrusts.</li>
+  </ul>
+  <aside class="notes">Emphasize separation of timescales — the inner loop must be much faster so the outer sees it as "instant".</aside>
+</section>
+
+<!-- 7. INNER LOOP DERIVATION -->
+<section>
+  <p class="eyebrow">The derivation</p>
+  <h2>Inner attitude loop → body torques</h2>
+  <p>Rotational dynamics (Euler): \( \mathbf{I}\dot{\boldsymbol\omega} = \boldsymbol\tau - \boldsymbol\omega\times \mathbf{I}\boldsymbol\omega \).
+     Near hover the gyroscopic term is small, so to command an angular acceleration we just pick \( \boldsymbol\tau \).</p>
+  <p>Drive the attitude \( \boldsymbol\eta=(\phi,\theta,\psi) \) to a desired \( \boldsymbol\eta_d \) with a <b>PD law</b>:</p>
+  \[ \boldsymbol\tau = \mathbf{I}\Big( K_p^{\text{att}}\,(\boldsymbol\eta_d-\boldsymbol\eta) \;+\; K_d^{\text{att}}\,(-\boldsymbol\omega) \Big) \]
+  <div class="box" style="margin-top:.3em">
+    Per axis this is exactly the line you'll write in <code>cascade_pid.py</code>:
+    <br/><code>tau = p.inertia * (kp_att * e_att + kd_att * (-omega))</code>
+  </div>
+  <aside class="notes">
+    Point out the minus-omega: we damp the rate directly (it's measured), rather than differentiating
+    the angle error — cleaner and lower-noise. Yaw error must be wrapped to (-pi, pi].
+  </aside>
+</section>
+
+<!-- 7b. DERIVE CLOSED LOOP -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill cyan">interactive</span></p>
+  <h2>From control law to closed-loop physics</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>\( I\ddot\theta = \tau \) (one axis, gyroscopic term dropped)</span>
+      <span class="dwhy"><b>Plant.</b> Near hover the ω×Iω term is second-order small — Wk 2's quiz justified this.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>\( \tau = I\big(K_p(\theta_d-\theta) - K_d\dot\theta\big) \)</span>
+      <span class="dwhy"><b>Our law.</b> Note: damping on the *measured rate*, not on d(error)/dt — that is fix #4 built in from birth.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">3</span>\( \ddot\theta + K_d\dot\theta + K_p\theta = K_p\theta_d \)</span>
+      <span class="dwhy"><b>Substitute — I cancels.</b> The closed loop doesn't care about inertia (as long as you scaled τ by it). A mass-spring-damper appears from nowhere.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>\( \omega_n = \sqrt{K_p}, \qquad \zeta = \dfrac{K_d}{2\sqrt{K_p}} \)</span>
+      <span class="dwhy"><b>Read off the standard form.</b> Two gains ⇔ two physical properties. Tuning is no longer folklore: pick ω_n and ζ, invert.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">5</span>\( K_p = 180 \Rightarrow \omega_n \approx 13.4\,\mathrm{rad/s}; \; K_d = 28 \Rightarrow \zeta \approx 1.04 \)</span>
+      <span class="dwhy"><b>The reference gains decoded.</b> Slightly overdamped, ~0.4 s settle. Now the widget: feel what you just derived.</span></div>
+  </div>
+  <aside class="notes">This derive block is the template for the graded "justify your gains via ω_n, ζ" lab checkpoint — tell them explicitly the viva-style questioning starts here.</aside>
+</section>
+
+<!-- 7c. RESPONSE CATALOGUE -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>The second-order response catalogue — the numbers behind the feel</h2>
+  <div class="env defn"><span class="eh">Facts <em>(standard form \( \ddot e + 2\zeta\omega_n \dot e + \omega_n^2 e = 0 \))</em>.</span>
+  Poles \( s = -\zeta\omega_n \pm j\omega_n\sqrt{1-\zeta^2} \) · overshoot \( M_p = e^{-\pi\zeta/\sqrt{1-\zeta^2}} \) · settling (2%) \( t_s \approx 4/(\zeta\omega_n) \).</div>
+  <table class="data" style="margin-top:.35em">
+    <tr><th>\( \zeta \)</th><th>Overshoot</th><th>Character</th><th>On an aircraft</th></tr>
+    <tr><td>0.4</td><td>25%</td><td>fast, ringing</td><td>looks "sporty", saturates motors, terrifies whoever is holding the transmitter</td></tr>
+    <tr><td>0.7</td><td>4.6%</td><td>the classical optimum</td><td>good default for the <i>outer</i> loop</td></tr>
+    <tr class="hl"><td>1.0</td><td>0%</td><td>critical</td><td>the inner-loop target — attitude should never overshoot</td></tr>
+    <tr><td>1.5</td><td>0%</td><td>sluggish</td><td>eats the timescale separation from below</td></tr>
+  </table>
+  <div class="env exm" style="margin-top:.35em"><span class="eh">Worked example <em>(design to a spec, then check the reference)</em>.</span>
+  Spec: settle in \( t_s = 0.4 \) s with \( \zeta = 1 \). Then \( \omega_n = 4/(\zeta t_s) = 10 \) rad/s ⇒ \( K_p = \omega_n^2 = 100 \), \( K_d = 2\zeta\omega_n = 20 \).
+  The course reference (180, 28) ⇒ \( \omega_n = 13.4 \), \( \zeta = 1.04 \), \( t_s \approx 0.29 \) s — same design, slightly hotter spec. <b>You can now generate defensible gains from a sentence.</b></div>
+  <aside class="notes">The graded lab requires exactly this computation, not copied numbers. Note the M_p formula's cliff below ζ=0.5 — connect back to the widget behaviour.</aside>
+</section>
+
+<!-- 7d. WHY KD CANNOT GROW -->
+<section>
+  <p class="eyebrow">One level deeper · the ceiling on damping</p>
+  <h2>Why "just add more D" fails twice on a real aircraft — and on the Week-10 plant</h2>
+  <div class="cols top">
+    <div class="env rmk"><span class="eh">Ceiling 1 — noise.</span>
+    Differentiation multiplies a gyro-noise component at frequency \( \omega \) by \( \omega \): white-ish noise comes out <i>violet</i>. Doubling \( K_d \) doubles the clean damping and doubles the amplified hash — the hash hits the motors first (fix #5, the low-pass, buys you back a margin, at the price of phase).</div>
+    <div class="env rmk"><span class="eh">Ceiling 2 — lag.</span>
+    The motor chain is a lag \( \tau_m \approx 40 \) ms. At the loop's crossover (\( \approx \omega_n = 13 \) rad/s) it steals \( \arctan(\omega_n \tau_m) \approx 28^\circ \) of phase. D is a phase <i>lead</i> — but leading against a hard lag saturates: past a point, more \( K_d \) adds noise and no damping.</div>
+  </div>
+  <p class="small muted" style="margin-top:.4em">Consequence you will feel in Week 9: hardware gains land <b>lower</b> than simulation gains — not because the sim lied, but because it modelled neither the noise floor nor \( \tau_m \). Both ceilings are measurable; Role 4 measures the first this week (milestone), the second is on the WHEELTEC bench (ep 9.4).</p>
+  <aside class="notes">This is the honest master-level answer to the most-asked tuning question. The arctan number makes it quantitative without a full Bode lecture — offer the Bode digression as office-hours material.</aside>
+</section>
+
+<!-- POLE 5 -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>What feedback actually does to the poles</h2>
+  <div class="cols top">
+    <div>
+  <p>Open loop, one axis: \( \ddot\theta = \tau/I \) — two poles at the origin. Close the loop with \( \tau = I(K_p e - K_d\dot\theta) \):</p>
+  \[ s^2 + K_d s + K_p = 0 \;\Longrightarrow\; s = \frac{-K_d \pm \sqrt{K_d^2 - 4K_p}}{2} \]
+  <ul class="small">
+    <li><b>The gains ARE the characteristic polynomial's coefficients.</b> Choosing gains <i>is</i> choosing pole locations.</li>
+    <li>\( K_p \) sets how fast; \( K_d \) sets how gracefully.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Place them deliberately.</span>
+  Want both poles at \( s=-13 \) (critically damped, ≈0.3 s settle)?<br/>\( (s+13)^2 = s^2 + 26s + 169 \Rightarrow K_d = 26,\; K_p = 169 \).<br/><br/>The course reference \( (180, 28) \) gives poles at \( -14.0 \) and \( -12.9 \) — <b>the same design reached by a different route</b>.</div>
+    </div>
+  </div>
+  <p class="small muted">This is <b>pole placement</b>: state the behaviour you want, solve for the gains that produce it. Week 7 does the same thing but lets an optimisation choose the poles.</p>
+
+  <aside class="notes">Deriving the reference gains two independent ways shows the methods are one method.</aside>
+</section>
+
+<!-- RATE 1 -->
+<section class="dense">
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>The rate loop underneath: real autopilots have three levels</h2>
+  <div class="cols top">
+    <div>
+  <div class="fig plain" data-diagram="cascade"><p class="cap">Our two loops. Production firmware splits the inner one again: angle → rate → torque.</p></div>
+    </div>
+    <div>
+  <ul class="small">
+    <li><b>Angle loop</b> (~10–20 Hz): attitude error → desired body rate.</li>
+    <li><b>Rate loop</b> (~200–500 Hz): rate error → torque; runs as fast as the gyro allows.</li>
+    <li>Why split? The rate loop is tuned <b>against the actuator</b> (lag, noise) without changing the angle loop's feel — and it is where D and its filter live.</li>
+    <li>Betaflight, PX4 and ArduPilot all do this. quadsim collapses the two because at our rates it changes little — but knowing the real architecture is what lets you read production firmware.</li>
+  </ul>
+    </div>
+  </div>
+  <div class="env exm"><span class="eh">Reading the firmware you will flash.</span>
+  Your aircraft's parameters include <code>rate_pid</code> and <code>angle_p</code> as separate groups. Now you know why — and you know the tuning order: <b>rate first, always</b>, because the angle loop rides on it.</div>
+
+  <aside class="notes">This is what makes the jump to real firmware legible in Wk 9. Stress the tuning order.</aside>
+</section>
+
+<!-- WEX 5 -->
+<section>
+  <p class="eyebrow">Worked example · by hand</p>
+  <h2>Tune an attitude loop from a written specification</h2>
+  <p>Spec: recover from a 20° disturbance in under 0.4 s, no overshoot, using less than half the available roll torque.</p>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>No overshoot ⇒ \( \zeta \ge 1 \). Take \( \zeta = 1 \).</li>
+    <li>0.4 s settle ⇒ \( \omega_n = 4/(\zeta t_s) = 10 \) rad/s.</li>
+    <li>\( K_p = \omega_n^2 = 100 \), \( K_d = 2\zeta\omega_n = 20 \).</li>
+    <li>Torque check at \( e=20^\circ \): \( \tau = I K_p e = 2.3\times10^{-3}(100)(0.35) \approx 0.08 \) N·m.</li>
+    <li>Available ≈0.8 N·m ⇒ <b>10% used. Inside spec ✓</b></li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Now push it.</span>
+  Demand 0.15 s instead: \( \omega_n = 27 \), \( K_p = 720 \), and the same 20° error needs \( \tau = 0.58 \) N·m — <b>72% of authority for one disturbance</b>, leaving nothing for the outer loop or for wind.<br/><br/>The spec was not impossible; it was <i>expensive</i>. Reading that cost before flying is the difference between a design and a guess.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — What settle time uses exactly half the authority at 20°? <span class="muted">(\( I\omega_n^2 e = 0.4 \Rightarrow \omega_n \approx 22 \) rad/s \( \Rightarrow t_s \approx 0.18 \) s. Your gains now carry a budget.)</span></div>
+
+  <aside class="notes">This is the graded lab's exact reasoning. 'Expensive, not impossible' is how professionals discuss specs.</aside>
+</section>
+
+<!-- 8. SECOND-ORDER INTUITION -->
+<section>
+  <p class="eyebrow">Why it behaves</p>
+  <h2>One axis = a second-order system</h2>
+  <p>Take roll alone. The inertia cancels and the closed loop is the textbook mass-spring-damper:</p>
+  \[ \ddot\theta = K_p(\theta_d-\theta) - K_d\,\dot\theta \;\;\Longrightarrow\;\;
+     \omega_n=\sqrt{K_p}, \quad \zeta=\frac{K_d}{2\sqrt{K_p}} \]
+  <div class="cols" style="font-size:.8em">
+    <div class="box">\( \zeta<1 \) <b>underdamped</b> — fast but overshoots / rings.</div>
+    <div class="box">\( \zeta\approx1 \) <b>critical</b> — fastest with no overshoot. The sweet spot.</div>
+  </div>
+  <p class="muted" style="margin-top:.4em">The reference autopilot uses \( K_p=180,\ K_d=28 \Rightarrow \zeta\approx1.04 \). Let's <em>feel</em> it ▶</p>
+</section>
+
+<!-- 9. LIVE WIDGET -->
+<section class="dense vdense">
+  <p class="eyebrow">Interactive · drag the sliders</p>
+  <h2>Tune the inner loop, live</h2>
+  <div class="widget" data-widget="pid"></div>
+  <p class="muted" style="font-size:.7em">Try: drop \(K_d\) to 4 → ringing. Push \(K_p\) to 360 → faster but twitchy. Hit <b>Disturb</b> to kick it.</p>
+  <aside class="notes">
+    Spend real time here. Ask the room to predict before each change. Set Kd=0 → marginally stable
+    oscillation. This is the intuition they take into the lab in 5 minutes.
+  </aside>
+</section>
+
+<!-- 9b. HARDWARE BRIDGE -->
+<section>
+  <p class="eyebrow">Reality check</p>
+  <h2>The same loop, two worlds</h2>
+  <div class="cols">
+    <div class="box">
+      <b>In <code>quadsim</code></b> (today's lab)<br/>
+      Python · fixed step · perfect state · a mixer that is already correct · motors that never saturate unfairly.
+      <br/><span class="muted">You debug the <em>control law</em>.</span>
+    </div>
+    <div class="box warn">
+      <b>On a real aircraft</b> (the instructor's, on the stand in ten minutes)<br/>
+      C on an STM32 · a loop rate you must measure · a noisy gyro · motors that answer late · a throttle floor before anything lifts.
+      <br/><span class="muted">You debug the <em>plumbing</em>. The control law is rarely the problem. Week 10 puts three of these into your simulated plant, hidden.</span>
+    </div>
+  </div>
+  <p class="muted" style="margin-top:.5em">The next three slides are the difference. They are why a controller that is perfect here can flip an aircraft in 0.2&nbsp;s.</p>
+  <aside class="notes">
+    This is the pivot slide of the week. Students consistently assume that a good simulated controller
+    transfers. It does not — and the reasons are boring, mechanical, and completely learnable.
+    Point them at the WHEELTEC F570 open-source course (22 episodes, free, on the demonstration
+    aircraft): episodes 9.1–9.8 are this exact material on real hardware.
+  </aside>
+</section>
+
+<!-- 9c. POLARITY -->
+<section>
+  <p class="eyebrow">Before you tune anything</p>
+  <h2>Get the <span class="accent">signs</span> right before you get the gains right</h2>
+  <p>A sign error anywhere in the chain turns feedback into <b>positive</b> feedback. No gain value saves you.</p>
+  <div class="cols" style="font-size:.85em">
+    <ul>
+      <li>Gyro axis orientation vs your body frame</li>
+      <li>Motor numbering vs mixer rows</li>
+      <li>Propeller direction (CW/CCW) vs yaw torque sign</li>
+      <li>Error convention: \( e = x_{\text{ref}} - x \), everywhere, consistently</li>
+    </ul>
+    <div class="box warn">
+      <b>Bench polarity test</b> — props <u>off</u>:<br/>
+      tilt the airframe by hand in <b>+roll</b>. The motors that must <em>speed up</em> are the ones on the
+      <em>low</em> side. If the wrong pair spins up, you have found the flip before it found you.
+    </div>
+  </div>
+  <p class="muted" style="margin-top:.4em">Repeat for pitch and yaw. Only then does a single gain get touched.</p>
+  <aside class="notes">
+    In simulation the mixer is handed to them correct, so this failure mode is invisible all term.
+    On hardware it is the single most common first-flight crash. WHEELTEC episode 9.4 spends 46 minutes
+    on exactly this ("PID參數與極性評估方法"). Make them do the bench test out loud, in pairs.
+  </aside>
+</section>
+
+<!-- 9d. SEVEN FIXES -->
+<section>
+  <p class="eyebrow">The engineering layer</p>
+  <h2>Seven fixes between a simulated PID and a flying one</h2>
+  <table style="font-size:.5em;width:100%;border-collapse:collapse">
+    <tr style="border-bottom:2px solid #bfe9ea"><th align="left">Fix</th><th align="left">What breaks without it</th></tr>
+    <tr><td><b>Integral clamping</b></td><td>Held or blocked ⇒ windup ⇒ motors saturated long after the error is gone; lurch on release</td></tr>
+    <tr><td><b>Integral separation</b></td><td>Integrator charges during the big-error phase, dumps late ⇒ overshoot</td></tr>
+    <tr><td><b>Variable-rate integration</b></td><td>Aircraft settles just outside the threshold; a small offset never trims out</td></tr>
+    <tr><td><b>Derivative on measurement</b></td><td>Setpoint jump ⇒ derivative kick ⇒ torque snap at every waypoint</td></tr>
+    <tr style="background:#fff7e6"><td><b>Filtered derivative</b></td><td><b>D amplifies gyro noise ⇒ motors buzz, ESCs heat, airframe shakes. The most common reason a good simulated controller is unflyable.</b></td></tr>
+    <tr style="background:#f1fbfb"><td><b>Output bias</b></td><td>PD returns torques — but nothing lifts until you add the <b>hover throttle</b>. Without that feed-forward the integrator is doing gravity's job</td></tr>
+    <tr><td><b>Input dead-band</b></td><td>Constant micro-twitching in hover, chasing sensor noise</td></tr>
+  </table>
+  <p class="muted" style="margin-top:.4em"><span class="pill">Lab</span> Today you implement two of them — clamping and filtered D — and show what each one fixes.</p>
+  <aside class="notes">
+    Do not read the table out. Pick the highlighted two. Filtered derivative: play them a video of a
+    quad screaming, then show the same trace with a first-order filter on D. Output bias: ask "your PD
+    returns torque — what makes it leave the ground?" and let the silence do the teaching.
+    Full mapping with symptoms and the widget that reproduces each is in teaching/instructor-demo.md §1; the live demo on the tethered kit follows this slide.
+  </aside>
+</section>
+
+<!-- WIDGET pid -->
+<section class="dense">
+  <p class="eyebrow">The engineering layer · interactive</p>
+  <h2>Make each failure appear, then fix it — the seven fixes as buttons</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="pid"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> Set noise 0.05 and Kd 6 with the D filter off. Predict what the torque trace looks like before you look. Then: hold+release on, Ki 20, clamp off — predict the angle trace after t = 1 s.</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#pid">Digital Lab → pid</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">Hiss (fix 5), lurch (fix 1), D-kick (fix 4) in ninety seconds, right after the tethered-kit demonstration showed the same three live.</aside>
+</section>
+
+<!-- 9e. TUNING PROCEDURE -->
+<section>
+  <p class="eyebrow">Method, not guesswork</p>
+  <h2>How a real one is tuned — what you will watch on the stand</h2>
+  <div class="cols">
+    <ol style="font-size:.82em">
+      <li><b>One axis at a time</b>, restrained on a stand. Roll, then pitch, then yaw.</li>
+      <li><b>Signs first</b> (previous slide). Then all gains to zero.</li>
+      <li>Raise <b>P</b> until it oscillates. Back off ~30%.</li>
+      <li>Raise <b>D</b> until the oscillation is damped — <em>and stop</em> when the motors start to hiss. That is the noise limit.</li>
+      <li>Add <b>I</b> last, smallest, only if a steady offset remains. Clamp it.</li>
+      <li>Change <b>one number at a time</b>, and log every change with its trace.</li>
+    </ol>
+    <div class="box">
+      <b>You cannot tune what you cannot see.</b><br/>
+      On the stand the instructor streams setpoint, measurement and each of P/I/D to a live plot (SerialPlot) before
+      touching a gain; in <code>quadsim</code> the equivalent is <code>SimLog</code> plus the <code>pid</code> widget. Tuning by watching the aircraft is guessing.
+      <br/><br/><span class="muted">Free reference on our demonstration aircraft: WHEELTEC F570 open-source course, eps 9.1–9.8 (PID &amp; cascade, ~4.5 h) and ep 10 (LQR).</span>
+    </div>
+  </div>
+  <aside class="notes">
+    Contrast with the pid widget two slides back: the widget gives intuition in 60 seconds because
+    the plant is perfect. This procedure is what that intuition costs on hardware — do steps 3–4 live on the
+    tethered kit now (instructor-demo.md §2), then reproduce the hiss in the widget with noise + D filter off.
+  </aside>
+</section>
+
+<!-- CODE 5 -->
+<section class="dense">
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Discrete PID: what the code actually computes</h2>
+  <pre><code class="language-python">class AttitudePID:
+    def __init__(s, kp, kd, ki, dt, f_c=20.0, i_max=0.03):
+        s.kp, s.kd, s.ki, s.dt = kp, kd, ki, dt
+        s.alpha = 1.0 / (1.0 + 2*np.pi*f_c*dt)   # fix 5: low-pass on D
+        s.i, s.d = 0.0, 0.0
+        s.i_max = i_max                          # fix 1: clamp
+
+    def step(s, ref, meas, rate, saturated=False):
+        e = wrap_pi(ref - meas)                  # yaw safety
+        if not saturated and abs(e) < 0.35:      # fixes 1+2: conditional + separation
+            s.i = np.clip(s.i + e*s.dt, -s.i_max, s.i_max)
+        s.d = s.alpha*s.d + (1-s.alpha)*(-rate)  # fix 4: D on measurement
+        return s.kp*e + s.ki*s.i + s.kd*s.d</code></pre>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Fourteen lines contain five of the seven fixes.</b> They are not decoration; they are most of the code.</li>
+    <li>The <code>saturated</code> flag comes from the mixer — the controller must be <i>told</i> when physics overruled it.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The interface that matters.</span>
+  Note the controller receives <code>rate</code> separately from <code>meas</code>. That single design choice is what gives you derivative-on-measurement for free, and it is why the estimator (Week 8) must supply both angle <i>and</i> rate.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Walk the code line by line and name the fix each line implements. Students should be able to point at all five.</aside>
+</section>
+
+<!-- NOISE 5 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Where the gyro's noise ends up — a numerical walk</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Gyro noise: \( \sigma \approx 0.01 \) rad/s RMS (a decent MEMS part at 200 Hz).</li>
+    <li>Through \( K_d = 28 \): torque noise \( \approx 28 \times 2.3\times10^{-3} \times 0.01 = 6.4\times10^{-4} \) N·m.</li>
+    <li>Through the mixer (\( 1/(4l) = 1.47 \)): \( \approx 0.001 \) N of thrust jitter per motor.</li>
+    <li>As a fraction of hover thrust: \( 0.001/1.59 \approx 0.06\% \) — inaudible.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Now raise \( K_d \) to 200.</span>
+  Jitter becomes \( \approx 0.4\% \) of hover thrust, at frequencies the motors can follow — <b>and that is what you hear</b>. Push further and it becomes heat, then a burnt ESC.<br/><br/><b>The audible hiss is a measurement.</b> When the motors start singing, your D-term has left the useful regime; the ear is a legitimate instrument here.</div>
+    </div>
+  </div>
+  <p class="small muted">Do this arithmetic once for your own aircraft and you will never guess at a D-limit again.</p>
+
+  <aside class="notes">Turning 'the motors hiss' into a computable number is exactly the master's-level upgrade of a hobbyist heuristic.</aside>
+</section>
+
+<!-- CQ 5 -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Three questions before the lab</h2>
+  <div class="quiz">
+    <div class="q">Q1 — Your attitude loop is stable in simulation but oscillates at ~8 Hz on the aircraft. Name two mechanisms, in order of likelihood.</div>
+    <p class="fragment"><span class="ok">(1) Motor lag eating phase margin; (2) D amplifying gyro noise into the actuators.</span> <span class="why">Both are absent from quadsim. Both are cured by the same move: reduce \( K_d \) or filter it harder, then reduce \( K_p \) to keep \( \zeta \). Structural vibration is a third, rarer, possibility.</span></p>
+    <div class="q fragment">Q2 — You add \( K_i = 5 \) to the attitude loop and take-off becomes a violent flip. What happened?</div>
+    <p class="fragment"><span class="ok">Windup while the aircraft was on the ground.</span> <span class="why">Sitting on its legs, the attitude error persists and the integral charges with nothing to release it. The moment it lifts, that stored authority arrives at once. Cure: freeze the integral while disarmed or below a thrust threshold — the ground-freeze rule.</span></p>
+    <div class="q fragment">Q3 — Would raising \( K_p \) alone ever stabilise a P-only attitude loop?</div>
+    <p class="fragment"><span class="ok">Never.</span> <span class="why">The characteristic polynomial is \( s^2 + K_p \): the roots stay on the imaginary axis for every positive \( K_p \). Damping requires an \( s \) term, and only \( K_d \) supplies one. This is structure, not tuning.</span></p>
+  </div>
+
+  <aside class="notes">Q3's 'structure, not tuning' answer is the single most useful diagnostic instinct this week can install.</aside>
+</section>
+
+<!-- TH 5 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Derive \( M_p = e^{-\pi\zeta/\sqrt{1-\zeta^2}} \) for a second-order step response, and evaluate it at \( \zeta = 0.4, 0.7, 1.0 \).</li>
+    <li>Design attitude gains for \( t_s = 0.25 \) s, \( \zeta = 0.9 \). Compute the peak torque for a 15° disturbance and express it as a percentage of available authority.</li>
+    <li>Simulate the P-only case (\( K_d = 0 \)) for 5 s and measure the oscillation frequency. Compare with \( \sqrt{K_p} \).</li>
+    <li>Implement fix 5 with \( f_c \in \{5, 20, 60\} \) Hz under injected gyro noise. Plot the commanded-torque traces and quantify the noise reduction and the phase cost.</li>
+    <li>Show analytically that derivative-on-measurement and derivative-on-error give identical responses to a <i>disturbance</i>, and differ only for a <i>setpoint</i> change.</li>
+    <li>Your aircraft's CoM is 4 mm off-centre. Compute the steady attitude error a pure PD loop would settle at, and the \( K_i \) needed to remove it within 2 s.</li>
+  </ol>
+  <div class="box warn">Question 5 is the conceptual centrepiece — it explains precisely why fix 4 is free rather than a compromise.</div>
+
+  <aside class="notes">Q4 produces a figure that is directly reusable in the lab report; point that out.</aside>
+</section>
+
+<!-- MAP 5 -->
+<section class="dense">
+  <p class="eyebrow">Concept map</p>
+  <h2>Week 5, in one page</h2>
+  <div class="fig plain" data-diagram="pid"><p class="cap">Three parallel views of one error. The whole week is about how each behaves on a real aircraft rather than in an equation.</p></div>
+  <table class="data">
+    <tr><th>Concept</th><th>One-line statement</th><th>Where it returns</th></tr>
+    <tr><td>P = spring, D = damper</td><td>gains are the characteristic polynomial</td><td>Wk 6 outer loop, Wk 7 LQR</td></tr>
+    <tr><td>\( \omega_n = \sqrt{K_p} \), \( \zeta = K_d/2\sqrt{K_p} \)</td><td>specification → gains, no folklore</td><td>every tuning task</td></tr>
+    <tr><td>derivative on measurement</td><td>no setpoint kick, free from the gyro</td><td>Wk 9 waypoint transitions</td></tr>
+    <tr><td>filtered derivative</td><td>a loan against phase margin</td><td>Wk 8's over-smoothing lesson</td></tr>
+    <tr><td>anti-windup</td><td>memory needs a bound</td><td>Wk 6 altitude, Wk 11 (constraints, done properly)</td></tr>
+    <tr class="hl"><td>signs before gains</td><td>polarity is not tuning</td><td>Wk 9 first flight</td></tr>
+  </table>
+
+  <aside class="notes">Sixty seconds. The last row is the one that matters — it is the failure the Week-10 plant's motor lag reproduces.</aside>
+</section>
+
+<!-- AHEAD 5 -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: wrap the outer loop and the quad goes places</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Today the aircraft stops tipping over. It still drifts — nothing measures or corrects position.</li>
+    <li>Week 6 adds the <b>outer loop</b>: position error → desired tilt → your inner loop's setpoint.</li>
+    <li>You will also meet the timescale-separation rule that decides how fast that outer loop is allowed to be.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Bring to Week 6:</b> Lab 2 passing (tilted start returns to level), with your gains justified by \( \omega_n \) and \( \zeta \) rather than copied.<br/><br/><b>Team:</b> the seven fixes decided and recorded in <code>student.py</code>, each with the widget screenshot that shows what it prevents.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Reinforce that Lab 2 is the inner loop everyone builds on; a team that slips it is debugging attitude in Week 10 instead of diagnosing a plant.</aside>
+</section>
+
+<!-- SS 5 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Steady-state error: what P alone leaves behind</h2>
+  <div class="cols top">
+    <div>
+  <p>Suppose a constant disturbance torque \( \tau_d \) (a CoM offset, a bent arm). With PD only, equilibrium requires:</p>
+  \[ I K_p e_{ss} = \tau_d \quad\Longrightarrow\quad e_{ss} = \frac{\tau_d}{I K_p} \]
+  <ul class="small">
+    <li><b>The error is inversely proportional to \( K_p \)</b> — you can shrink it but never remove it.</li>
+    <li>With \( \tau_d = 0.006 \) N·m (Week 2's payload offset) and \( I K_p = 0.41 \): \( e_{ss} = 0.015 \) rad \( = 0.84^\circ \).</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Does 0.84° matter?.</span>
+  For attitude, barely. But the outer loop reads that tilt as a <b>command to accelerate</b>: \( a = g\sin(0.84^\circ) = 0.14 \) m/s².<br/><br/>Left alone for 5 s that is 1.8 m of drift. <b>A sub-degree attitude error becomes a metre-scale position error</b> — which is exactly why the position loop, not the attitude loop, is where integral action belongs.</div>
+    </div>
+  </div>
+
+  <aside class="notes">This calculation is the cleanest justification for putting I on the outer loop; it also connects Wk 2's CoM slide to Wk 6.</aside>
+</section>
+
+<!-- THR 5 -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>Why the aircraft feels different at different throttle</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Attitude authority comes from thrust <i>differences</i>, and those are bounded by the headroom around the current throttle (Week 3).</li>
+    <li>Near hover you have ±2.4 N per motor. At 10% throttle you have almost none below and plenty above; near full throttle, the reverse.</li>
+    <li><b>So your effective \( K_p \) is throttle-dependent</b> — not in the code, but in what the aircraft can deliver.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What pilots call it.</span>
+  'It gets twitchy when I punch the throttle' or 'it feels mushy on descent'. Both are the same phenomenon: the mixer's available torque changed while the gains stayed fixed.<br/><br/><b>The professional fix</b> is thrust-normalised mixing — scale attitude commands by the current throttle so the <i>delivered</i> torque per unit command stays constant. Betaflight calls it 'airmode'; PX4 does it in the allocator. One line of insight, one line of code.</div>
+    </div>
+  </div>
+  <p class="small muted">This is your first encounter with a plant whose gain varies with operating point — and a preview of why gain scheduling and adaptive control exist.</p>
+
+  <aside class="notes">Explaining a phenomenon FPV pilots already know, in control-theoretic language, is very satisfying for students with hobby experience.</aside>
+</section>
+
+<!-- TRANS 5 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>From nominal-model gains to real-aircraft gains: the translation</h2>
+  <table class="data">
+    <tr><th>Effect</th><th>Present in quadsim?</th><th>Direction</th><th>Typical size</th></tr>
+    <tr class="hl"><td>motor lag \( \tau_m \)</td><td>no</td><td>reduces achievable \( K_d \)</td><td>−20 to −40%</td></tr>
+    <tr class="hl"><td>gyro noise</td><td>optional</td><td>reduces usable \( K_d \)</td><td>−20 to −50%</td></tr>
+    <tr><td>discrete loop rate</td><td>yes (200 Hz)</td><td>small at our rates</td><td>−5%</td></tr>
+    <tr><td>rotor drag</td><td>no</td><td><b>helps</b> — adds damping</td><td>+ a little margin</td></tr>
+    <tr><td>frame flex</td><td>no</td><td>reduces both gains</td><td>varies wildly</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">The practical rule.</span>
+  Start hardware at roughly <b>half</b> your simulated gains, verify stability, then walk up. Expect to land 30–50% below simulation for \( K_d \), closer for \( K_p \).<br/><br/>That is not the simulation being wrong — it is the simulation being <i>incomplete in a known direction</i>, which is a much better position to be in.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">And the report sentence.</span>
+  'Simulated gains were \( (180, 28) \); flight-tested gains converged to \( (150, 16) \), a 43% reduction in \( K_d \) consistent with the measured 45 ms actuator lag and 0.012 rad/s gyro noise.' <b>That sentence is what a Week-10 gap analysis looks like.</b></div>
+    </div>
+  </div>
+
+  <aside class="notes">Give them the expected number BEFORE they fly so the reduction reads as understanding rather than failure.</aside>
+</section>
+
+<!-- WHYC 5 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Cascade vs single-loop: why not one big controller?</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th></th><th>Single loop (position → torque)</th><th>Cascade (ours)</th></tr>
+    <tr><td>Structure</td><td>one PID on a \( 1/s^4 \) plant</td><td>two PDs on \( 1/s^2 \) each</td></tr>
+    <tr class="hl"><td>Phase at crossover</td><td>−360° — no margin exists</td><td>−180° each, recoverable</td></tr>
+    <tr><td>Tuning</td><td>all gains interact</td><td>inner then outer, independently</td></tr>
+    <tr><td>Debugging</td><td>one signal, many causes</td><td><b>failures localise to a loop</b></td></tr>
+    <tr class="hl"><td>Limits</td><td>hard to impose</td><td>tilt clamp sits naturally between loops</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The deciding argument.</span>
+  It is not that a single loop is harder to tune — it is that a \( 1/s^4 \) plant has no phase margin to work with at any gain. <b>The cascade is not a convenience; it is what makes the problem solvable at all.</b><br/><br/>And the tilt clamp between the loops is a bonus that no single-loop design offers: a physical safety limit sitting exactly where the signal is interpretable.</div>
+    </div>
+  </div>
+  <p class="small muted">Week 11's MPC will replace the outer loop while keeping the inner one — precisely because this decomposition is worth preserving even when the method changes.</p>
+
+  <aside class="notes">Answering 'why not one controller' explicitly pre-empts a question that surfaces every year.</aside>
+</section>
+
+<!-- READ 5 -->
+<section class="dense">
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Reading a step response like a clinician</h2>
+  <div class="fig plain" data-diagram="splane"><p class="cap">Every feature of a step response maps to a pole location. Learn to read one and you can diagnose the other.</p></div>
+  <table class="data">
+    <tr><th>What you see</th><th>What it means</th><th>First action</th></tr>
+    <tr><td>Overshoot &gt;20%</td><td>\( \zeta &lt; 0.5 \) — underdamped</td><td>raise \( K_d \)</td></tr>
+    <tr><td>Slow, no overshoot</td><td>overdamped, \( \omega_n \) too low</td><td>raise \( K_p \), keep the \( K_d/\sqrt{K_p} \) ratio</td></tr>
+    <tr><td>Sustained oscillation</td><td>\( \zeta \approx 0 \) — no effective damping</td><td>check \( K_d \) sign and the rate signal</td></tr>
+    <tr class="hl"><td>Growing oscillation</td><td>unstable — wrong sign somewhere</td><td><b>stop; run the polarity drill</b></td></tr>
+    <tr><td>Settles to the wrong value</td><td>steady-state error or bias</td><td>add clamped I, or fix the trim</td></tr>
+    <tr><td>Fine, then a sudden jolt</td><td>saturation or integrator release</td><td>log commanded vs delivered</td></tr>
+  </table>
+
+  <aside class="notes">This table is a lab-bench companion; encourage them to keep it visible while tuning.</aside>
+</section>
+
+<!-- F570 5a -->
+<section class="dense">
+  <p class="eyebrow">The instructor's aircraft</p>
+  <h2>The F570's cascade PID, as shipped</h2>
+  <div class="cols top">
+    <div>
+  <p>Vendor's structure — <b>angle loop outside, rate loop inside</b>, exactly the three-level architecture from earlier:</p>
+  <pre><code class="language-cpp">// PID version: motor throttle integration
+motor.A.throttle = base_throttle - RollRatePID.output
+                                 - PitchRatePID.output
+                                 + YawRatePID.output
+                                 + HeightSpeedPID.output;
+motor.B.throttle = base_throttle + RollRatePID.output
+                                 - PitchRatePID.output
+                                 - YawRatePID.output
+                                 + HeightSpeedPID.output;
+// C: +Roll +Pitch +Yaw   ·   D: -Roll +Pitch -Yaw</code></pre>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Read it as a mixer.</span>
+  Those four lines <b>are</b> \( M^{-1} \), written by hand instead of inverted numerically. The sign pattern is the geometry: A and D on one roll side, A and B on one pitch side, A and C sharing a spin direction.<br/><br/>Note <code>HeightSpeedPID</code> adds to <i>all four</i> equally — the thrust row of the mixer, doing exactly what Week 3's row of ones does.</div>
+    </div>
+  </div>
+  <p class="small muted">Nothing here is exotic. It is your Week-3 mixer and your Week-5 cascade, compiled for an STM32 — which is the point: <b>you are learning what production firmware actually contains.</b></p>
+
+  <aside class="notes">Seeing real shipped firmware match the lecture is the strongest motivation available. Read the sign pattern out loud against the geometry drawing.</aside>
+</section>
+
+<!-- F570 5b -->
+<section class="dense vdense">
+  <p class="eyebrow">The instructor's aircraft</p>
+  <h2>The vendor's tuning recipe — and one clever criterion</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Strap the aircraft to a test stand</b>, one axis free — what the instructor did today. (Our Gate 2.)</li>
+    <li><b>Inner rate loop, \( K_p \) only:</b> raise until the aircraft settles slowly onto the stand without shaking.</li>
+    <li><b>Inner \( K_d \):</b> add a <i>small</i> amount only if shaking appears. 'If there is no obvious shaking, \( K_d \) may be omitted — but disturbance rejection will be poorer.'</li>
+    <li><b>Inner \( K_i \):</b> add until the aircraft holds itself up on the stand (the angle it holds is not yet fixed — that is the outer loop's job).</li>
+    <li><b>Outer angle loop:</b> \( K_p \) until it tracks the target angle; \( K_d \) for disturbance rejection — <b>'too large causes shaking and motor heating'</b>; \( K_i \) only if the target is not reached.</li>
+    <li><b>Validate:</b> command \( \pm 10^\circ \) steps repeatedly from the transmitter; stable tracking without divergence means done.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The criterion worth stealing.</span>
+  The manual's final tip: among all gain sets that fly stably, prefer the one that <b>minimises total current draw</b>.<br/><br/>That is a beautiful, physical version of LQR's \( R \) term: a controller fighting itself burns power. Current is a directly measurable proxy for \( \int \lVert \mathbf u \rVert^2 \) — <b>free instrumentation for control effort</b>, and it costs nothing to log.<br/><br/>Next week we will write that criterion as a cost function. The vendor arrived at it by feel.</div>
+    </div>
+  </div>
+  <p class="small">Notice step 5's warning — 'too large \( K_d \) causes shaking and motor heating'. That is exactly the noise-amplification ceiling we computed in newtons earlier. <b>Field experience and the arithmetic agree.</b></p>
+
+  <aside class="notes">The minimum-current criterion is a genuine gem: it is LQR's R term discovered empirically. Land that connection.</aside>
+</section>
+
+<!-- F570 5c -->
+<section class="dense">
+  <p class="eyebrow">The aircraft in this room</p>
+  <h2>Fighting motor lag with a feed-forward compensator</h2>
+  <div class="cols top">
+    <div>
+  <p>The vendor models the brushless motor as a pure first-order lag and cancels it with a lead:</p>
+  \[ \frac{X(s)}{R(s)} = \frac{1}{\tau s + 1} \quad\Longrightarrow\quad \text{prepend } (\tau s + 1) \]
+  <pre><code class="language-cpp">// feed-forward compensator, per axis
+u[1][0] += (u[1][0] - u10Prev) * 0.0015f;
+u[2][0] += (u[2][0] - u20Prev) * 0.0015f;
+u[3][0] += (u[3][0] - u30Prev) * 0.0015f;</code></pre>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Read the three lines.</span>
+  \( u + \tau \dot u \), discretised: the command is boosted in proportion to how fast it is <i>changing</i>. A step gets an extra kick at its edge; a constant gets nothing.<br/><br/>With \( \Delta t = 5 \) ms, the coefficient 0.0015 implies \( \tau \approx 7.5 \) ms of lag being cancelled.<br/><br/><b>This is the motor lag from Week 3, attacked directly</b> — rather than paid for in reduced \( K_d \).</div>
+    </div>
+  </div>
+  <div class="env rmk"><span class="eh">Why this is worth understanding rather than copying.</span>
+  Lead compensation amplifies high frequencies — the same trade as the D term. Cancel too much lag and you amplify noise into the ESCs. The vendor's small coefficient is a <b>conservative</b> choice, and knowing why it is small is the difference between tuning it and guessing at it.</div>
+
+  <aside class="notes">Three lines of real firmware that implement a control-theory concept. Students find it satisfying to decode production code this way.</aside>
+</section>
+
+<!-- 10. THE LAB -->
+<section class="divider">
+  <p class="eyebrow">Second half · hands-on</p>
+  <h2>Now you build it</h2>
+  <hr class="drule"/>
+  <ul>
+    <li>Open the <b>Week 5 lab sheet</b> → edit <code>quadsim/controllers/student.py</code>.</li>
+    <li>Add the inner attitude loop; return \( [T,\tau_x,\tau_y,\tau_z] \).</li>
+    <li>Run <code>python examples/02_hover_pid.py --controller student</code>.</li>
+    <li><b>Checkpoint:</b> from a tilted start, attitude returns to level. graded graded.</li>
+  </ul>
+  <p style="margin-top:1em"><a class="btn" href="../labs/week05-attitude-control.html">Open the Week 5 lab sheet →</a></p>
+  <span class="assess">Assessed: Lab Report 2 — 5% of the course grade (one of six, Wks 4–9). Marked on: working loop · gains justified via ω_n/ζ · the two fixes demonstrated with evidence plots.</span>
+</section>
+
+
+
+<!-- 10b. LAB SESSION -->
+<section>
+  <div class="labwrap">
+    <p class="eyebrow" style="color:#1ec8c8">Lab session · 01:55 &rarr; 02:50</p>
+    <h3>Build order &amp; checkpoints</h3>
+    <p class="cp"><b>02:10</b> — inner PD loop in <code>StudentController</code>; tilted start returns to level &starf;</p>
+    <p class="cp"><b>02:25</b> — gains justified via &omega;<sub>n</sub>, &zeta; (not copied); yaw error wrapped</p>
+    <p class="cp"><b>02:40</b> — <b>fix #1 + #5 in</b>: clamped integral (for later) &amp; filtered D; three overlaid step responses saved</p>
+    <p class="cp"><b>02:50</b> — noise-injection run: unfiltered vs filtered D torque trace — the &#34;screaming motor&#34; plot, in sim</p>
+    <p style="margin-top:.8em"><a class="btn" href="../labs/week05-attitude-control.html">Open the Week 5 lab sheet &rarr;</a></p>
+  </div>
+  <aside class="notes">The two-fixes checkpoint is what connects today&#39;s hardware block to code. Teams that finish: derivative-on-measurement (fix #4) and a setpoint-step comparison — 10 minutes, one plot, worth it.</aside>
+</section>
+
+<!-- 10c. MILESTONE -->
+<section>
+  <p class="eyebrow">Team project · Wk 5 of 10</p>
+  <h2>Milestone board</h2>
+  <div class="miles">
+    <div class="m"><b>1 · Modeling</b>the two \( 1/I \) entries of \( B \) read off and turned into first gains; \( \omega_n, \zeta \) written next to them</div>
+    <div class="m due"><b>2 · Inner loop</b><b>Lab 2 this week</b>: tilted start returns to level; each of the seven fixes you adopt has its widget screenshot</div>
+    <div class="m"><b>3 · Outer loop</b>today&#39;s lab controller merged into the team <code>student.py</code> as the inner loop everyone builds on</div>
+    <div class="m"><b>4 · Estimation</b>gyro noise &sigma; from a 60 s <code>quadsim.sensors.IMU</code> log — numbers, not vibes; the D-filter corner chosen from it</div>
+    <div class="m"><b>5 · Integration</b>the <code>pid</code> widget&#39;s three failure modes (hiss, lurch, snap) reproduced and captured for the report</div>
+  </div>
+  <p class="muted" style="margin-top:.6em">What you watched on the stand today is the whole reason the seven fixes exist. WHEELTEC ep 9.4 shows the vendor&#39;s method on the same aircraft, for the curious.</p>
+</section>
+
+<!-- 10d. MISCONCEPTIONS -->
+<section>
+  <p class="eyebrow">Before you leave</p>
+  <h2>The traps, named</h2>
+  <table class="data">
+    <tr><th>The trap</th><th>The truth</th></tr>
+    <tr><td>"D acts on the error, so differentiate the error."</td><td>Differentiate the <b>measurement</b> (we have the gyro!). Error-derivative adds a spike at every setpoint step — fix #4 exists because of this row.</td></tr>
+    <tr><td>"Gains are universal — copy a working set."</td><td>Our law pre-multiplies by \( \mathbf I \), so gains are inertia-normalised — but thrust maps, loop rates and noise floors are not. Copied gains are a <i>starting point</i>, defended gains are a design.</td></tr>
+    <tr><td>"The inner loop needs an integrator too."</td><td>Near hover the steady attitude moment is ≈ 0; the position loop above supplies the trim. A fat attitude-I mostly stores wind-up. (Small I for CG offset on hardware: fine, clamped.)</td></tr>
+    <tr><td>"Yaw is broken — it barely responds."</td><td>Yaw authority is \( c/l \approx 1/10 \) of roll's by construction (Wk 3). Set expectations, don't chase gains.</td></tr>
+  </table>
+  <aside class="notes">Row 1 = the most common student implementation bug this week; the lab test catches it via the setpoint-step trace.</aside>
+</section>
+
+<!-- 11. SUMMARY -->
+<section>
+  <p class="eyebrow">Wrap-up</p>
+  <h2>What to remember</h2>
+  <ul>
+    <li>A quad is <b>underactuated</b> → control attitude first, position rides on it.</li>
+    <li>Inner loop is a <b>PD law</b>: \( \boldsymbol\tau = \mathbf{I}(K_p^{\text{att}}\mathbf{e}_\eta - K_d^{\text{att}}\boldsymbol\omega) \).</li>
+    <li>One axis is second-order: gains set \( \omega_n,\ \zeta \). Aim near \( \zeta\approx1 \).</li>
+    <li><b>Next week:</b> wrap the <span class="accent">outer position loop</span> around this → the full autopilot.</li>
+    <li>On hardware: <b>signs before gains</b>, hover throttle as feed-forward, and a filter on D — see the first-flight checklist.</li>
+  </ul>
+  <p class="muted" style="margin-top:1em">Reading: Quan Quan Ch. 6 · Beard &amp; McLain Ch. 6. Deliverable &amp; deadline on the lab sheet.</p>
+  <aside class="notes">Preview Wk6: the outer loop produces phi_d, theta_d that become this loop's setpoint.</aside>
+</section>
+
+</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+  // Mount the interactive widget once Reveal lays out the DOM, and whenever a
+  // slide becomes active (the widget itself only animates while on-screen).
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+  Reveal.on("ready", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

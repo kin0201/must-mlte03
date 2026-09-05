@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 1 — Intro, Frames &amp; Rotations · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+
+<style>
+  .reveal .attitude-demo { font-size: 15px; margin: 6px 0; }
+  .reveal .attitude-demo canvas { height: 180px; }
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 1 · Intro, Frames &amp; Rotations<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1. TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Introduction · Frames &amp; Rotations</h1>
+    <p class="tp-sub">座標系與旋轉</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 1 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. The session plan follows; keep this up while people settle.</aside>
+</section>
+
+<!-- 1b. THE OBJECT -->
+<section class="dense">
+  <p class="eyebrow">The object of study</p>
+  <h2>This machine should not be able to fly</h2>
+  <div class="cols">
+    <figure class="photo"><img src="../assets/img/quad.jpg" alt=""/><figcaption>A small quadrotor in hover — four fixed-pitch propellers, no control surfaces, nothing passive to keep it upright. <span class="cr">Wikimedia Commons, CC0.</span></figcaption></figure>
+    <ul class="small">
+      <li>No tail, no wings, no dihedral: <b>nothing about the airframe is self-stabilising</b>. Release the sticks on a raw quad and it flips within a second.</li>
+      <li>Four motors are its <i>only</i> actuators — four numbers, sixty times a second, stand between hover and wreckage.</li>
+      <li>And yet it hovers rock-steady, follows paths, carries cameras. The difference is <b>entirely software</b> — the feedback loops this course teaches you to build.</li>
+      <li>By Week 10, a machine like this — <b>yours</b> — flies in this classroom because of code your team wrote.</li>
+    </ul>
+  </div>
+  <aside class="notes">Open with 30 s of a real hover video if available, then this still. The claim "the difference is entirely software" IS the course thesis — say it twice.</aside>
+</section>
+
+<!-- 2. WHERE WE ARE -->
+<section>
+  <p class="eyebrow">Where we are</p>
+  <h2>The plan: one platform, all term</h2>
+  <div class="cols">
+    <ul>
+      <li><b>Wk 1 (today):</b> the language — frames &amp; rotations; meet the simulator.</li>
+      <li><b>Wk 2–3:</b> the 12-state nonlinear model \( \dot{\mathbf{x}}=f(\mathbf{x},\mathbf{u}) \).</li>
+      <li><b>Wk 4:</b> hover trim &amp; the linearized \( (A,B) \) — and its unstable poles.</li>
+      <li><b>Wk 5+:</b> close loops — attitude, then position, then learning-based control.</li>
+    </ul>
+    <div class="box warn">
+      <b>The whole course in one line:</b><br/>
+      open loop ⇒ the quad tips over. To control it we first need to <em>describe</em> it — and that means a
+      clean, agreed-upon way to say <span class="accent">"which way is it pointing?"</span>
+    </div>
+  </div>
+  <aside class="notes">Forward-reference Week 5: the open-loop tip-over they'll see in today's lab is exactly what closing the attitude loop fixes.</aside>
+</section>
+
+
+
+<!-- 2a. ROADMAP FIG -->
+<section>
+  <p class="eyebrow">The route</p>
+  <h2>Fifteen weeks, one growing artifact</h2>
+
+  <div class="fig" data-diagram="coursearc"><p class="cap">Every graded lab layers onto the same controller; Wk 10 it flies a real aircraft; Wk 15 you defend its intelligent upgrade.</p></div>
+  <p class="muted" style="margin-top:.5em">Print this slide. When any week feels abstract, find it on this line — it is always building toward the flight.</p>
+  <aside class="notes">30 seconds. The point: no throwaway work, and two hard public deadlines (Wk 10 demo, Wk 15 defense).</aside>
+</section>
+
+<!-- 2b. AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan</h2>
+  <table class="agenda">
+    <tr><th>Clock</th><th>Segment</th><th></th></tr>
+    <tr><td class="t">00:00</td><td>Welcome · what this course is · how it's graded</td><td>15&#8242;</td></tr>
+    <tr><td class="t">00:15</td><td><b>The team project</b> — 7 teams, 5 roles, one real aircraft each</td><td>15&#8242;</td></tr>
+    <tr><td class="t">00:30</td><td><b>Block A</b> — frames, rotations, SO(3), Euler angles</td><td>40&#8242;</td></tr>
+    <tr><td class="t">01:10</td><td>Concept check + rotation widget</td><td>10&#8242;</td></tr>
+    <tr><td class="t">01:20</td><td><b>Block B</b> — gimbal lock, quaternions, checking R in code</td><td>20&#8242;</td></tr>
+    <tr class="break"><td class="t">01:40</td><td>Break</td><td>10&#8242;</td></tr>
+    <tr><td class="t">01:50</td><td>Lab briefing + Python environment setup</td><td>15&#8242;</td></tr>
+    <tr class="lab"><td class="t">02:05</td><td><b>Lab session</b>: quadsim runs, the open-loop quad tips over</td><td>45&#8242;</td></tr>
+    <tr><td class="t">02:50</td><td>Team formation confirmed + wrap</td><td>10&#8242;</td></tr>
+  </table>
+</section>
+
+<!-- 2c. GRADING -->
+<section>
+  <p class="eyebrow">The contract</p>
+  <h2>How this course is graded — no surprises later</h2>
+  <table class="data">
+    <tr><th>Component</th><th>Weight</th><th>What it actually is</th></tr>
+    <tr><td>Class participation</td><td>10%</td><td>predictions, quizzes, being wrong out loud (encouraged)</td></tr>
+    <tr><td>Lab reports (6, starred graded)</td><td>30%</td><td>the controller you build all term, one layer per week</td></tr>
+    <tr><td>Team case study</td><td>20%</td><td><b>Wk 10: your team flies a real quadcopter</b> — plus the sim-vs-real analysis</td></tr>
+    <tr><td>Final project</td><td>40%</td><td>upgrade your autopilot with MPC, certify it on your own vehicle; defend it at an individual viva</td></tr>
+  </table>
+  <div class="box warn" style="margin-top:.4em">One codebase, fifteen weeks, entirely in simulation: the controller you start in Wk 4 meets an aircraft it was not tuned for in Wk 10 and gets an intelligent upgrade by Wk 15. Nothing is throwaway. The only real quadcopter in the course is the instructor's, flown twice as evidence.</div>
+</section>
+
+<!-- 2d. TEAM PROJECT -->
+<section>
+  <p class="eyebrow">The team project · starts today</p>
+  <h2>7 teams × 5 roles × 1 shared controller</h2>
+  <div class="miles">
+    <div class="m"><b>1 · Modeling</b>owns the 6-DOF model and the mixer; keeps the simulator honest</div>
+    <div class="m"><b>2 · Inner loop</b>attitude control; owns the gain sheet and the seven fixes</div>
+    <div class="m"><b>3 · Outer loop</b>position &amp; guidance; owns the mission logic and the abort edge</div>
+    <div class="m"><b>4 · Estimation</b>IMU / GPS fusion; owns "where are we" and the estimator log</div>
+    <div class="m"><b>5 · Integration &amp; evidence</b>git, the one <code>student.py</code>, the metric scripts and the plots</div>
+  </div>
+  <ul class="small" style="margin-top:.5em">
+    <li>Every role has <b>individually graded</b> lab deliverables + cross-sign-offs (your interface partner co-signs your work).</li>
+    <li>Weekly milestone board at the end of every lecture — the project advances <i>every week</i>, not in Wk 9 panic.</li>
+    <li>Team case study: <b>Wk 10</b>, the reality-gap workshop — your controller flies a hidden, team-specific plant and you explain the difference from the data. Rubric published today.</li>
+  </ul>
+  <p class="muted">Form teams during today's lab; roles confirmed by the end of Wk 2. Choose complements, not friends — you need a code-curious member (role 5) and a data-curious one (role 4). <b>The team id (T1–T7) becomes the seed of your Week-10 plant — pick it once.</b></p>
+  <aside class="notes">Sell the arc: everything taught lands in one controller that meets an unfamiliar plant in Wk 10. Say plainly: nobody flies hardware; the instructor's aircraft appears twice (Wks 5 and 10). Team list + roles into the course sheet by Wk 2.</aside>
+</section><!-- CTX 1 -->
+<section>
+  <p class="eyebrow">Why this course exists now</p>
+  <h2>The low-altitude economy (低空經濟)</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>China's State Council named the low-altitude economy a <b>strategic emerging industry</b> in 2024; provincial plans target logistics, inspection, agriculture, emergency response and passenger eVTOL.</li>
+    <li>The Greater Bay Area — Shenzhen, Zhuhai, Macau — is the densest cluster of UAS manufacturing on Earth. DJI, EHang, Autel and their supply chains are within 100 km of this room.</li>
+    <li>MUST opened its <b>MSc in Low-Altitude Economy and Technology</b> because the bottleneck is no longer airframes; it is <b>people who understand the control and autonomy stack</b>.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box"><b>Where this course sits.</b> Every aircraft in that economy — delivery quad, inspection drone, eVTOL — runs the same three layers you will build: a <i>model</i> of the vehicle, a <i>controller</i> that stabilises it, an <i>estimator</i> that tells it where it is. Change the airframe and the numbers move; the structure does not.</div>
+  <p class="small muted">This is not a survey course. You will write the loops.</p>
+    </div>
+  </div>
+
+  <aside class="notes">Ninety seconds of context so nobody wonders why a control course sits in this programme. Do not oversell the market — sell the bottleneck: control competence.</aside>
+</section>
+
+<!-- CTX 2 -->
+<section>
+  <p class="eyebrow">The application space</p>
+  <h2>What people actually do with these machines</h2>
+  <table class="data">
+    <tr><th>Sector</th><th>Mission</th><th>What the control system must be good at</th></tr>
+    <tr class="hl"><td>Logistics</td><td>point-to-point parcel delivery, 2–20 kg</td><td>payload changes mid-flight, wind rejection, precision landing</td></tr>
+    <tr><td>Inspection</td><td>power lines, bridges, wind turbines, façades</td><td>station-keeping near structures, GPS-denied flight, gust rejection</td></tr>
+    <tr><td>Agriculture</td><td>spraying, seeding, multispectral survey</td><td>very large mass change in flight, terrain following, endurance</td></tr>
+    <tr><td>Emergency</td><td>search, thermal survey, comms relay</td><td>long hover, degraded sensing, robust failsafe</td></tr>
+    <tr><td>Cinematography</td><td>tracking shots, aggressive framing</td><td>smooth trajectories, aggressive tracking, low jerk</td></tr>
+    <tr class="hl"><td>Research</td><td>swarms, autonomy, agile flight</td><td>fast attitude loops, learning-based control, sim-to-real</td></tr>
+  </table>
+  <p class="small">Read the right-hand column: <b>payload change, wind, GPS-denied, mass change, smoothness, agility</b>. Those six phrases are Weeks 5–14 of this course, in order.</p>
+
+  <aside class="notes">Ask which sector each student cares about, then point at the matching week. Ownership of the syllabus jumps when they see their own interest on the map.</aside>
+</section>
+
+<!-- CTX 3 -->
+<section>
+  <p class="eyebrow">The machine, part by part</p>
+  <h2>Anatomy of the aircraft you will model — and watch fly</h2>
+  <div class="fig plain" data-diagram="anatomy"><p class="cap">The aircraft, labelled. Trace one signal: IMU → flight controller → ESC → motor → thrust → the IMU feels it again. That circle is the whole course.</p></div>
+
+  <p class="small muted">Everything above is hardware you can buy. The part nobody can sell you is the <b>software that closes the loop</b> — which is why a 200 g toy and a 25 kg agricultural drone share the same textbook.</p>
+
+  <aside class="notes">Hold up the F570 and point at each row physically — this is the aircraft they will see fly in Weeks 5 and 10. Students who have never opened one need this before Week 3's mixer makes sense.</aside>
+</section>
+
+<!-- CTX 3b -->
+<section>
+  <p class="eyebrow">The machine, part by part</p>
+  <h2>Each component, and its role in <i>your</i> control problem</h2>
+  <table class="data">
+    <tr><th>Part</th><th>What it does</th><th>Its role in <i>your</i> control problem</th></tr>
+    <tr><td>Frame + props</td><td>structure, generates lift</td><td>sets \( m, \mathbf I, l \) — the plant parameters (Wk 2–3)</td></tr>
+    <tr><td>BLDC motors + ESCs</td><td>convert commands to thrust</td><td>the actuator, with a lag \( \tau_m \approx 20\text{–}80 \) ms and hard limits</td></tr>
+    <tr><td>IMU (gyro + accel)</td><td>measures rates and specific force</td><td>the fast sensor — the inner loop's eyes (Wk 8)</td></tr>
+    <tr><td>Barometer / ToF laser</td><td>height</td><td>the altitude loop's sensor (Wk 6)</td></tr>
+    <tr><td>Optical flow camera</td><td>ground-relative velocity</td><td>makes indoor position hold possible at all (Wk 8)</td></tr>
+    <tr class="hl"><td>Flight controller (MCU)</td><td>runs the loops at 200–1000 Hz</td><td><b>the computer your code runs on</b></td></tr>
+    <tr><td>Battery</td><td>energy</td><td>sags under load — a slow, real disturbance</td></tr>
+    <tr><td>Radio link</td><td>commands + telemetry</td><td>the human failsafe: the kill switch</td></tr>
+  </table>
+  <p class="small muted">Everything above is hardware you can buy. The part nobody can sell you is the <b>software that closes the loop</b> — which is why a 200 g toy and a 25 kg agricultural drone share the same textbook.</p>
+  <aside class="notes">Hold up the F570 and point at each row physically — this is the aircraft they will see fly in Weeks 5 and 10. Students who have never opened one need this before Week 3's mixer makes sense.</aside>
+</section>
+
+
+<!-- CTX 4 -->
+<section class="dense">
+  <p class="eyebrow">The software stack</p>
+  <h2>What runs where, and how fast</h2>
+  <div class="fig plain" data-diagram="timescale"><p class="cap">The rate ladder — the same picture whether the vehicle is 200 g or 2 tonnes.</p></div>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>1 kHz</b> — sensor sampling, IMU filtering.</li>
+    <li><b>200–500 Hz</b> — rate loop (the innermost control law).</li>
+    <li><b>50–200 Hz</b> — attitude loop. <i>Week 5.</i></li>
+    <li><b>10–50 Hz</b> — position / altitude loop. <i>Week 6.</i></li>
+    <li><b>1–10 Hz</b> — guidance, mission logic. <i>Week 9.</i></li>
+  </ul>
+    </div>
+    <div>
+  <div class="box"><b>Why the ladder matters.</b> Each layer assumes the layer beneath it is fast enough to be invisible. That single assumption is what lets us design four small controllers instead of one impossible twelve-state one — and violating it is the cause of an entire family of oscillations you will meet in Week 6.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Plant the ladder now; it reappears in Wk 6 (design), Wk 8 (sensor rates), Wk 12 (MPC scheduling). Three appearances of one idea is how it sticks.</aside>
+</section>
+
+<!-- CTX 5 -->
+<section>
+  <p class="eyebrow">Before anything flies</p>
+  <h2>Rules, weight classes, and the one number that matters</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Mass is the regulatory axis.</b> Most jurisdictions — mainland China, Macau, EU, US — draw their first line at <b>250 g</b>. Below it, requirements are light; above it, registration and pilot competency kick in.</li>
+    <li>The instructor's demonstrator is well under 250 g by design. That is not an accident; it is what makes a classroom demonstration legally and practically simple.</li>
+    <li>In Macau, outdoor operations fall under the Civil Aviation Authority (AACM). <b>Nothing in this course flies outdoors, and only the instructor flies at all</b> — the two demonstrations (Weeks 5 and 10) are inside this room.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>The rule that never bends.</b> Indoors, outdoors, 200 g or 20 kg: a spinning propeller is a blade. That is one reason this course keeps students in simulation and lets only the instructor fly — twice, behind a line, with a kill switch. Safety here is a <i>procedure</i>, not an attitude, and the simulator inherits the same discipline: an abort edge in every mission, tested before it is needed.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Set the tone in Week 1: the whole course is simulation; the only real aircraft is the instructor's, flown twice (Weeks 5 and 10) as evidence. Say it plainly so nobody buys a kit.</aside>
+</section>
+
+<!-- 3. OBJECTIVES -->
+<section>
+  <p class="eyebrow">Learning objectives</p>
+  <h2>By the end of today you can…</h2>
+  <ul>
+    <li>Distinguish the <b>world frame</b> (ENU, z-up) from the <b>body frame</b>, and read the rotation \(R\) between them.</li>
+    <li>State why \(R\in SO(3)\): columns are body axes in world, \(R^{\top}=R^{-1}\), \(\det R=+1\).</li>
+    <li>Build \(R\) from <b>intrinsic ZYX</b> (yaw→pitch→roll) Euler angles, and locate <b>gimbal lock</b>.</li>
+    <li>Explain <b>quaternions</b> as the singularity-free alternative — scalar-first, and the SciPy pitfall.</li>
+    <li><span class="pill">Lab</span> Run the <b>open-loop</b> quad, watch attitude diverge, and verify \(R^{\top}R=I\).</li>
+  </ul>
+</section>
+
+<!-- 3b. NOTATION -->
+<section>
+  <p class="eyebrow">Notation · used all semester</p>
+  <h2>Read the symbols once, never stumble again</h2>
+  <table class="data">
+    <tr><th>Symbol</th><th>Meaning</th><th>Lives in</th><th>Units</th></tr>
+    <tr><td>\( \mathbf p = (x,y,z)^\top \)</td><td>position of the centre of mass</td><td>world, z-up</td><td>m</td></tr>
+    <tr><td>\( \mathbf v = \dot{\mathbf p} \)</td><td>velocity</td><td>world</td><td>m/s</td></tr>
+    <tr><td>\( \boldsymbol\eta = (\phi,\theta,\psi)^\top \)</td><td>roll · pitch · yaw (ZYX Euler)</td><td>attitude chart</td><td>rad</td></tr>
+    <tr><td>\( R(\boldsymbol\eta) \in SO(3) \)</td><td>rotation, body → world</td><td>—</td><td>—</td></tr>
+    <tr><td>\( \boldsymbol\omega = (p,q,r)^\top \)</td><td>angular velocity (what the gyro reads)</td><td><b>body</b></td><td>rad/s</td></tr>
+    <tr><td>\( T,\; \boldsymbol\tau = (\tau_x,\tau_y,\tau_z)^\top \)</td><td>total thrust · body torques (the control wrench)</td><td>body</td><td>N · N·m</td></tr>
+    <tr><td>\( f_1..f_4 \)</td><td>per-motor thrusts</td><td>body</td><td>N</td></tr>
+  </table>
+  <div class="env rmk" style="margin-top:.4em"><span class="eh">Remark <em>(conventions bite)</em>.</span>
+  We use <b>z-up (ENU)</b>; the Beard–McLain textbook uses z-down (NED). Lifting an equation across without flipping the sign of gravity and \(z\) is the most common Week-2 bug. Bold = vector, italic = scalar, hat \( \hat{\cdot} \) = an estimate (that hat starts mattering in Week 8).</div>
+  <aside class="notes">2 minutes, but it pays every week. The (p,q,r) naming for body rates is aerospace-standard — warn CS students it collides with position "p".</aside>
+</section>
+
+<!-- PRE 1 -->
+<section class="dense">
+  <p class="eyebrow">Prerequisite, made explicit</p>
+  <h2>Vectors, bases, and coordinates are three different things</h2>
+  <div class="fig plain" data-diagram="basiscoord"><p class="cap">One physical arrow, two bases, two sets of numbers. R is the dictionary between the two descriptions — not a change to the arrow.</p></div>
+
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>A <b>vector</b> is a geometric object — a displacement, a velocity, a force. It exists before anyone chooses axes.</li>
+    <li>A <b>basis</b> is a choice of three reference directions.</li>
+    <li><b>Coordinates</b> are the three numbers you get after choosing a basis. Change the basis and the numbers change — <i>the vector does not</i>.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Example.</span>
+  The thrust of your quad is one physical arrow. In body coordinates it reads \( (0,0,T)^\top \); in world coordinates it reads \( R\,(0,0,T)^\top \). Same arrow, two descriptions. Ninety per cent of frame bugs are a program treating the <i>numbers</i> as if they were the <i>arrow</i>.</div>
+    </div>
+  </div>
+  <p class="small muted">Notation we will hold to: a subscript names the frame the <i>coordinates</i> are in — \( \mathbf v_W \) versus \( \mathbf v_B \). When a symbol has no subscript, the frame must be obvious from context, or the equation is not finished.</p>
+
+  <aside class="notes">Worth the four minutes. Every later confusion — Euler rates vs body rates, world vs body accelerations — is this distinction failing.</aside>
+</section>
+
+<!-- PRE 2 -->
+<section>
+  <p class="eyebrow">Prerequisite, made explicit</p>
+  <h2>A matrix is a machine that maps basis vectors</h2>
+  <div class="cols top">
+    <div>
+  <p>For any matrix \( M \), the product \( M\mathbf e_1 \) is exactly the <b>first column</b> of \( M \); \( M \mathbf e_2 \) the second; \( M \mathbf e_3 \) the third.</p>
+  \[ M = \big[\; M\mathbf e_1 \;\big|\; M\mathbf e_2 \;\big|\; M\mathbf e_3 \;\big] \]
+  <p class="small">So to <i>read</i> a matrix, ask: where does it send each axis?</p>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Read a rotation this way.</span>
+  If \( R \) takes body coordinates to world coordinates, then column 1 of \( R \) is the body's x-axis (the nose) <b>written in world coordinates</b>. Column 3 is the body's z-axis — the direction thrust points. That is why \( R\,(0,0,T)^\top \) is just \( T \times \) (third column).</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(90 s)</span> — Take \( R = R_z(90^\circ) \). Without multiplying anything, write down where the nose points in world coordinates. <span class="muted">(Column 1 = \( (0,1,0)^\top \): the nose points along world-y.)</span></div>
+
+  <aside class="notes">This single habit — read columns, do not multiply — makes rotation matrices legible for the rest of the course.</aside>
+</section>
+
+<!-- PRE 3 -->
+<section>
+  <p class="eyebrow">Prerequisite, made explicit</p>
+  <h2>Orthogonal matrices: what rotations preserve</h2>
+  <div class="env defn"><span class="eh">Definition.</span>
+  \( M \) is <b>orthogonal</b> if \( M^\top M = I \); equivalently its columns are mutually perpendicular unit vectors.</div>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Lengths are preserved:</b> \( \lVert M\mathbf v \rVert = \lVert \mathbf v \rVert \). A rotated velocity has the same speed.</li>
+    <li><b>Angles are preserved:</b> \( (M\mathbf a)\cdot(M\mathbf b) = \mathbf a \cdot \mathbf b \).</li>
+    <li><b>Inversion is free:</b> \( M^{-1} = M^\top \) — no determinant, no solve, one transpose.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why this matters computationally.</span>
+  Going world→body is \( R^\top \), which costs nothing. Your estimator will do this thousands of times a second. It is also a <i>numerical hygiene</i> tool: if you ever compute an \( R \) and \( R^\top R \) drifts from \( I \), your integration has gone wrong — a cheap assertion worth putting in the code.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The R^T R = I assertion is a genuinely useful debugging tool; suggest they add it to their lab code today.</aside>
+</section>
+
+<!-- 4b. FRAMES FIG -->
+<section>
+  <p class="eyebrow">The two frames · drawn</p>
+  <h2>One picture to rule the whole course</h2>
+
+  <div class="fig" data-diagram="frames"><p class="cap">Position p lives in the world frame; attitude R and rates ω live on the body. Every equation from here on is bookkeeping between these two.</p></div>
+  <div class="turn" style="margin-top:.5em"><span class="tt">Your turn (60 s)</span> — point at the drawing and answer: which arrow does the gyro measure? which does GPS measure? which does *nothing on the aircraft* measure directly? <span class="muted">(ω_body · p_world · R itself — R is always reconstructed.)</span></div>
+  <aside class="notes">The third question is the Wk-8 seed: attitude is never measured, only estimated. Plant it on day one.</aside>
+</section>
+
+<!-- 4. TWO FRAMES -->
+<section>
+  <p class="eyebrow">The two frames</p>
+  <h2>World vs body — and z is UP</h2>
+  <div class="cols">
+    <ul>
+      <li><b>World frame</b> \(\{W\}\): fixed to the ground, <b>ENU / z-up</b>. Gravity points \(-z\).</li>
+      <li><b>Body frame</b> \(\{B\}\): glued to the airframe. Thrust is always \(+\)body-\(z\).</li>
+      <li>The rotation matrix \(R\) carries a body vector into the world: \( \mathbf{v}_W = R\,\mathbf{v}_B \).</li>
+      <li>This is exactly how the sim resolves thrust &amp; gravity into world acceleration.</li>
+    </ul>
+    <div class="box">
+      <b>Translational dynamics</b> (from <code>quadsim/dynamics.py</code>):
+      \[ \mathbf a = \begin{bmatrix}0\\0\\-g\end{bmatrix} + \frac{1}{m}\,R\begin{bmatrix}0\\0\\T\end{bmatrix} \]
+      Gravity is \(-z\); thrust \(T\) lives on \(+\)body-\(z\) and \(R\) tilts it into the world.
+    </div>
+  </div>
+  <aside class="notes">
+    Convention call-out: Beard &amp; McLain / the UAVbook use NED (z-down, gravity +z). We are z-up. If you
+    lift an equation from a NED source, flip the z sign — never mix the two in one derivation.
+  </aside>
+</section>
+
+
+<!-- 5. SO(3) -->
+<section>
+  <p class="eyebrow">The rotation matrix</p>
+  <h2>\(R\) is a member of \(SO(3)\)</h2>
+  <p>A rotation matrix is not any \(3\times3\) array. Its columns are the body axes \(\mathbf{x}_B,\mathbf{y}_B,\mathbf{z}_B\)
+     expressed in world coordinates, and it obeys two laws:</p>
+  \[ R^{\top}R = I \quad\Longleftrightarrow\quad R^{-1}=R^{\top}, \qquad \det R = +1 \]
+  <div class="cols" style="font-size:.8em;margin-top:.3em">
+    <div class="box"><b>Orthonormal</b> — the body axes stay unit-length and mutually perpendicular. The inverse rotation is just the transpose: no matrix solve needed.</div>
+    <div class="box"><b>\(\det=+1\)</b> — a proper rotation, no reflection. \(\det=-1\) would flip handedness (a mirror), which no real rigid body does.</div>
+  </div>
+  <p class="muted" style="margin-top:.4em">In today's lab you'll feed angles to <code>rotation_matrix(...)</code> and check both laws numerically.</p>
+</section>
+
+<!-- 5b. SO3 FORMAL -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>Nine numbers, six constraints, three freedoms</h2>
+  <div class="env defn"><span class="eh">Definition <em>(the rotation group)</em>.</span>
+  \( SO(3) = \{ R \in \mathbb{R}^{3\times 3} : R^\top R = I,\; \det R = +1 \} \).
+  Orthonormality is 6 scalar constraints on 9 entries — leaving <b>3 degrees of freedom</b>, which is why <i>any</i> minimal attitude parametrisation has exactly 3 numbers.</div>
+  <div class="cols" style="margin-top:.4em">
+    <ul class="small">
+      <li>Columns of \(R\) = the body axes written in world coordinates. <b>Read a rotation matrix by its columns</b> — always.</li>
+      <li>\( R^{-1} = R^\top \): inverting a rotation is free. (Your Wk-8 estimator leans on this daily.)</li>
+      <li>\( \det R = +1 \) excludes reflections — a quad cannot turn into its mirror image.</li>
+    </ul>
+    <div class="env exm"><span class="eh">Worked example.</span>
+    Pure yaw \( \psi = 90^\circ \): \( R = \begin{bmatrix} 0 & -1 & 0 \\ 1 & 0 & 0 \\ 0 & 0 & 1 \end{bmatrix} \).
+    Column 1 = body-x expressed in world = \( (0,1,0)^\top \): the nose now points along world-y. Check: \( R\,(1,0,0)^\top = (0,1,0)^\top \). Do this column-reading once by hand and \(R\) stops being a wall of numbers.</div>
+  </div>
+  <aside class="notes">The 9−6=3 count is a 60-second argument that pays off twice: it explains why Euler angles exist at all, and why any 3-number chart must have a singularity somewhere (Wk-1's gimbal lock) while the 9-number R never does.</aside>
+</section>
+
+<!-- ROT 1 -->
+<section class="dense vdense">
+  <p class="eyebrow">A distinction that bites</p>
+  <h2>Rotating a vector vs re-describing it</h2>
+  <div class="fig plain" data-diagram="activepassive"><p class="cap">The object turns, or the frame turns. Same matrix, opposite stories — subscripts are what keep them apart.</p></div>
+
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">Active (rotation).</span>
+  The object physically turns; the frame stays. \( \mathbf v' = R\,\mathbf v \), both in the same frame. <i>Example: the quad banks.</i></div>
+    </div>
+    <div>
+  <div class="env defn"><span class="eh">Passive (coordinate change).</span>
+  The object is fixed; you describe it in a different frame. \( \mathbf v_W = R\, \mathbf v_B \). <i>Example: expressing thrust in world coordinates.</i></div>
+    </div>
+  </div>
+  <p class="small">The <b>same matrix</b> serves both readings — which is exactly why the confusion survives. The cure is to never write \( R \) alone: write \( R_{W\leftarrow B} \) when frames are in play, and let the subscripts cancel like units:</p>
+  \[ \mathbf v_W = R_{W\leftarrow B}\, \mathbf v_B, \qquad R_{W\leftarrow B} = R_{B\leftarrow W}^{\top} \]
+  <div class="box warn">Course convention, fixed now: <b>\( R \) means body→world</b> unless a subscript says otherwise. <code>quadsim.dynamics.rotation_matrix()</code> returns this one.</div>
+
+  <aside class="notes">The subscript-cancellation trick is what professional robotics code does (T_world_body). Recommend they name variables that way from day one.</aside>
+</section>
+
+<!-- ROT 2 -->
+<section>
+  <p class="eyebrow">Building blocks</p>
+  <h2>The three elementary rotations, derived once</h2>
+  <p>Rotate about \( z \) by \( \psi \). The z-axis is untouched; x and y turn in their plane:</p>
+  \[ R_z(\psi) = \begin{bmatrix} \cos\psi & -\sin\psi & 0 \\ \sin\psi & \cos\psi & 0 \\ 0 & 0 & 1 \end{bmatrix}, \quad R_y(\theta) = \begin{bmatrix} \cos\theta & 0 & \sin\theta \\ 0 & 1 & 0 \\ -\sin\theta & 0 & \cos\theta \end{bmatrix}, \quad R_x(\phi) = \begin{bmatrix} 1 & 0 & 0 \\ 0 & \cos\phi & -\sin\phi \\ 0 & \sin\phi & \cos\phi \end{bmatrix} \]
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Check column 1 of \( R_z \): \( (\cos\psi, \sin\psi, 0)^\top \) — the x-axis swung into the xy-plane by \( \psi \). Correct.</li>
+    <li>Notice \( R_y \) has its minus sign in the <i>lower left</i>, not the upper right, unlike the other two.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The sign trap.</span>
+  That \( R_y \) asymmetry is real and is the single most common hand-derivation error. It follows from the cyclic order \( x \to y \to z \to x \): the y-rotation maps \( z \to x \), reversing the pattern. When in doubt, rebuild the column by asking where each axis goes.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Derive R_z live on the board with a drawing; state the R_y sign trap explicitly — it will save marks in the exam and hours in the lab.</aside>
+</section>
+
+<!-- ROT 3 -->
+<section class="dense vdense">
+  <p class="eyebrow">Worked example · by hand</p>
+  <h2>Composition, and the proof that order matters</h2>
+  <div class="fig plain" data-diagram="noncommute"><p class="cap">Two 90° rotations, two orders, two completely different attitudes — one sideways, one at the floor.</p></div>
+
+  <p>Take \( \phi = 90^\circ \) (roll), \( \theta = 90^\circ \) (pitch), yaw zero. Compare the two orders:</p>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Pitch-then-roll: \( R_x R_y \).</span>
+  \( R_y(90^\circ) \) sends \( \mathbf e_1 \mapsto (0,0,-1)^\top \) (nose down). Then \( R_x(90^\circ) \) sends \( (0,0,-1) \mapsto (0,1,0) \).<br/><b>Net: nose \( \to \) world \( +y \).</b></div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Roll-then-pitch: \( R_y R_x \).</span>
+  \( R_x(90^\circ) \) leaves \( \mathbf e_1 \) alone (roll does not move the nose). Then \( R_y(90^\circ) \) sends \( \mathbf e_1 \mapsto (0,0,-1)^\top \).<br/><b>Net: nose \( \to \) world \( -z \), straight down.</b></div>
+    </div>
+  </div>
+  <p class="small">Two identical angle pairs, two completely different attitudes — one pointing sideways, one pointing at the floor. <b>\( R_x R_y \ne R_y R_x \)</b>, and no amount of care with the numbers rescues an unstated convention.</p>
+  <div class="turn"><span class="tt">(2 min)</span> — Do the same pair with \( 10^\circ \) instead of \( 90^\circ \). How different are the results? <span class="muted">(Tiny — order matters at second order in the angles, which is precisely why small-angle work is forgiving and aggressive flight is not.)</span></div>
+
+  <aside class="notes">The 10-degree follow-up is the important half: it explains why sloppy conventions survive gentle flight and explode in aggressive flight.</aside>
+</section>
+
+<!-- ROT 4 -->
+<section>
+  <p class="eyebrow">The full matrix</p>
+  <h2>\( R(\phi,\theta,\psi) \), all nine entries</h2>
+  \[ R = R_z(\psi)R_y(\theta)R_x(\phi) = \begin{bmatrix} c_\psi c_\theta & c_\psi s_\theta s_\phi - s_\psi c_\phi & c_\psi s_\theta c_\phi + s_\psi s_\phi \\ s_\psi c_\theta & s_\psi s_\theta s_\phi + c_\psi c_\phi & s_\psi s_\theta c_\phi - c_\psi s_\phi \\ -s_\theta & c_\theta s_\phi & c_\theta c_\phi \end{bmatrix} \]
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Do <b>not</b> memorise this. Memorise how to rebuild it: three elementary matrices, multiplied right to left.</li>
+    <li>The <b>third column</b> is the one that earns its keep all term — it is where thrust points.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The column that matters.</span>
+  \( R\mathbf e_3 = (c_\psi s_\theta c_\phi + s_\psi s_\phi,\; s_\psi s_\theta c_\phi - c_\psi s_\phi,\; c_\theta c_\phi)^\top \).<br/>Week 6 linearises exactly this vector to get the tilt map. Every 'lean to move' argument in the course is one Taylor expansion of these three entries.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Flag now that they will meet the third column again in Wk 6; students appreciate knowing which piece of an ugly matrix will actually be used.</aside>
+</section>
+
+<!-- ROT 5 -->
+<section class="dense vdense">
+  <p class="eyebrow">The approximation the whole course leans on</p>
+  <h2>Small angles: \( R \approx I + \widehat{\boldsymbol\eta} \)</h2>
+  <div class="fig plain" data-diagram="smallangle"><p class="cap">The cost of sin θ ≈ θ, measured. Our tilt band sits inside the 1–3% region; racing does not.</p></div>
+
+  <p>Set \( \cos \approx 1 \), \( \sin \approx \) angle, drop products of two small angles:</p>
+  \[ R \approx \begin{bmatrix} 1 & -\psi & \theta \\ \psi & 1 & -\phi \\ -\theta & \phi & 1 \end{bmatrix} = I + \begin{bmatrix} 0 & -\psi & \theta \\ \psi & 0 & -\phi \\ -\theta & \phi & 0 \end{bmatrix} \]
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>The correction term is <b>skew-symmetric</b> — that structure is not a coincidence; it is the tangent space of \( SO(3) \) at the identity.</li>
+    <li>In this regime rotations <i>do</i> commute (to first order), which is why gentle flight forgives convention mistakes.</li>
+    <li>Third column \( \approx (\theta, -\phi, 1)^\top \) ⇒ \( \ddot x \approx g\theta \), \( \ddot y \approx -g\phi \).</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Where the price is paid.</span>
+  Accurate to about 1% at \( 15^\circ \), 5% at \( 30^\circ \), 10% at \( 45^\circ \). Our tilt limit (12–25°) sits comfortably inside; a racing turn does not — which is the honest reason the aggressive-tracking example (M2, Week 11) cannot be flown by a hover-linearised design.</div>
+    </div>
+  </div>
+
+  <aside class="notes">This slide is the bridge from Wk 1 to Wk 4 and Wk 6. Say explicitly: 'you have just derived the tilt map three weeks early'.</aside>
+</section>
+
+<!-- 6a. EULER MENTAL -->
+<section>
+  <p class="eyebrow">Mental picture first</p>
+  <h2>Three turns, in order, each about a <i>new</i> axis</h2>
+  <div class="fig plain" data-diagram="eulerzyx"><p class="cap">Three elementary rotations, applied to ever-newer axes — yaw sets heading, pitch lifts the nose, roll banks.</p></div>
+  <p class="small muted" style="margin-top:.5em">Say it as a sentence before the formulas: <i>face your heading (ψ), lift your nose (θ), bank your wings (φ)</i>. The order is a convention — and conventions only work if nobody improvises.</p>
+  <aside class="notes">Have the room do it with a flat hand: yaw, pitch, roll. Then swap the order and watch hands disagree — non-commutativity by kinesthetics.</aside>
+</section>
+
+<!-- 6. EULER ZYX -->
+<section>
+  <p class="eyebrow">Building R</p>
+  <h2>Intrinsic ZYX: yaw → pitch → roll</h2>
+  <div style="float:right;width:120px;margin:0 0 8px 14px"><figure class="photo"><img src="../assets/img/euler.jpg" alt=""/><figcaption>L. Euler, 1753. <span class="cr">Handmann; public domain.</span></figcaption></figure></div>
+  <p>The course builds \(R\) (body→world) by composing three elementary rotations in the order
+     <b>yaw \(\psi\), then pitch \(\theta\), then roll \(\phi\)</b> — this is the <b>3-2-1</b> sequence:</p>
+  \[ R(\phi,\theta,\psi) = R_z(\psi)\,R_y(\theta)\,R_x(\phi) \]
+
+  <div class="box" style="margin-top:.3em;font-size:.8em">
+    This is <em>exactly</em> what <code>quadsim.dynamics.rotation_matrix(phi, theta, psi)</code> returns. Order
+    matters: rotations do not commute, so \(R_z R_y R_x \neq R_x R_y R_z\). State always the sequence.
+  </div>
+  <aside class="notes">
+    Show on the board that swapping the order gives a different orientation. The state vector stores
+    (phi, theta, psi) at x[6:9]; the function signature takes them in roll-pitch-yaw argument order but
+    composes Z·Y·X. Make sure students read the dynamics.py docstring.
+  </aside>
+</section>
+
+<!-- EUL 1 -->
+<section>
+  <p class="eyebrow">The inverse problem</p>
+  <h2>Getting \( (\phi,\theta,\psi) \) back out of \( R \)</h2>
+  <p>Firmware stores \( R \) or a quaternion; humans want angles. Read them off the entries that isolate one angle each:</p>
+  \[ \theta = -\arcsin(R_{31}), \qquad \phi = \operatorname{atan2}(R_{32}, R_{33}), \qquad \psi = \operatorname{atan2}(R_{21}, R_{11}) \]
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Use <b>atan2</b>, never <code>atan(y/x)</code>: atan2 keeps the quadrant, so \( 170^\circ \) does not silently become \( -10^\circ \).</li>
+    <li>Row 3 gives pitch alone because \( R_{31} = -\sin\theta \) — the one entry with no \( \psi \) in it.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">At the singularity.</span>
+  When \( \cos\theta \to 0 \), both atan2 arguments for \( \phi \) and \( \psi \) go to zero: \( 0/0 \). Only the <i>sum or difference</i> \( \phi \pm \psi \) is recoverable — the exact statement of gimbal lock, in code rather than in pictures.</div>
+    </div>
+  </div>
+
+  <aside class="notes">atan2 discipline is a genuine bug-prevention lesson; ask who has been bitten by a bare atan before.</aside>
+</section>
+
+<!-- EUL 2 -->
+<section>
+  <p class="eyebrow">Know the zoo</p>
+  <h2>There are twelve Euler conventions and everyone picks a different one</h2>
+  <table class="data">
+    <tr><th>Convention</th><th>Sequence</th><th>Used by</th></tr>
+    <tr class="hl"><td><b>ZYX (3-2-1), intrinsic</b></td><td>yaw → pitch → roll</td><td><b>aerospace, this course, most autopilots</b></td></tr>
+    <tr><td>ZXZ (3-1-3)</td><td>precession → nutation → spin</td><td>classical mechanics, orbital dynamics</td></tr>
+    <tr><td>XYZ extrinsic</td><td>about fixed world axes</td><td>some CAD and graphics tools</td></tr>
+    <tr><td>Tait–Bryan vs proper Euler</td><td>three distinct axes vs first = last</td><td>the naming split behind most confusion</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Intrinsic</b> = each rotation about the <i>new</i> (already rotated) axis. <b>Extrinsic</b> = all about the original fixed axes.</li>
+    <li>Fact worth knowing: intrinsic ZYX and extrinsic XYZ give the <b>same</b> matrix with the order reversed. That equivalence is why two correct-looking sources appear to contradict each other.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Practical rule.</b> When you import an equation, a dataset, or a library function, the first question is not 'is it right?' but <b>'which convention?'</b>. SciPy's <code>Rotation.from_euler('ZYX', ...)</code> in capitals means intrinsic; lowercase means extrinsic. One character.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The SciPy capitalisation detail is a real, checkable gotcha that lands well — several students will have hit it already.</aside>
+</section>
+
+<!-- 6b. GIMBAL PHOTO -->
+<section class="dense">
+  <p class="eyebrow">Mental picture first</p>
+  <h2>Where "gimbal lock" got its name</h2>
+  <div class="cols">
+    <figure class="photo"><img src="../assets/img/gimbal.gif" alt=""/><figcaption>A three-ring gimbal. When two rings fold into the same plane, one rotation axis is lost — the mechanism, and the mathematics, jam identically. <span class="cr">Animation: Lucas Vieira, Wikimedia Commons, CC BY-SA 3.0.</span></figcaption></figure>
+    <ul class="small">
+      <li>Apollo 13's IMU used a physical three-gimbal platform — the crew actively steered <i>around</i> gimbal lock during the emergency return.</li>
+      <li>Our "gimbals" are the three Euler rotations. At pitch \( \pm 90^\circ \) the roll and yaw rings align: <b>two knobs, one motion</b>.</li>
+      <li>Watch the animation until you can say which ring becomes redundant — then the algebra on the next slide is a formality.</li>
+    </ul>
+  </div>
+  <aside class="notes">Mental model before math — let the gif loop twice in silence. Apollo detail is true and lands well with engineers.</aside>
+</section>
+
+<!-- 7. GIMBAL LOCK -->
+<section>
+  <p class="eyebrow">The catch</p>
+  <h2>Gimbal lock at pitch \(=\pm90^\circ\)</h2>
+  <div class="cols">
+    <ul>
+      <li>Every Euler convention has <b>exactly two</b> singularities — no exceptions.</li>
+      <li>For <b>ZYX</b> they sit at the <b>second</b> rotation: <b>pitch \(\theta=\pm90^\circ\)</b>.</li>
+      <li>There the yaw and roll axes align — one rotational DOF is <b>lost</b>, and the Euler-rate map blows up.</li>
+      <li>The map \(\dot{\boldsymbol\eta}=W(\phi,\theta)\,\boldsymbol\omega\) has \(\cos\theta\) in a denominator ⇒ \(\to\infty\).</li>
+    </ul>
+    <div class="box warn">
+      <b>Why we care:</b> an aerobatic quad <em>will</em> pitch through \(90^\circ\). Euler angles silently break
+      there. That single fact is the entire motivation for the next slide — <span class="accent">quaternions</span>.
+    </div>
+  </div>
+  <aside class="notes">
+    The singularity is at theta = ±90°, the SECOND (pitch) rotation — students often misremember it as roll
+    or yaw. Tie it to euler_rate_matrix in dynamics.py: the 1/cos(theta) terms diverge at ±90°.
+  </aside>
+</section>
+
+<!-- AX 1 -->
+<section>
+  <p class="eyebrow">A third parametrisation</p>
+  <h2>Axis–angle and Rodrigues' formula</h2>
+  <div class="env defn"><span class="eh">Euler's rotation theorem (1775).</span>
+  Any orientation of a rigid body with one fixed point is a <b>single rotation about a single axis</b>. So three numbers suffice as \( \mathbf r = \alpha\,\mathbf u \): direction = axis, length = angle.</div>
+  <p>Rodrigues turns that description into a matrix without trigonometric bookkeeping:</p>
+  \[ R = I + \sin\alpha\, \widehat{\mathbf u} + (1-\cos\alpha)\, \widehat{\mathbf u}^{\,2}, \qquad \widehat{\mathbf u} = \begin{bmatrix} 0 & -u_3 & u_2 \\ u_3 & 0 & -u_1 \\ -u_2 & u_1 & 0 \end{bmatrix} \]
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>\( \widehat{\mathbf u} \) is the <b>skew (hat) operator</b>: \( \widehat{\mathbf a}\mathbf b = \mathbf a \times \mathbf b \). Cross products become matrix products — a notation that will pay off next week.</li>
+    <li>Small \( \alpha \): \( R \approx I + \widehat{\mathbf r} \) — the same skew-symmetric first order we met two slides ago.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why anyone bothers.</span>
+  Attitude <i>error</i> is naturally axis–angle: 'you are 12° off, about this axis'. Geometric attitude controllers (and the Mellinger controller inside gym-pybullet-drones) build their error term this way, precisely to avoid Euler singularities.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The hat operator is worth ten minutes because Wk 2's Euler equation and Wk 8's estimator both use it. Do the a-hat-b = a cross b check on the board.</aside>
+</section>
+
+<!-- AX 2 -->
+<section>
+  <p class="eyebrow">Kinematics of rotation</p>
+  <h2>How \( R \) changes: \( \dot R = R\,\widehat{\boldsymbol\omega} \)</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>\( R^\top R = I \) holds for all time</span>
+      <span class="dwhy"><b>Start from the constraint.</b> Orthonormality is not an approximation — it must survive differentiation.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>differentiate: \( \dot R^\top R + R^\top \dot R = 0 \)</span>
+      <span class="dwhy"><b>Product rule.</b> So the matrix \( S = R^\top \dot R \) satisfies \( S^\top = -S \).</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">3</span>\( S \) is skew-symmetric ⇒ \( S = \widehat{\boldsymbol\omega} \) for some vector \( \boldsymbol\omega \)</span>
+      <span class="dwhy"><b>The payoff.</b> Skew-symmetric 3×3 matrices have exactly three free entries — and that vector <i>is</i> the angular velocity. Angular velocity is not defined into existence; it falls out of orthonormality.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>\( \dot R = R\,\widehat{\boldsymbol\omega} \)  (with \( \boldsymbol\omega \) in <b>body</b> coordinates)</span>
+      <span class="dwhy"><b>Rearrange.</b> This is what an attitude estimator integrates — and note it needs \( \boldsymbol\omega \), exactly what the gyroscope measures. No Euler angles anywhere: no singularity anywhere.</span></div>
+  </div>
+  <p class="small muted">Next week we will connect this to Euler-angle rates through \( W(\boldsymbol\eta) \) — and see where the \( 1/\cos\theta \) comes from.</p>
+
+  <aside class="notes">A genuinely beautiful four-step argument and entirely within reach. It also motivates why serious firmware integrates R or quaternions rather than angles.</aside>
+</section>
+
+<!-- 8. QUATERNIONS -->
+<section>
+  <p class="eyebrow">The fix</p>
+  <h2>Quaternions: singularity-free</h2>
+  <p>A unit quaternion encodes the same orientation with <b>no singularities anywhere</b>. We use the
+     <b>scalar-FIRST</b> (Hamilton) ordering:</p>
+  \[ q = \begin{bmatrix} q_0 \\ q_1 \\ q_2 \\ q_3 \end{bmatrix}
+       = \begin{bmatrix} \cos(\tfrac{\vartheta}{2}) \\[2pt] \hat{\mathbf k}\,\sin(\tfrac{\vartheta}{2}) \end{bmatrix},
+       \qquad \lVert q \rVert = 1 \]
+  <div class="box warn" style="margin-top:.3em;font-size:.78em">
+    <b>⚠ Pitfall:</b> SciPy's <code>Rotation.as_quat()</code> returns <b>scalar-LAST</b> \([q_1,q_2,q_3,q_0]\) by
+    default. Paste it into scalar-first code and your orientation is silently wrong. Always state the order;
+    in recent SciPy pass <code>scalar_first=True</code>.
+  </div>
+  <aside class="notes">
+    \(\hat{k}\) is the unit rotation axis, \(\vartheta\) the rotation angle. Rule of thumb: name the order on
+    every slide and in every docstring. The scalar-last paste bug is one of the most common silent errors
+    students hit later in the course — flag it hard now.
+  </aside>
+</section>
+
+
+
+<!-- 8a. QUAT FORMAL -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>Quaternions, precisely enough to use</h2>
+  <div class="env defn"><span class="eh">Definition <em>(unit quaternion as rotation)</em>.</span>
+  \( q = \big(\cos\tfrac{\alpha}{2},\; \mathbf{u}\sin\tfrac{\alpha}{2}\big) \in \mathbb{S}^3 \) encodes a rotation by angle \( \alpha \) about unit axis \( \mathbf u \); vectors rotate by \( \mathbf v' = q\,\mathbf v\,q^{-1} \), and composition is quaternion multiplication (4 numbers, ~16 flops, no trig).</div>
+  <ul class="small" style="margin-top:.35em">
+    <li><b>No singularity:</b> the map covers every attitude — the price of a 4th number, per the 9−6=3 argument.</li>
+    <li><b>Double cover:</b> \( q \) and \( -q \) are the <i>same</i> rotation. Naively averaging or interpolating quaternions across that seam is a classic firmware bug — normalise and take the shortest arc.</li>
+    <li><b>Who uses what:</b> quadsim integrates Euler angles (transparent for teaching, fine near hover); PX4/Betaflight — and your team aircraft's firmware — run quaternions or rotation matrices internally, then <i>display</i> Euler angles for humans. Know both dialects; convert at the boundary.</li>
+  </ul>
+  <div class="env rmk" style="margin-top:.3em"><span class="eh">Remark.</span> For every controller in this course the attitude <i>error</i> is what matters, and near hover the Euler error ≈ the axis-angle error. The parametrisation choice is an engineering trade (transparency vs global validity), not a moral one.</div>
+  <aside class="notes">Keep to 4 minutes. The double-cover bullet is the one exam-worthy subtlety; the "dialects" bullet is what they'll actually hit when reading firmware in Wk 5.</aside>
+</section>
+
+<!-- 8b. WIDGET -->
+<section class="dense">
+  <p class="eyebrow">Interactive · drag the sliders</p>
+  <h2>Feel SO(3): the airframe under R(&phi;,&theta;,&psi;)</h2>
+  <div class="widget" data-widget="rot3d"></div>
+  <p class="muted" style="font-size:.6em">Drive pitch toward &plusmn;90&deg; and watch 1/cos&theta;.</p>
+  <aside class="notes">Two things to point at: columns of R are the body axes expressed in world frame (read them as the drawing rotates); and the singularity indicator exploding while the picture stays perfectly fine — the parametrization fails, not the rotation.</aside>
+</section>
+
+<!-- 8c. QUIZ -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Predict before you compute</h2>
+  <div class="quiz">
+    <div class="q">Q1 — Roll 90&deg; then pitch 90&deg;, versus pitch 90&deg; then roll 90&deg;. Same final attitude?</div>
+    <p class="fragment"><span class="ok">No.</span> <span class="why">Rotations do not commute — matrix order matters, which is exactly why we fix the ZYX convention on day one and never argue about it again. Try it with your phone.</span></p>
+    <div class="q fragment">Q2 — Why does the course simulator integrate body rates &omega; and not Euler-angle rates directly?</div>
+    <p class="fragment"><span class="ok">The gyro measures &omega;, and &omega; has no singularity</span> <span class="why">— Euler rates blow up at &theta;=&plusmn;90&deg; (you just watched it). Physics lives in &omega;; Euler angles are a display format. Wk 2 makes this precise with the W(&eta;) matrix.</span></p>
+  </div>
+</section>
+
+<!-- 8d. BREAK -->
+<section class="divider">
+  <h2><span class="tchip">01:40</span> Break — 10 minutes</h2>
+  <hr class="drule"/>
+  <p>After: laptops out — Python env, quadsim install, and the first (deliberate) crash.</p>
+</section><!-- WP 1 -->
+<section>
+  <p class="eyebrow">Worked problem 1 · do it with me</p>
+  <h2>Build \( R \) and check it</h2>
+  <p>Given \( \phi = 30^\circ \), \( \theta = 0 \), \( \psi = 0 \). Build \( R \), then verify.</p>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Step 1 — build.</span>
+  Only roll is non-zero, so \( R = R_x(30^\circ) \):  \[ R = \begin{bmatrix} 1 & 0 & 0 \\ 0 & 0.866 & -0.5 \\ 0 & 0.5 & 0.866 \end{bmatrix} \]
+</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Step 2 — three checks.</span>
+  <b>(a)</b> Columns unit length: \( 0.866^2 + 0.5^2 = 1 \) ✓<br/><b>(b)</b> Columns orthogonal: \( 0(0) + 0.866(-0.5) + 0.5(0.866) = 0 \) ✓<br/><b>(c)</b> \( \det R = +1 \) ✓ (not a reflection)</div>
+    </div>
+  </div>
+  <div class="env exm"><span class="eh">Step 3 — interpret.</span>
+  Third column \( = (0, -0.5, 0.866)^\top \): thrust now leans towards world \( -y \) with 86.6% of its magnitude still vertical. So a 30° roll costs 13% of your lift and buys \( 0.5g \approx 4.9 \) m/s² of sideways acceleration. <b>That trade is the entire physics of quadrotor translation.</b></div>
+
+  <aside class="notes">Do all three checks aloud; they become the assertion set students put in their Lab-1 code. The 13% lift loss number surprises people and sticks.</aside>
+</section>
+
+<!-- WP 2 -->
+<section>
+  <p class="eyebrow">Worked problem 2 · you drive</p>
+  <h2>From body measurement to world statement</h2>
+  <p>Your aircraft is at \( \phi = 0 \), \( \theta = 20^\circ \), \( \psi = 45^\circ \), producing total thrust \( T = 6.4 \) N with mass \( 0.65 \) kg. Find the world-frame acceleration.</p>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Third column of \( R \): \( (c_\psi s_\theta,\; s_\psi s_\theta,\; c_\theta)^\top = (0.242,\; 0.242,\; 0.940)^\top \).</li>
+    <li>Thrust in world: \( T \times \) that \( = (1.55,\; 1.55,\; 6.02) \) N.</li>
+    <li>Add gravity: \( -mg\mathbf e_3 = (0,0,-6.38) \) N.</li>
+    <li>Divide by \( m \): \( \mathbf a = (2.38,\; 2.38,\; -0.55) \) m/s².</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Read the answer.</span>
+  It accelerates north-east at \( 3.4 \) m/s² <b>and sinks</b> at \( 0.55 \) m/s². The pitch bought horizontal acceleration but stole vertical thrust — so a pure attitude command <i>always</i> disturbs altitude unless thrust is raised to compensate.<br/><br/>That compensation, \( T = mg/(\cos\phi\cos\theta) \), is a real line in real autopilots and appears in your Week 6 controller.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(60 s)</span> — What thrust would hold altitude exactly at this attitude? <span class="muted">(\( T = 6.38/0.940 = 6.79 \) N — about 6% more.)</span></div>
+
+  <aside class="notes">Let the room compute step 4 before revealing. The 'attitude disturbs altitude' insight is the motivation for Wk-6's thrust compensation.</aside>
+</section>
+
+<!-- WP 3 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Show that the product of two orthogonal matrices is orthogonal. Why does this mean composing rotations always gives a rotation?</li>
+    <li>For \( \psi = 90^\circ \), \( \theta = \phi = 0 \), compute \( R \) and verify that a body-frame velocity of \( (1,0,0) \) m/s becomes \( (0,1,0) \) m/s in the world.</li>
+    <li>Prove that \( \widehat{\mathbf a}\mathbf b = \mathbf a \times \mathbf b \) by expanding both sides for general \( \mathbf a, \mathbf b \).</li>
+    <li>At \( \theta = 89^\circ \), compute the Euler-rate gain \( 1/\cos\theta \). If your gyro reads \( q = 0.1 \) rad/s, what \( \dot\psi \) does the Euler map claim? Comment.</li>
+    <li>A quaternion \( q \) and \( -q \) describe the same rotation. Give a concrete way this could break an averaging routine, and a one-line fix.</li>
+    <li>Using the small-angle form of \( R \), show \( \ddot y \approx -g\phi \) near hover, and explain the minus sign geometrically.</li>
+  </ol>
+  <div class="box warn">Bring question 4 to next week's session — it is the seed of the \( W(\boldsymbol\eta) \) discussion, and I will ask for answers out loud.</div>
+
+  <aside class="notes">Six problems is one honest hour. Q3 and Q6 are the two that most reward being done by hand.</aside>
+</section>
+
+<!-- 9. WORKED EXAMPLE -->
+<section>
+  <p class="eyebrow">Tie it to the sim</p>
+  <h2>Check \(R\) with three lines of Python</h2>
+  <pre><code class="language-python" data-trim data-noescape>import numpy as np
+from quadsim.dynamics import rotation_matrix
+
+R = rotation_matrix(phi=0.3, theta=-0.2, psi=1.1)   # ZYX, radians
+print(np.allclose(R.T @ R, np.eye(3)))               # True  -> orthonormal
+print(round(np.linalg.det(R), 6))                    # 1.0   -> proper rotation
+</code></pre>
+  <div class="box" style="margin-top:.2em;font-size:.8em">
+    Two checks, two SO(3) laws: \(R^{\top}R=I\) and \(\det R=+1\). If either fails, you built the wrong matrix
+    (often a frame- or order-mismatch). This is the warm-up for today's lab.
+  </div>
+  <aside class="notes">Have students predict det before running. Then nudge theta toward ±pi/2 in the lab to feel gimbal lock in the Euler-rate map.</aside>
+</section>
+
+<!-- 10. THE LAB -->
+<section class="divider">
+  <p class="eyebrow">Second half · hands-on</p>
+  <h2>Now you run it</h2>
+  <hr class="drule"/>
+  <ul>
+    <li>Open the <b>Week 1 lab sheet</b> → run <code>examples/01_open_loop.py</code>.</li>
+    <li>Watch attitude <b>diverge</b> with no feedback — the quad tips over.</li>
+    <li>Experiment with <code>rotation_matrix(...)</code>; verify \(R^{\top}R=I\), \(\det R=+1\).</li>
+    <li><b>Deliverable:</b> a plot of attitude diverging + one line on why feedback is needed. graded graded.</li>
+  </ul>
+  <p style="margin-top:1em"><a class="btn" href="../labs/week01-intro-frames-rotations.html">Open the Week 1 lab sheet →</a></p>
+</section>
+
+
+
+<!-- 10b. LAB SESSION -->
+<section>
+  <div class="labwrap">
+    <p class="eyebrow" style="color:#1ec8c8">Lab session · 02:05 &rarr; 02:50</p>
+    <h3>Checkpoints — and team formation in parallel</h3>
+    <p class="cp"><b>02:20</b> — Python env + quadsim installed; smoke tests pass</p>
+    <p class="cp"><b>02:30</b> — <code>examples/01_open_loop.py</code> runs: hover thrust + tiny torque bias &rarr; the quad tips over. Save that plot.</p>
+    <p class="cp"><b>02:40</b> — three-line rotation check from the worked example reproduced in your own REPL</p>
+    <p class="cp"><b>02:50</b> — team of 5 registered on the course sheet (roles may still be draft)</p>
+    <p style="margin-top:.8em"><a class="btn" href="../labs/week01-intro-frames-rotations.html">Open the Week 1 lab sheet &rarr;</a></p>
+  </div>
+  <aside class="notes">The tip-over plot is the course's founding artifact: no feedback &rArr; no flight. Have teams pin it — Wk 5 kills that divergence, on the same codebase.</aside>
+</section>
+
+<!-- 10c. MILESTONE -->
+<section>
+  <p class="eyebrow">Team project · Wk 1 of 10</p>
+  <h2>Milestone board — week one</h2>
+  <div class="miles">
+    <div class="m due"><b>Everyone</b>team formed · quadsim runs on every member&#39;s laptop</div>
+    <div class="m"><b>1 · Modeling</b>read <code>params.py</code>: every number the sim believes about the vehicle</div>
+    <div class="m"><b>2 · Inner loop</b>skim <code>controllers/</code>: where your code will live all term</div>
+    <div class="m"><b>4 · Estimation</b>run a sim with <code>sensors</code> on: see the noise you&#39;ll defeat in Wk 8</div>
+    <div class="m"><b>5 · Integration</b>create the team git repo; everyone commits once this week</div>
+  </div>
+  <p class="muted" style="margin-top:.6em">Team ids T1–T7 are fixed in Wk 2 — the id is the seed of your Week-10 plant. From then on, the milestone board always has a shared-controller row.</p>
+</section><!-- 10d. MISCONCEPTIONS -->
+<section>
+  <p class="eyebrow">Before you leave</p>
+  <h2>Four traps that cost real marks (and real airframes)</h2>
+  <table class="data">
+    <tr><th>The trap</th><th>The truth</th></tr>
+    <tr><td>"Rotations add: roll 90° then pitch 90° = pitch then roll."</td><td>Rotations <b>compose</b>, they don't commute. Fix the order (ZYX) once, state it in every derivation.</td></tr>
+    <tr><td>"The gyro measures \( \dot\phi, \dot\theta, \dot\psi \)."</td><td>It measures <b>body rates</b> \( (p,q,r) \). The two differ by \( W(\boldsymbol\eta) \) — Week 2 makes it exact; confusing them breaks every estimator you'll write.</td></tr>
+    <tr><td>"Gimbal lock means the drone gets stuck."</td><td>The <i>aircraft</i> is fine; the <i>Euler chart</i> fails. R and quaternions sail through 90° pitch untroubled.</td></tr>
+    <tr><td>"z-up vs z-down is cosmetic."</td><td>It flips the sign of gravity, thrust and half the trig. Declare the frame in line 1 of every derivation — we grade for it.</td></tr>
+  </table>
+  <aside class="notes">Frame these as marks: each row has appeared as an exam distractor or a lab bug in real courses. The W(η) row seeds Week 2.</aside>
+</section>
+
+<!-- 11. SUMMARY -->
+<section>
+  <p class="eyebrow">Wrap-up</p>
+  <h2>What to remember</h2>
+  <ul>
+    <li>World is <b>ENU / z-up</b> (gravity \(-z\), thrust \(+\)body-\(z\)); \(R\) maps body→world.</li>
+    <li>\(R\in SO(3)\): \(R^{\top}R=I\), \(\det R=+1\). Built as <b>ZYX</b> \(R_z(\psi)R_y(\theta)R_x(\phi)\).</li>
+    <li>Euler has <b>two</b> singularities; for ZYX they're at <b>pitch \(\pm90^\circ\)</b> — hence quaternions.</li>
+    <li>Quaternions are <b>scalar-first</b> here; beware SciPy's scalar-last default.</li>
+    <li><b>Next week:</b> assemble these into the full <span class="accent">12-state nonlinear model</span>.</li>
+  </ul>
+  <p class="muted" style="margin-top:1em">Reading: Cornell RPAL <em>Kinematics</em> notes · Quan Quan RFly lesson decks. Deliverable &amp; deadline on the lab sheet.</p>
+  <aside class="notes">Preview Wk2: today's R and the Euler-rate map W are two of the building blocks of state_derivative(x,u).</aside>
+</section>
+
+</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+</script>
+<script>
+  Reveal.on("ready", () => { window.MLTEWidgets && MLTEWidgets.init(); window.MLTEDiagrams && MLTEDiagrams.init(); });
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 15 Viva Brief · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css" />
+</head>
+<body data-lab="week15-viva">
+
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Week 15 · Final Project — Individual Viva · ⭐ graded (20 of the project's 100 marks)</div>
+    <h1>The Viva — Five Minutes, One-to-One, Hard Cut</h1>
+    <div class="sub">What happens in the Week 15 session, what to bring, how the five minutes are spent, how they are marked, and the published question bank.</div>
+    <div class="meta">
+      <span>🗓 <b>Week 15 session</b> (make-up slot 3) · Room B201a</span>
+      <span>⏱ <b>5 min per student</b>, timer-enforced</span>
+      <span>🧍 <b>Individual</b> — no presentation, no live demo</span>
+      <span>⚖️ <b>20 marks</b> of the final project's 100</span>
+    </div>
+    <p style="margin-top:14px">
+      <a class="btn ghost" href="final-project.html">← Final-project brief &amp; rubric</a>
+      <a class="btn ghost" href="../index.html#assign">All assignments</a>
+      <a class="btn ghost" href="../pdf/MLTE03_Assignment_viva-week15.pdf">Download PDF</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">What this session is</span>
+  The Week 15 session contains <b>nothing but vivas</b>: 35 students, five minutes each, back to back.
+  Your controller has <i>already</i> been certified by then — <code>certify.py</code> ran before the session,
+  on your own vehicle, and its output is pasted in your report. The viva does not test whether your code
+  runs. It tests whether <b>you understand what you submitted</b>. That is the whole point of the
+  instrument: a working artifact can be borrowed; an explanation cannot.
+</div>
+
+<h2>Before the session — the checklist</h2>
+<p>Everything below must be done <b>before</b> your slot. There is nothing to hand in on the day.</p>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="c1" id="c1"><label for="c1">Your repo is tagged <code>final</code> and a <b>fresh clone runs the certification in one command</b>, network off.</label></li>
+  <li><input type="checkbox" data-id="c2" id="c2"><label for="c2">You have run <code>python certify.py --controller &lt;yours&gt; --student &lt;your ID&gt; --mission M3</code> <b>twice</b>: once on your frozen Week-12 baseline, once on your final submission. Both outputs are pasted verbatim in the report.</label></li>
+  <li><input type="checkbox" data-id="c3" id="c3"><label for="c3">Both certification reports show <b>the same student ID, and it is yours</b>. A run under the wrong ID certifies someone else's aircraft and does not count.</label></li>
+  <li><input type="checkbox" data-id="c4" id="c4"><label for="c4">You know your own vehicle's numbers off by heart: <code>python -m quadsim.student_params &lt;your ID&gt;</code> — mass before and after the drop, arm length, inertia. The first question is usually "what does your aircraft weigh?"</label></li>
+  <li><input type="checkbox" data-id="c5" id="c5"><label for="c5">Your one-page <b>engineering log</b> is written and committed (what you tried, what failed, what you decided).</label></li>
+  <li><input type="checkbox" data-id="c6" id="c6"><label for="c6">You can open, on your own laptop, within ten seconds: your certification reports, your evidence figure, and your repo in an editor. Slots do not wait for a laptop to boot.</label></li>
+  <li><input type="checkbox" data-id="c7" id="c7"><label for="c7">You know your <b>slot time</b> — you drew it yourself at the Week 14 exit gate; the photographed board is the schedule (a copy goes on the LMS) — and you arrive <b>one slot early</b>. Swaps are agreed between students and told to the instructor <b>before</b> Week 15, never on the day.</label></li>
+</ul>
+
+<h2>How the session runs</h2>
+<table class="rubric">
+<thead><tr><th>Time</th><th>What happens</th></tr></thead>
+<tbody>
+<tr><td>12:00–12:05</td><td>Opening. Slot order (as drawn in Week 14) confirmed. Reminder: the timer is the chair.</td></tr>
+<tr><td>12:05–15:00</td><td><b>35 vivas, five minutes each, continuous.</b> Your slot is yours alone; the next one starts on time whether or not the previous finished early.</td></tr>
+<tr><td>15:00–15:10</td><td>Close. One-sentence course wrap-up; report deadline reminder.</td></tr>
+</tbody></table>
+<div class="callout warn">
+  <span class="ttl">Session length</span>
+  35 × 5 minutes is 175 minutes of viva time, so this session runs to about <b>15:10</b> — roughly
+  twenty minutes longer than a normal class. The exact start time and any change to it will be confirmed
+  on the course platform before Week 14. Plan the whole afternoon.
+</div>
+
+<h2>Your five minutes</h2>
+<p>Three parts, compressed. The examiner chooses; you choose nothing. A timer runs from the moment you sit down
+   and the viva <b>ends at 5:00 regardless</b> of where the conversation is.</p>
+<table class="rubric">
+<thead><tr><th>Clock</th><th>Part</th><th>What the examiner does</th></tr></thead>
+<tbody>
+<tr><td>0:00–2:00</td><td><b>1 · Explain your artifact</b></td><td>Picks <b>one line</b> from <i>your</i> pasted <code>certify.py</code> output — a PASS or a FAIL, a margin, a metric — and asks: <i>"walk me through why this requirement passed / failed; what would change it?"</i> Expect an opener on your vehicle's mass and your student ID.</td></tr>
+<tr><td>2:00–4:00</td><td><b>2 · Depth probe</b></td><td>Asks <b>one question from the published bank</b> below — set A (MPC), set B (verification &amp; certification) or set C (integrative), at the examiner's discretion. The bank is public; the numbers are yours.</td></tr>
+<tr><td>4:00–5:00</td><td><b>3 · Code ownership</b></td><td>Points at <b>any line or block in your own repo</b>: <i>"why is this here; what breaks without it?"</i> On an individual project every line is yours to account for — there is no "my teammate wrote that". Code you cannot explain scores zero on this part.</td></tr>
+<tr><td>5:00</td><td><b>Hard cut</b></td><td>Timer sounds. The viva ends mid-sentence if it has to. The next student sits down.</td></tr>
+</tbody></table>
+<p>Because the cut is hard, <b>answer the question that was asked, first, in one sentence</b> — then elaborate.
+   A correct mechanism stated in twenty seconds beats a tour of your repository that runs out the clock.</p>
+
+<h2>How the 20 marks are awarded</h2>
+<p>The examiner is listening for <b>mechanism, not procedure</b>. The published anchors:</p>
+<table class="rubric">
+<thead><tr><th>Band</th><th>What it sounds like</th></tr></thead>
+<tbody>
+<tr><td style="text-align:center"><b>17–20</b></td><td>Explains <i>why</i>, not <i>what</i>; anticipates the follow-up; connects the method to its alternatives — <i>"we softened tilt because a gust makes hard constraints infeasible; motors stay hard because physics enforces them"</i>.</td></tr>
+<tr><td style="text-align:center"><b>12–16</b></td><td>Correct local explanations; wobbles on "what if we changed…"; knows the what and part of the why.</td></tr>
+<tr><td style="text-align:center"><b>7–11</b></td><td>Describes what the code or library does, procedurally; cannot predict the effect of changing a design parameter.</td></tr>
+<tr><td style="text-align:center"><b>0–6</b></td><td>Cannot explain their own submitted artifacts.</td></tr>
+</tbody></table>
+<div class="callout">
+  <span class="ttl">Negative results are fine</span>
+  If your MPC did not close REQ-M3-1 and you submitted under the fallback rule, the viva is <b>not capped</b>.
+  A student who can say precisely why the upgrade failed on their vehicle can still earn full viva marks.
+  What the viva cannot forgive is an artifact you cannot account for.
+</div>
+
+<h2>Rules on the day</h2>
+<ul>
+  <li><b>One student at the table.</b> Others waiting are there to prepare their own slot and <b>may not speak</b>. Coaching from the room ends that student's viva and is recorded.</li>
+  <li><b>Bring your own laptop</b> with the artifacts already open. Nothing is projected; the examiner reads your screen.</li>
+  <li><b>Your artifacts only.</b> The examiner works from your pasted certification reports, your figures and your repo — not from slides or notes prepared for the occasion.</li>
+  <li><b>The examiner's re-run is the reference.</b> Before the session the instructor certifies every submission independently (fresh clone, tag <code>final</code>, your ID from the class roster, network off). If your pasted numbers disagree with that run, expect to be asked why. A wrong <code>--student</code> ID is a voided certification, not an integrity case; unexplained different numbers under the correct ID are.</li>
+  <li><b>Missing your slot</b> without an institutional reason forfeits the viva marks. The schedule cannot be re-run for one person.</li>
+  <li><b>AI and external code</b> are declared in your README. Using tools is fine; the viva is the enforcement — part 3 asks about the lines, whoever typed them.</li>
+</ul>
+
+<h2>The question bank (published — preparing for it <i>is</i> the learning)</h2>
+<p>One of these is drawn in part 2. They are parameterised at the table with <b>your</b> horizon, <b>your</b> weights,
+   <b>your</b> numbers. Read them as a study guide for the whole second half of the course.</p>
+
+<h3>A — MPC</h3>
+<ol>
+  <li>Your horizon is N at rate f. What, physically, can this controller <i>not</i> see coming? Show the arithmetic on your mission.</li>
+  <li>Why is your tilt limit soft but your thrust limit hard? What happens to the QP if we swap that?</li>
+  <li>Point at your before/after altitude trace through the mass drop: narrate what the planner did differently from the PID loop, second by second.</li>
+  <li>Your Δu penalty is ρ. Predict the two symptoms of setting it 100× larger / to zero — which did you observe while tuning?</li>
+  <li>Remove the terminal cost. What failure appears, at what horizon, and why does the LQR bowl fix it?</li>
+  <li>Warm starting: what exactly is reused, why does it usually work, and when is it actively harmful?</li>
+  <li>Your model is a hover linearisation. Defend the mission's worst-case excursion against that choice with a number.</li>
+  <li>The solver returns infeasible mid-run. Trace precisely what your implementation applies to the motors in the next three steps.</li>
+  <li>Where would MPC sit on a real aircraft — or on your team's Week-10 plant (rates, layering with the inner PID)? Justify the split with the Week-6 timescale argument.</li>
+  <li>Show one metric where your frozen baseline <i>beats</i> your MPC and explain why that is expected, not embarrassing.</li>
+</ol>
+
+<h3>B — Verification &amp; certification</h3>
+<ol>
+  <li>What is the difference between <i>"it works"</i> and <i>"it is certified"</i>? Answer with your own project as the worked example, not in the abstract.</li>
+  <li>Pick one requirement from your mission spec. State its verification method and the evidence that closes it. Now name one thing that would make that evidence invalid.</li>
+  <li>Your certification report shows a FAIL. Walk me through the diagnosis: what is the physical cause, and what specific change would move the number?</li>
+  <li><b>Traceability.</b> Point at any figure in your report and trace it back to the requirement it serves. Which of your requirements has the weakest evidence, and why that one?</li>
+  <li>Your controller certified on a single run. Why is that not yet evidence — and what exactly would make it evidence?</li>
+  <li>Why does <code>certify.py</code> close the loop on <i>estimated</i> state rather than ground truth? What would a pass on ground truth prove, and what would it fail to prove?</li>
+  <li>Your improvement claim compares frozen baseline to final submission. Name three things that must be identical for that comparison to mean anything, and show me where you held each one fixed.</li>
+  <li>Your mission's requirement has threshold X. Argue whether X is the right bar: what would you move it to, and what would that do to the failure it is meant to catch?</li>
+  <li>A student tunes seeds until one run passes, then submits that. Which part of the process is designed to catch this, and what in <i>your</i> submission demonstrates you didn't do it?</li>
+  <li>Your baseline fails a requirement your MPC passes. Name the specific structural feature of MPC responsible for the difference — and the plot in your report that shows it doing the work.</li>
+</ol>
+
+<h3>C — Integrative</h3>
+<ol>
+  <li>Attack your mission with <i>learning</i> instead of optimisation: sketch the design, then name the first thing you would have to prove about it before it could be certified at all.</li>
+  <li>Rank PID / LQR / MPC for your mission under a 10× compute cut. Justify the top choice.</li>
+  <li>Point at any figure in your report and state the one-sentence claim it supports. Now state what plot would <i>falsify</i> that claim.</li>
+  <li>Your baseline was frozen in Week 12. Argue why that freezing was necessary for your headline number to mean anything.</li>
+  <li>Which of the seven PID fixes (Week 5) has a direct analogue inside MPC? (e.g. anti-windup ↔ constrained optimisation; filtered D ↔ measurement-noise handling.)</li>
+</ol>
+
+<h2>How to prepare (one evening is enough if the project is honest)</h2>
+<ol>
+  <li><b>Read your own certification output line by line</b> and, for each number, write one sentence: what produced it, what would move it. That is part 1, rehearsed.</li>
+  <li><b>Pick three questions from each set</b> you find hardest and answer them aloud with your own numbers. Time yourself at two minutes.</li>
+  <li><b>Open your repo at a random line</b> ten times and explain it in one breath. If a line takes more than a breath, either understand it or delete it before tagging <code>final</code>.</li>
+  <li><b>Do not prepare slides.</b> There is no presentation. Anything you bring that is not your submitted artifact will be set aside.</li>
+</ol>
+
+<div class="submit-box">
+  <h3>📤 Deadlines around the viva</h3>
+  <div class="row">
+    <div>Before the session</div><div>repo tagged <code>final</code>; both certification runs done on your own ID; engineering log committed — see the <a href="final-project.html">final-project brief</a> for the zip, filename and LMS dropbox</div>
+    <div>The session</div><div>your five-minute slot — nothing to hand in</div>
+    <div>Report</div><div>≤6 pages, three required items, <b>inside the same zip as your code, before the session</b> — the viva examines what you handed in; nothing is accepted afterwards (per <code>final-project-assessment.md</code> §8)</div>
+  </div>
+</div>
+
+</main>
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

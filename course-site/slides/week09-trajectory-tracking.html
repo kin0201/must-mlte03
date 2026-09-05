@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 9 — Trajectory Tracking &amp; Guidance · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 9 · Trajectories<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1 TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Trajectory Tracking &amp; Guidance</h1>
+    <p class="tp-sub">軌跡追蹤與導引</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 9 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. The session plan follows; keep this up while people settle.</aside>
+</section>
+
+<!-- 2 AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan — the last classical week</h2>
+  <table class="agenda">
+    <tr><th>Clock</th><th>Segment</th><th></th></tr>
+    <tr><td class="t">00:00</td><td>Recap + midterm map: the whole classical stack on one slide</td><td>15′</td></tr>
+    <tr><td class="t">00:15</td><td><b>Block A</b> — waypoints, guidance, smooth trajectories (with the <code>poly7</code> widget)</td><td>35′</td></tr>
+    <tr><td class="t">00:50</td><td>Concept check + feedforward widget</td><td>10′</td></tr>
+    <tr><td class="t">01:00</td><td><b>Block B</b> — feedforward, wind &amp; metrics; next week's plant, previewed</td><td>30′</td></tr>
+    <tr class="break"><td class="t">01:30</td><td>Break</td><td>10′</td></tr>
+    <tr><td class="t">01:40</td><td>Lab briefing — Labs 6+7 (one graded report)</td><td>10′</td></tr>
+    <tr class="lab"><td class="t">01:50</td><td><b>Lab session</b> — Labs 6+7, then the <b>team dry-run</b> of next week's mission (nominal model only)</td><td>60′</td></tr>
+    <tr><td class="t">02:50</td><td>Debrief: dry-run numbers, team roles for Week 10</td><td>10′</td></tr>
+  </table>
+</section>
+
+<!-- 3 MIDTERM MAP -->
+<section>
+  <p class="eyebrow">Recap · the exam-ready map</p>
+  <h2>Nine weeks on one slide</h2>
+
+  <div class="fig plain" data-diagram="coursearc"><p class="cap">Nine weeks in: the classical autopilot is complete. Today adds the mission layer; next week it flies for marks.</p></div>
+  <p class="muted">Every arrow is a possible exam question; three favourites: why cascade needs timescale separation · what the ARE delivers · why over-smoothing an estimate destabilizes a loop.</p>
+  <aside class="notes">5 minutes max, but do it — the consolidation moment matters before the reality-gap workshop and before the intelligent-control half begins.</aside>
+</section>
+
+<!-- 4 OBJECTIVES -->
+<section>
+  <p class="eyebrow">Learning objectives</p>
+  <h2>By the end of today you can…</h2>
+  <ul>
+    <li>Distinguish <b>path / waypoints / trajectory</b> — and pick the right abstraction per mission.</li>
+    <li>Implement waypoint <b>guidance</b> (acceptance radius, carrot look-ahead) as a state machine.</li>
+    <li>Explain why <b>smoothness</b> matters: rough references saturate real actuators.</li>
+    <li>Add <b>feedforward</b> and show, with numbers, why feedback alone must lag a moving target.</li>
+    <li><span class="pill">Labs 6+7 graded</span> Fly a waypoint mission and a figure-eight, RMSE &lt; 0.1 m.</li>
+  </ul>
+</section>
+
+<!-- 5 PATH VS TRAJ -->
+<section>
+  <p class="eyebrow">Block A · 00:15</p>
+  <h2>Three abstractions, one mission</h2>
+  <table class="data">
+    <tr><th></th><th>Object</th><th>Question it answers</th><th>Use it for</th></tr>
+    <tr><td><b>Waypoints</b></td><td>list of points</td><td>"visit these"</td><td>survey, delivery, your Lab 6</td></tr>
+    <tr><td><b>Path</b></td><td>geometric curve, no clock</td><td>"stay on this shape"</td><td>corridors, racing lines</td></tr>
+    <tr class="hl"><td><b>Trajectory</b></td><td>curve <b>+ timestamp</b>: \( \mathbf{p}_r(t), \dot{\mathbf{p}}_r(t), \ddot{\mathbf{p}}_r(t) \)</td><td>"be here, at speed v, now"</td><td>tracking, aggressive flight, everything in Wks 11–14</td></tr>
+  </table>
+  <div class="box" style="margin-top:.4em">The trajectory's derivatives are not decoration — they are the <b>feedforward signals</b>. A reference that knows its own acceleration can hand the controller the answer instead of making feedback rediscover it every step.</div>
+  <aside class="notes">Foreshadow: MPC (Wk 12) consumes trajectories natively — the preview is its whole advantage. The abstraction survives every controller swap.</aside>
+</section>
+
+<!-- 5b. LAYERS FIG -->
+<section>
+  <p class="eyebrow">The stack · drawn</p>
+  <h2>Four layers between "deliver the parcel" and four motor thrusts</h2>
+
+  <div class="fig" data-diagram="trajlayers"><p class="cap">Swap any layer without touching its neighbours — in Wks 11–14 you will replace only the controller box and the rest of this stack survives.</p></div>
+  <div class="turn" style="margin-top:.4em"><span class="tt">Your turn (60 s)</span> — the Wk-10 kill switch acts at which layer? And the tilt limit? <span class="muted">(Abort edge = mission layer; tilt clamp = controller layer. Safety lives at *every* layer, deliberately.)</span></div>
+</section>
+
+<!-- FP 9 -->
+<section>
+  <p class="eyebrow">First principles</p>
+  <h2>Three questions a mission layer must answer</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Where should I be?</b> — the geometric problem. A path, a shape in space.</li>
+    <li><b>When should I be there?</b> — the timing problem. Adding a clock turns a path into a trajectory.</li>
+    <li><b>What do I do when I am not there?</b> — the tracking problem, which is Weeks 5–8, already solved.</li>
+  </ol>
+  <p class="small">Weeks 5–8 answered only the third. Today is the first two — and the discovery that answering them <i>well</i> makes the third much easier.</p>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why separating them matters.</span>
+  A planner that ignores dynamics produces references the aircraft cannot fly. A controller that receives impossible references saturates, and no tuning fixes it.<br/><br/><b>The interface between planning and control is a feasibility contract:</b> the planner promises references within the aircraft's limits; the controller promises to track anything that respects them. Break the contract on either side and the system fails in a way that looks like the other side's fault.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Framing the week as a contract between two subsystems pre-empts the classic 'is this a planning or control bug?' confusion.</aside>
+</section>
+
+<!-- DERIV 9 -->
+<section>
+  <p class="eyebrow">Term by term</p>
+  <h2>Path, trajectory, and the derivatives that matter</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Order</th><th>Name</th><th>Physical meaning</th><th>Limited by</th></tr>
+    <tr><td>\( \mathbf p \)</td><td>position</td><td>where</td><td>the arena</td></tr>
+    <tr><td>\( \dot{\mathbf p} \)</td><td>velocity</td><td>how fast</td><td>\( v_{max} \), safety</td></tr>
+    <tr class="hl"><td>\( \ddot{\mathbf p} \)</td><td>acceleration</td><td><b>the tilt angle</b></td><td>\( g\tan\eta_{max} \)</td></tr>
+    <tr><td>\( \dddot{\mathbf p} \)</td><td>jerk</td><td><b>the body rate</b></td><td>attitude loop bandwidth</td></tr>
+    <tr class="hl"><td>\( \mathbf p^{(4)} \)</td><td>snap</td><td><b>the torque</b></td><td>motor differential thrust</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why a quadrotor cares about the 4th derivative.</span>
+  Read the right column upward: torque sets angular acceleration, which changes attitude, which sets translational acceleration, which integrates twice to position. <b>Four integrations from motor command to position.</b><br/><br/>So a reference that is discontinuous in its 4th derivative demands an instantaneous torque change — a step in motor thrust — which the ESCs and the motor lag cannot deliver.<br/><br/>Hence <b>minimum-snap</b>: plan the smoothest possible 4th derivative and the aircraft never has to do the impossible.</div>
+    </div>
+  </div>
+
+  <aside class="notes">This ladder is the single clearest justification for min-snap trajectories; read the right-hand column upward, out loud.</aside>
+</section>
+
+<!-- POLY 9 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Polynomial trajectories, and why 7th order</h2>
+  <div class="cols top">
+    <div>
+  <p>Between two waypoints, write each axis as a polynomial in time:</p>
+  \[ p(t) = \sum_{k=0}^{n} c_k t^k \]
+  <ul class="small">
+    <li>Boundary conditions at each end: position, velocity, acceleration, jerk = <b>4 per end, 8 total</b>.</li>
+    <li>Eight conditions ⇒ eight coefficients ⇒ <b>7th-order polynomial</b>. That is where the number comes from — not tradition.</li>
+    <li>Minimising \( \int \lVert p^{(4)}\rVert^2 dt \) over a multi-segment spline is a <b>quadratic program</b> — small, convex, solved in milliseconds.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The connection you should notice.</span>
+  A convex QP, minimising a quadratic cost, subject to linear equality constraints.<br/><br/>That is the <i>same mathematical object</i> as Week 11's MPC — the difference is only that MPC re-solves it every control step from the measured state, while a planner solves it once, offline.<br/><br/><b>Trajectory generation is open-loop MPC.</b> Say that sentence in your Week-15 viva and you will have shown you understand both.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The 'trajectory generation is open-loop MPC' line is the strongest possible bridge to Wk 11 and worth stating twice.</aside>
+</section>
+
+<!-- WIDGET poly7 -->
+<section>
+  <p class="eyebrow">Block A · interactive</p>
+  <h2>Seventh-order segment — boundary conditions in, feasibility out</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="poly7"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> 2 m in 3 s: peak acceleration? Peak tilt? Now halve T in your head before you drag it — by what factor does acceleration rise?</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#poly7">Digital Lab → poly7</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">Feasibility-before-flight as a five-second calculation. The jerk curve is why corners do not snap.</aside>
+</section>
+
+<!-- GUID 9 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Guidance: three ways to follow a path</h2>
+  <table class="data">
+    <tr><th>Method</th><th>How it works</th><th>Strength</th><th>Weakness</th></tr>
+    <tr><td><b>Waypoint hopping</b></td><td>command the next point; switch inside \( r_{acc} \)</td><td>trivial to implement</td><td>corners are rounded unpredictably; stops and starts</td></tr>
+    <tr><td><b>Carrot / look-ahead</b></td><td>chase a point sliding \( L \) ahead along the path</td><td>smooth, one tuning parameter</td><td>cuts corners by \( \approx L \); can shortcut tight turns</td></tr>
+    <tr class="hl"><td><b>Trajectory tracking</b></td><td>follow \( \mathbf p_r(t) \) with feed-forward</td><td>accurate, predictable, fast</td><td>needs a feasible, timed reference</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Choosing \( L \) for the carrot.</span>
+  Too small: the aircraft oscillates about the path (it is chasing a point it keeps reaching). Too large: it cuts the corner and may leave the corridor.<br/><br/>Rule of thumb: \( L \approx v \times \) (outer-loop time constant) \( = 1.0 \times 0.45 \approx 0.45 \) m at our speeds. <b>Look ahead by roughly one response time.</b></div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Which to use in Week 10.</span>
+  <b>L4's box mission: waypoint hopping with a generous acceptance radius.</b> It is the most robust to position noise, and the task rewards visiting corners, not elegance between them.<br/><br/>Save trajectory tracking for the figure-eight in Lab 7, where smoothness is the graded quantity.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Giving an explicit recommendation prevents teams over-engineering the Week-10 square mission.</aside>
+</section>
+
+<!-- DER 9 -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill">interactive</span></p>
+  <h2>Why feedback alone must lag — the proof in four steps</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>track a circle: \( \mathbf p_r(t) = A(\cos\omega t, \sin\omega t) \)</span>
+      <span class="dwhy"><b>The simplest moving target.</b> Constant speed, constant turn rate.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>required acceleration: \( \ddot{\mathbf p}_r = -A\omega^2 \mathbf p_r/A \), magnitude \( A\omega^2 \), pointing inward</span>
+      <span class="dwhy"><b>Centripetal acceleration is not optional</b> — without it the aircraft flies straight off the circle. Somebody must supply it.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">3</span>with feedback only, \( \mathbf a_{cmd} = K_p \mathbf e \), so at steady state \( K_p \lVert\mathbf e\rVert = A\omega^2 \)</span>
+      <span class="dwhy"><b>The error is the only source of command.</b> So the error must be exactly large enough to generate the needed acceleration.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>\( \lVert \mathbf e \rVert = A\omega^2/K_p \) — a <b>permanent, structural</b> lag, pointing inward</span>
+      <span class="dwhy"><b>Not a tuning failure.</b> With \( A = 1.2 \) m, \( \omega = 0.8 \), \( K_p = 4.9 \): \( 0.157 \) m of error, forever. Raise \( K_p \) tenfold and it shrinks tenfold — but so does your stability margin.</span></div>
+  </div>
+  <p class="small muted">Feed-forward supplies \( \ddot{\mathbf p}_r \) directly, so the error no longer has a job to do and collapses to whatever the disturbances demand. <b>The same aircraft, the same gains, ten times the accuracy — for one term you can compute analytically.</b></p>
+
+  <aside class="notes">This four-step proof turns the widget's demonstration into a result students can defend in an exam.</aside>
+</section>
+
+<!-- 6 GUIDANCE -->
+<section>
+  <p class="eyebrow">Block A</p>
+  <h2>Waypoint guidance = a small honest state machine</h2>
+  <div class="cols">
+    <ul>
+      <li><b>Acceptance radius:</b> switch to the next waypoint inside \(r_{\text{acc}}\) (0.2–0.3 m for us). Too small → the quad orbits a point it keeps <i>almost</i> reaching.</li>
+      <li><b>Carrot / look-ahead:</b> chase a point sliding along the segment ahead — turns corner-hitting into curve-cutting; one parameter (look-ahead distance) trades cut vs wobble.</li>
+      <li><b>Mission wrapper:</b> IDLE → TAKEOFF → WP(i) → LAND, with an abort edge from every state.</li>
+    </ul>
+    <div class="box"><b>The abort edge is not optional.</b> Lab-6 rule: your mission script must contain, in code, the transition that abandons the mission and lands — and you must trigger it deliberately once, in simulation, and show the trace. Safety code that has never run is safety theatre.</div>
+  </div>
+</section>
+
+<!-- 6c. RACER PHOTO -->
+<section class="dense">
+  <p class="eyebrow">Mental picture first</p>
+  <h2>What "aggressive trajectory" means when it's real</h2>
+  <div class="cols">
+    <figure class="photo"><img src="../assets/img/racer.jpg" alt=""/><figcaption>Drone Racing League airframes. A racing line through gates is a trajectory at the edge of the feasible set — tilt near 90°, thrust near max, every derivative mattering. <span class="cr">Photo: Melanie Wallner, Wikimedia Commons, CC BY-SA 4.0.</span></figcaption></figure>
+    <ul class="small">
+      <li>A racing gate line is not "waypoints, but faster": at these speeds the <b>reference's own derivatives</b> dominate the motor commands — feedback alone cannot manufacture them in time.</li>
+      <li>Racing autonomy (and mission M2) lives exactly in the machinery of this lecture: smooth references, feedforward, and knowing the aircraft's limits as <i>constraints</i>.</li>
+      <li>Hold the picture: everything below is what lets a controller fly a line like this without being surprised by its own reference.</li>
+    </ul>
+  </div>
+  <aside class="notes">One breath of glamour to motivate 40 minutes of derivatives. The Wk-14 AI-racing photo closes the arc this one opens.</aside>
+</section>
+
+<!-- MP 9 -->
+<section class="dense">
+  <p class="eyebrow">Mental picture first</p>
+  <h2>A mission is a promise about the future</h2>
+  <div class="cols top">
+    <div>
+  <figure class="photo"><img src="../assets/img/racer.jpg" alt="" style="max-height:280px"/><figcaption>Racing airframes at the limit. A racing line is a trajectory whose every derivative has been checked against what the aircraft can deliver. <span class="cr">M. Wallner, Wikimedia Commons, CC BY-SA 4.0.</span></figcaption></figure>
+    </div>
+    <div>
+  <ul class="small">
+    <li>Until today, every reference we gave the aircraft was a <b>constant</b>: 'be at this point'. The controller had all the time in the world to get there.</li>
+    <li>A mission is different: 'be <i>here</i>, at <i>this speed</i>, <i>now</i>' — a promise about the future, renewed every millisecond.</li>
+    <li>That changes the controller's job from <i>correcting</i> to <i>anticipating</i> — and anticipation needs information the reference must supply.</li>
+  </ul>
+    </div>
+  </div>
+  <p class="small muted">Everything in this lecture follows from one observation: <b>a reference that knows its own derivatives can hand the controller the answer</b>, instead of making feedback rediscover it from error.</p>
+
+  <aside class="notes">Set the frame before mathematics: constants vs promises. It makes feedforward feel inevitable.</aside>
+</section>
+
+<!-- SCALE 9 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Time scaling: one trajectory, many tempos</h2>
+  <div class="cols top">
+    <div>
+  <p>Given a feasible trajectory, replay it at rate \( \alpha \): \( \tilde{\mathbf p}(t) = \mathbf p(\alpha t) \). Then:</p>
+  \[ \dot{\tilde{\mathbf p}} = \alpha \dot{\mathbf p}, \quad \ddot{\tilde{\mathbf p}} = \alpha^2 \ddot{\mathbf p}, \quad \tilde{\mathbf p}^{(4)} = \alpha^4 \mathbf p^{(4)} \]
+  <ul class="small">
+    <li><b>Velocity scales linearly, acceleration quadratically, snap to the fourth power.</b></li>
+    <li>So flying 50% faster multiplies required torque by \( 1.5^4 = 5.1 \). Aggressiveness is brutally nonlinear in tempo.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The practical procedure.</span>
+  Design the shape once, then find the fastest \( \alpha \) keeping every derivative inside its limit:<br/><br/>\( \alpha_{max} = \min\big( v_{lim}/v_{peak},\; \sqrt{a_{lim}/a_{peak}},\; \dots \big) \)<br/><br/>One line, and 'how fast can we fly this?' becomes a computation. <b>This is what a racing-line optimiser does</b> — and what you should do before the Week-12 tempo stress test.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The alpha^4 scaling explains why small tempo increases break aircraft; the alpha_max formula is reusable.</aside>
+</section>
+
+<!-- CQ 9 -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Three questions before the lab</h2>
+  <div class="quiz">
+    <div class="q">Q1 &mdash; You halve the acceptance radius to be &ldquo;more accurate&rdquo;. The mission now takes twice as long and sometimes stalls. Why?</div>
+    <p class="fragment"><span class="ok">The radius is now comparable to your position noise.</span> <span class="why">The aircraft cannot reliably prove it has arrived, so it hovers awaiting a measurement the noise floor forbids. Acceptance radius is a <i>statistical</i> parameter: \( r_{acc} \gtrsim 3\sigma \).</span></p>
+    <div class="q fragment">Q2 &mdash; Your figure-eight tracks beautifully at \( \omega = 0.8 \) and falls apart at \( \omega = 1.6 \). Before touching gains, what do you compute?</div>
+    <p class="fragment"><span class="ok">The required tilt: \( a = 2A\omega^2 \) rises fourfold, so tilt goes from about 9&deg; to 32&deg;.</span> <span class="why">If that exceeds your clamp the reference is infeasible and no gain fixes it. <b>Check feasibility before tuning</b> &mdash; always in that order.</span></p>
+    <div class="q fragment">Q3 &mdash; Feed-forward removes the tracking lag. Does it also remove the need for feedback?</div>
+    <p class="fragment"><span class="ok">No &mdash; it removes feedback&rsquo;s need to fight the <i>reference</i>.</span> <span class="why">Feedback still handles wind, model error and every disturbance the plan did not foresee. FF flies the plan; FB flies the surprises. Remove feedback and the first gust ends the flight.</span></p>
+  </div>
+
+  <aside class="notes">Q2's 'check feasibility before tuning' is the week's thesis in diagnostic form.</aside>
+</section>
+
+<!-- 7 SMOOTHNESS -->
+<section>
+  <p class="eyebrow">Block A</p>
+  <h2>Why smoothness is a hardware requirement, not an aesthetic</h2>
+  <div class="cols">
+    <div>
+      <p>Chain rule of the cascade, read right-to-left:</p>
+      \[ \mathbf{p}_r(t) \xrightarrow{\;\ddot{\phantom{p}}\;} \mathbf{a}_{\text{des}} \xrightarrow{\text{tilt map}} \boldsymbol\eta_d \xrightarrow{\;\dot{\phantom{\eta}}\;} \boldsymbol\omega_d \xrightarrow{\;\dot{\phantom{\omega}}\;} \boldsymbol\tau \]
+      <p class="small">A step in position wants infinite acceleration; a corner wants a torque spike (derivative kick, fix #4). Real motors decline. The reference must be differentiable <i>as many times as the chain differentiates it</i> — for a quad, ~4 (hence "minimum-<b>snap</b>").</p>
+    </div>
+    <div class="box"><b>Differential flatness (name-drop with content):</b> quad dynamics are flat in \( (x,y,z,\psi) \) — any sufficiently smooth position+yaw trajectory determines full states <i>and</i> inputs algebraically. That's the license behind min-snap planners and drone racing. We use its practical corollary: <b>plan smooth, get feasible</b>. quadsim's <code>trajectories.figure_eight()</code> hands you smooth \( \mathbf{p}_r,\dot{\mathbf{p}}_r,\ddot{\mathbf{p}}_r \).</div>
+  </div>
+</section>
+
+<!-- 7c. FLATNESS FORMAL -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>Differential flatness — the licence behind everything today</h2>
+  <div class="env defn"><span class="eh">Fact <em>(Mellinger–Kumar, 2011)</em>.</span>
+  The quadrotor is <b>differentially flat</b> in \( (x, y, z, \psi) \): given any sufficiently smooth trajectory of these four outputs, <i>every</i> state and <i>every</i> input is determined algebraically from the outputs and their derivatives — attitude from \( \ddot{\mathbf p} \) (the tilt map, exactly), body rates from the jerk, torques from the snap.</div>
+  <ul class="small" style="margin-top:.35em">
+    <li><b>Consequence 1 — planning splits from control:</b> plan only 4 curves, not 12 states; feasibility = bounds on their derivatives. This is why the guidance stack can be layered at all.</li>
+    <li><b>Consequence 2 — minimum-snap:</b> since torque rides on the 4th derivative, penalise \( \int \lVert \mathbf p^{(4)} \rVert^2 dt \) ⇒ piecewise 7th-order polynomials through waypoints — a small QP (Wk-11 foreshadow), and the industry-standard smooth-path generator.</li>
+    <li><b>Consequence 3 — your feedforward is exact:</b> the \( \ddot{\mathbf p}_r \) term you wire in Lab 7 is not a heuristic; it is the flatness map's first bite.</li>
+  </ul>
+  <div class="env exm" style="margin-top:.3em"><span class="eh">Worked example <em>(tempo vs the tilt budget)</em>.</span>
+  Figure-eight \( A = 1.2 \) m at \( \omega = 0.8 \) rad/s ⇒ peak \( a \approx 2A\omega^2 = 1.5 \) m/s² ⇒ tilt ≈ \( \arctan(1.5/9.81) = 8.9^\circ \). Double the tempo: \( a = 6.1 \) m/s² ⇒ 32° — <b>past the 25° demo clamp; the mission is infeasible before any controller runs</b>. Feasibility math beats tuning heroics.</div>
+  <aside class="notes">Flatness stated without proof, used with precision — the right master's dose. The worked example is the concrete link: reference design IS constraint design.</aside>
+</section>
+
+<!-- 8 QUIZ A -->
+<section>
+  <p class="eyebrow">Concept check · 00:50</p>
+  <h2>Predict before you compute</h2>
+  <div class="quiz">
+    <div class="q">Q1 — Pure feedback (no FF) tracking a circle at constant speed: the steady tracking error is…</div>
+    <div class="opt">A. zero — PD handles it</div>
+    <div class="opt">B. nonzero, pointing <i>inward</i> — the error generates the centripetal acceleration</div>
+    <div class="opt">C. nonzero, pointing <i>outward</i></div>
+    <p class="fragment"><span class="ok">B.</span> <span class="why">Someone must supply \(v^2/r\); with FB alone it's the error, scaled by \(1/K_p\). Feedforward supplies it from the reference instead, and the error collapses. You'll measure exactly this in Lab 7.</span></p>
+    <div class="q fragment">Q2 — Halving the figure-eight period multiplies the required peak acceleration by…</div>
+    <p class="fragment"><span class="ok">×4</span> <span class="why">(\( a \propto \omega^2 \)). Aggressiveness is quadratic in tempo — the innocent-looking "just fly it faster" is how demo-day tilt limits get discovered. Budget speed like an engineer.</span></p>
+  </div>
+</section>
+
+<!-- 9 WIDGET -->
+<section>
+  <p class="eyebrow">Interactive</p>
+  <h2>Feedback vs feedback + feedforward</h2>
+  <div class="widget" data-widget="traj" style="max-width:780px;margin:0 auto"></div>
+  <p class="muted" style="font-size:.55em">Toggle FF off: the lag is structural. Wind on, FF on: feedback's real job is disturbances.</p>
+  <aside class="notes">Division of labour, said plainly: FF flies the plan, FB flies the surprises. This sentence reappears in the MPC weeks (MPC = FF re-planned every step) — say it now.</aside>
+</section>
+
+<!-- FSM 9 -->
+<section class="dense">
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>The mission state machine, written out</h2>
+  <pre><code class="language-python">class Mission:
+    def step(self, t, x):
+        if   self.state == IDLE:
+            if self.armed and self.go: self.state = TAKEOFF
+        elif self.state == TAKEOFF:
+            self.ref = hover_at(self.home, self.h_target)
+            if abs(x.z - self.h_target) < 0.10 and abs(x.vz) < 0.15:
+                self.state, self.i = CRUISE, 0
+        elif self.state == CRUISE:
+            self.ref = self.waypoints[self.i]
+            if norm(x.pos - self.ref.pos) < self.r_acc:
+                self.i += 1
+                if self.i >= len(self.waypoints): self.state = LAND
+        elif self.state == LAND:
+            self.ref = descend(self.ref, rate=0.3)
+            if self.touchdown_detected(x): self.state = DISARM
+
+        if self.abort:                     # <-- from ANY state
+            self.state = LAND; self.ref = descend(x.pos, rate=0.5)
+        return self.ref</code></pre>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Every transition has an explicit test</b>, and every test uses a tolerance, not equality.</li>
+    <li>The <code>abort</code> block sits <i>outside</i> the state logic deliberately — it must be reachable from every state, including states you add later.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why state machines and not <code>if</code>-chains.</span>
+  Because 'what is the aircraft doing right now?' must have exactly one answer, loggable as a single integer. When a flight goes wrong, the state trace tells you <i>what the aircraft thought it was doing</i> — which is usually the whole diagnosis.<br/><br/><b>Log the state variable. Every flight.</b></div>
+    </div>
+  </div>
+
+  <aside class="notes">Insist on logging the state integer; it is the single most useful line in a mission log.</aside>
+</section>
+
+<!-- MET 9 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Metrics, defined precisely enough to be gradeable</h2>
+  <table class="data">
+    <tr><th>Metric</th><th>Definition</th><th>What it catches</th><th>Our target</th></tr>
+    <tr><td>RMSE</td><td>\( \sqrt{\tfrac1T\int \lVert \mathbf p - \mathbf p_r\rVert^2 dt} \)</td><td>average quality</td><td>&lt; 0.10 m, no wind</td></tr>
+    <tr class="hl"><td>Max deviation</td><td>\( \max_t \lVert \mathbf p - \mathbf p_r \rVert \)</td><td><b>the safety question</b></td><td>&lt; 0.30 m</td></tr>
+    <tr><td>Control effort</td><td>\( \int \lVert \mathbf u \rVert^2 dt \)</td><td>battery, heat, wear</td><td>report it, compare fairly</td></tr>
+    <tr><td>Recovery time</td><td>time to re-enter tolerance after a disturbance</td><td>robustness</td><td>&lt; 2 s</td></tr>
+    <tr class="hl"><td>Constraint violations</td><td>count and magnitude</td><td><b>did it stay legal?</b></td><td>zero</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">Why RMSE alone is not enough.</span>
+  A controller can have excellent RMSE and one catastrophic 1.5 m excursion — and RMSE will barely notice, because it averages. <b>Max deviation is the number that decides whether the aircraft hits a wall.</b><br/><br/>Report both, always. In the final project, a comparison that quotes only RMSE will be asked about the maximum.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The fair-comparison rules.</span>
+  Same trajectory · same limits · same wind seed · same metric code · same duration, with the first lap discarded as transient.<br/><br/>Write the metric function <b>once</b>, import it everywhere. A metric computed two slightly different ways is the commonest source of accidentally dishonest comparisons.</div>
+    </div>
+  </div>
+
+  <aside class="notes">These five metrics and the fairness rules become the final-project benchmarking standard; introduce them as such.</aside>
+</section>
+
+<!-- FEAS 9 -->
+<section>
+  <p class="eyebrow">Worked example · by hand</p>
+  <h2>Is this mission feasible before we fly it?</h2>
+  <p>Proposed L4 mission: a 1 m box, corners visited in 8 s total, tilt limited to 12°.</p>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Perimeter 4 m in 8 s ⇒ average 0.5 m/s.</li>
+    <li>Each corner is a 90° turn. Simplest profile: decelerate to rest, turn, accelerate.</li>
+    <li>\( a_{max} = g\tan 12^\circ = 2.08 \) m/s². Accelerate to 0.5 m/s: \( t = 0.24 \) s over 0.06 m.</li>
+    <li>Per side: accelerate 0.06 m + cruise 0.88 m + decelerate 0.06 m = 0.24 + 1.76 + 0.24 = <b>2.24 s</b>.</li>
+    <li>Four sides: <b>8.96 s &gt; 8 s.</b> Marginally infeasible.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Three honest fixes.</span>
+  <b>(a)</b> Allow 9.5 s — the cheapest fix, and nobody is grading elegance.<br/><b>(b)</b> Raise the tilt limit to 15° ⇒ \( a = 2.6 \) m/s² ⇒ 8.5 s. Still not 8.<br/><b>(c)</b> Round the corners (carrot guidance) so the aircraft never stops ⇒ comfortably under 8 s, at the cost of not passing exactly through the corners.<br/><br/><b>All three are legitimate. Choosing among them is mission design</b>, and it took five lines of arithmetic rather than five flights.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(3 min)</span> — Repeat for a 2 m box in the same 8 s. Feasible? <span class="muted">(Perimeter 8 m at 2.08 m/s²: cruise speed would need to be ~1.05 m/s and the total lands near 8.4 s — borderline again, and now the aircraft is moving fast enough that a 0.3 m excursion matters. Bigger is not automatically harder to control, but it is always harder to <i>schedule</i>.)</span></div>
+
+  <aside class="notes">Feasibility-before-flight is the professional habit; this example makes it a five-minute calculation rather than an abstraction.</aside>
+</section>
+
+<!-- WIND 9 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Wind: what it does, and what can be done about it</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Wind type</th><th>Model</th><th>Effect</th><th>Best defence</th></tr>
+    <tr><td>steady breeze</td><td>constant force</td><td>steady position offset</td><td>integral action</td></tr>
+    <tr><td>gust</td><td>step force</td><td>transient excursion</td><td>bandwidth + headroom</td></tr>
+    <tr><td>turbulence</td><td>filtered noise</td><td>continuous jitter</td><td>reduce gains, accept it</td></tr>
+    <tr class="hl"><td><b>ground/wall effect</b></td><td>state-dependent thrust change</td><td>surprise near surfaces</td><td><b>keep clear; model if you must</b></td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Sizing the indoor problem.</span>
+  An air-conditioning draught of 0.5 m/s against \( C_dA \approx 0.01 \) m²: \( F = \tfrac12(1.225)(0.01)(0.25) \approx 0.0015 \) N — negligible.<br/><br/>But the <b>downwash reflecting off a nearby wall</b> can produce a fraction of a newton, unpredictably. That is why the Week-10 arena keeps the aircraft a metre from the barrier, and why teams that hug the edge have a bad time.<br/><br/><b>Indoors, the aircraft is its own weather.</b></div>
+    </div>
+  </div>
+  <p class="small muted">In simulation, <code>--wind 0.5</code> injects a steady force plus turbulence. Use it to test that your integral action and headroom are real, not decorative — and use the same seed for every controller you compare.</p>
+
+  <aside class="notes">The 'the aircraft is its own weather' observation is true, memorable, and explains a real flight-test failure mode.</aside>
+</section>
+
+<!-- 10 METRICS -->
+<section>
+  <p class="eyebrow">Block B · 01:00</p>
+  <h2>Metrics: how tracking gets graded — in labs, the workshop, and the final project</h2>
+  <div class="cols">
+    <ul>
+      <li><b>RMSE</b> over the run — the headline number (course bar: &lt; 0.1 m, no wind).</li>
+      <li><b>Max deviation</b> — safety corridor half-width; the Week-10 workshop and REQ-M3-1 both care about this one.</li>
+      <li><b>Control effort</b> \( \int\lVert\mathbf{u}\rVert^2 \) — flight time is energy; grades per joule matter in comparisons.</li>
+      <li><b>Under disturbance:</b> recovery time and steady offset with wind on.</li>
+    </ul>
+    <div class="box warn"><b>Benchmarking discipline (rehearse it now, it's the final-project law):</b> same trajectory, same limits, same wind seed, same metric script for every controller you compare. A comparison with moving conditions is marketing, not engineering.</div>
+  </div>
+</section>
+
+<!-- 11 DEMO BRIEFING -->
+<!-- 11 PREVIEW WK10 -->
+<section>
+  <p class="eyebrow">Block B · next week, previewed</p>
+  <h2>Next week: the same controller, a different aircraft</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Your controller assumes</th><th>Next week's plant has</th></tr>
+    <tr><td>motors answer instantly</td><td>a first-order lag, 50–120 ms</td></tr>
+    <tr><td>no air</td><td>drag, linear + quadratic</td></tr>
+    <tr><td>0.65 kg exactly</td><td>+4 … +14 % you were not told</td></tr>
+    <tr><td>GPS fixes on time</td><td>fixes 120–300 ms old</td></tr>
+    <tr><td>constant wind at most</td><td>a mean gust from a random heading, plus wander</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">What the workshop asks.</span>
+  Fly <b>this week's</b> mission on that plant, unmodified, and explain the difference from the data — three mechanisms, one fix. The numbers are hidden behind your team id; the effect classes are public. <b>Today's job is only to make sure the mission runs</b> — that is the dry-run in the last twenty minutes of the lab.</div>
+    </div>
+  </div>
+  <p class="small muted">Nothing to bring but a laptop with the environment working and your team's controller on <code>main</code>. The instructor's F570 flies for fifteen minutes at the start of the session so that every hidden effect has a face.</p>
+  <aside class="notes">Preview only — do not give numbers. The point today is that the Week-10 mission is <i>this</i> mission, so Lab 6 is directly the rehearsal.</aside>
+</section>
+
+<!-- F570 9a -->
+<section>
+  <p class="eyebrow">The aircraft in this room</p>
+  <h2>How the F570 does position — flow and lidar, two ways</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th></th><th>Optical flow version</th><th>Lidar version</th></tr>
+    <tr><td>Measures</td><td>ground-relative velocity</td><td>range to walls, 2-D scan</td></tr>
+    <tr><td>Gives position by</td><td><b>integrating velocity</b></td><td>matching the scan to a map</td></tr>
+    <tr class="hl"><td>Drifts?</td><td><b>yes, unboundedly</b></td><td>no — walls are an absolute reference</td></tr>
+    <tr><td>Needs</td><td>floor texture + light</td><td>walls within range, low yaw change</td></tr>
+    <tr><td>Vendor's caveat</td><td>surface-dependent</td><td>'assumes yaw changes little; assumes speed low enough to ignore scan distortion'</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Read the third row.</span>
+  This is the deepest distinction in indoor navigation. Flow is <b>dead reckoning</b> — smooth, high-rate, and it walks away over minutes. Lidar is <b>absolute</b> — noisier, lower-rate, but anchored to something that does not move.<br/><br/>Exactly the gyro-versus-accelerometer split from Week 8, one level up. <b>The same fusion argument applies</b>, and a good indoor system uses both.</div>
+    </div>
+  </div>
+  <p class="small">Your team aircraft has flow only. So your position estimate <i>will</i> drift, and the honest design question is not how to stop it but <b>how long a hold you can promise before it matters</b> — which is exactly what the L3 60-second task measures.</p>
+
+  <aside class="notes">Reframing L3's 60 seconds as 'how long can you promise' turns an arbitrary tolerance into an engineering specification.</aside>
+</section>
+
+<!-- FAIL 9 -->
+<section>
+  <p class="eyebrow">Common failure gallery</p>
+  <h2>Six ways a mission goes wrong</h2>
+  <table class="data">
+    <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+    <tr class="hl"><td>Orbits a waypoint forever</td><td>acceptance radius smaller than position noise</td><td>\( r_{acc} \ge 3\sigma_{pos} \); ours ≈ 0.25 m</td></tr>
+    <tr><td>Corner overshoot into the barrier</td><td>no deceleration planning; carrot too long</td><td>plan the stop, or shorten \( L \)</td></tr>
+    <tr><td>Stalls between waypoints</td><td>transition test never true (equality, not tolerance)</td><td>tolerances everywhere; add a timeout</td></tr>
+    <tr><td>Perfect on the nominal model, wanders on the team plant</td><td>a mean gust your loop has no integrator against</td><td>shorter legs; a horizontal integrator (with a clamp)</td></tr>
+    <tr><td>Aborts, then re-arms and continues</td><td>abort did not latch</td><td>latch it; require a deliberate reset</td></tr>
+    <tr class="hl"><td>Lands, then tips over</td><td>no touchdown detection</td><td>three conditions AND-ed, with a hold time</td></tr>
+  </table>
+  <p class="small">Rows 1 and 6 are the two that will cost your team its Week-10 run. Both are ten-line fixes and both are invisible until the plant is not the one you tuned on.</p>
+
+  <aside class="notes">The acceptance-radius-vs-noise rule is quantitative and immediately actionable; give the 0.25 m number.</aside>
+</section>
+
+<!-- TH 9 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Derive the 7th-order polynomial coefficients for a 1 m rest-to-rest move in 2 s with zero velocity, acceleration and jerk at both ends. Plot all four derivatives.</li>
+    <li>Show analytically that the steady tracking error of a PD controller on a circular reference is \( A\omega^2/K_p \), directed inward.</li>
+    <li>For the figure-eight (\( A=1.2 \) m, \( \omega=0.8 \) rad/s), compute peak velocity, acceleration and required tilt. Then repeat at \( \times 1.5 \) and \( \times 2 \) tempo and identify where it becomes infeasible at a 25° limit.</li>
+    <li>Implement carrot guidance with \( L \in \{0.2, 0.5, 1.0\} \) m on a square path. Measure corner-cutting distance and path RMSE for each; recommend a value with reasoning.</li>
+    <li>Add a 2 s flow dropout mid-mission to your Lab-6 run. What does your state machine do? What <i>should</i> it do?</li>
+    <li>Design the acceptance-radius and timeout parameters for the Week-10 square mission from your own measured position noise. Justify each number.</li>
+  </ol>
+  <div class="box warn">Question 6 is not hypothetical — those are the parameters your mission script carries into next week's workshop. Bring your numbers to the dry-run.</div>
+
+  <aside class="notes">Q6 makes the take-home directly useful for the workshop, which raises completion rates considerably.</aside>
+</section>
+
+<!-- MAP 9 -->
+<section class="dense">
+  <p class="eyebrow">Concept map</p>
+  <h2>Week 9, in one page</h2>
+  <div class="fig plain" data-diagram="trajlayers"><p class="cap">The four layers, and the one interface that matters: the planner's promise that its references are flyable.</p></div>
+  <table class="data">
+    <tr><th>Concept</th><th>One-line statement</th><th>Where it returns</th></tr>
+    <tr><td>path vs trajectory</td><td>the clock is what makes it feasible or not</td><td>Wk 11 preview horizon</td></tr>
+    <tr><td>derivative ladder</td><td>snap ⇒ torque; smoothness is a hardware requirement</td><td>min-snap, racing lines</td></tr>
+    <tr><td>feed-forward</td><td>supply what you know; feedback handles surprises</td><td>Wk 12 MPC preview</td></tr>
+    <tr><td>guidance FSM</td><td>tolerances, timeouts, and a latching abort</td><td>Wk 10 workshop, every real autopilot</td></tr>
+    <tr><td>metrics</td><td>RMSE <i>and</i> max deviation, fairly measured</td><td>the final-project rubric</td></tr>
+    <tr class="hl"><td>feasibility first</td><td>five lines of arithmetic beat five flights</td><td>every mission you design</td></tr>
+  </table>
+
+  <aside class="notes">Sixty seconds. The last row is the week's most transferable habit.</aside>
+</section>
+
+<!-- AHEAD 9 -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: it flies for marks — on a plant you were never shown</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>The classical autopilot is complete: model, control, estimate, plan. Nothing structural is missing.</li>
+    <li>Week 10 is the <b>reality-gap workshop</b> — 7 teams, the same mission you fly today, on each team's hidden <code>TeamPlant</code>; the gap analysis carries most of the case-study grade.</li>
+    <li>It is also the final-project kickoff: one mission, one method, your own vehicle, and the assessment that will occupy Weeks 11–15.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Bring to Week 10:</b> a laptop where <code>08_team_mission.py --team T&lt;n&gt; --dry-run</code> runs, your team's controller on <code>main</code> with a git hash, and the four Week-8/9 plotting snippets to hand.<br/><br/><b>Do not tune tonight.</b> The workshop measures the controller you already have; a midnight retune only makes the "before" column unreproducible.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Repeat the 'do not tune tonight' line; it protects the before/after structure of the case study.</aside>
+</section>
+
+<!-- CORNER 9 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Corner handling: three strategies, drawn in numbers</h2>
+  <table class="data">
+    <tr><th>Strategy</th><th>Path error at corner</th><th>Time cost</th><th>Best for</th></tr>
+    <tr><td>Stop-turn-go</td><td><b>zero</b> — passes exactly through</td><td>+0.5 s per corner</td><td>surveying, precise waypoints</td></tr>
+    <tr class="hl"><td>Carrot with look-ahead \( L \)</td><td>\( \approx L/2 \) inside the corner</td><td>none</td><td><b>our L4 box mission</b></td></tr>
+    <tr><td>Planned rounded corner (radius \( r \))</td><td>exactly \( r \), by design</td><td>small</td><td>racing, cinematography</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Sizing a planned corner.</span>
+  A rounded corner of radius \( r \) at speed \( v \) needs centripetal acceleration \( v^2/r \).<br/><br/>At \( v = 0.5 \) m/s with \( a_{max} = 2.08 \) m/s²: \( r_{min} = 0.25/2.08 = 0.12 \) m.<br/><br/>So a 12 cm corner radius is the tightest this aircraft can turn at that speed <b>without leaving its tilt budget</b> — and the arithmetic took one line.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The choice is a specification, not a preference.</span>
+  'Pass exactly through the corners' and 'never stop' are incompatible for an underactuated vehicle. Someone must decide which matters, and that decision belongs in the mission spec — <b>before</b> anyone tunes anything.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The r_min = v^2/a_max formula is immediately useful for their mission design.</aside>
+</section>
+
+<!-- FLAT 9 -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>Differential flatness, and what it licenses</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">The result (Mellinger &amp; Kumar, 2011).</span>
+  A quadrotor is <b>differentially flat</b> in \( (x,y,z,\psi) \): choose any sufficiently smooth trajectory for those four outputs and <i>every</i> state and <i>every</i> input follows algebraically — attitude from \( \ddot{\mathbf p} \), body rates from jerk, torques from snap.</div>
+    </div>
+    <div>
+  <ul class="small">
+    <li><b>Consequence 1 — planning decouples from control.</b> Plan four curves, not twelve states. This is why the layer diagram works at all.</li>
+    <li><b>Consequence 2 — feasibility is a derivative check.</b> Bounded snap ⇒ bounded torque. No simulation required to reject a bad plan.</li>
+    <li><b>Consequence 3 — your Lab-7 feed-forward is exact</b>, not a heuristic: it is the flatness map's first term.</li>
+  </ul>
+    </div>
+  </div>
+  <p class="small muted">Flatness is why aggressive quadrotor flight became tractable in the 2010s, and it underlies every min-snap planner and racing-line optimiser you will meet. <b>We use its practical corollary all term: plan smooth, get feasible.</b></p>
+
+  <aside class="notes">State without proof, use with precision — the right dose for a master's course.</aside>
+</section>
+
+<!-- REPLAN 9 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Replanning: what happens when the world moves</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>A trajectory is a plan made at one instant. If the aircraft is pushed off it, do you <b>return to the plan</b> or <b>make a new one</b>?</li>
+    <li><b>Return:</b> simple, keeps the timing promise, but can demand a violent catch-up if the excursion was large.</li>
+    <li><b>Re-time:</b> slide the clock so the aircraft rejoins at the nearest point. Gentle, but the mission takes longer.</li>
+    <li><b>Replan:</b> generate a fresh trajectory from the current state. Best, and expensive.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Where this is going.</span>
+  Option three, executed <i>every control step</i>, is Model Predictive Control — Week 11.<br/><br/>Notice how naturally the need arises: the moment you have a plan and a disturbance, you face the replan question. MPC is not an exotic method looking for a problem; it is the obvious answer to a question this lecture just raised.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — Your aircraft is blown 0.4 m off a figure-eight. Which option would you choose for the Week-10 mission, and why? <span class="muted">(Re-time. Returning to the plan means catching up at a speed you did not budget for — and the metric that matters is maximum deviation, which a violent catch-up makes worse.)</span></div>
+
+  <aside class="notes">This slide makes MPC feel inevitable rather than introduced. Use it as the bridge in the Wk-11 recap.</aside>
+</section>
+
+<!-- 12 BREAK -->
+<section class="divider">
+  <h2><span class="tchip">01:30</span> Break — 10 minutes</h2>
+  <hr class="drule"/>
+  <p>After the break: Labs 6+7 for everyone, then the team dry-run of next week's mission in the last twenty minutes.</p>
+</section>
+
+<!-- STITCH 9 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Multi-segment trajectories: stitching, and the continuity that matters</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>A mission is many segments. Each is a polynomial; the question is what must match at the joins.</li>
+    <li><b>Position only</b> (C⁰): the aircraft jerks at every waypoint — velocity jumps.</li>
+    <li><b>+ velocity</b> (C¹): smooth motion, but acceleration jumps ⇒ tilt jumps ⇒ torque spikes.</li>
+    <li><b>+ acceleration</b> (C²): tilt is continuous. <b>This is the practical minimum for a quadrotor.</b></li>
+    <li><b>+ jerk</b> (C³): body rates continuous. Needed for aggressive flight.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why C² is the threshold.</span>
+  Acceleration maps directly to tilt angle (Week 6). A discontinuity in acceleration is a <i>step</i> in commanded attitude — and your inner loop, however well tuned, needs ~0.1 s to follow a step.<br/><br/>So a C¹ trajectory hands the aircraft a demand it structurally cannot meet at every single waypoint. <b>The corner-rounding you see in real flight logs is often not sloppy control — it is a controller doing its best with an infeasible reference.</b></div>
+    </div>
+  </div>
+
+  <aside class="notes">This explains a phenomenon students will see in their own logs and misattribute to tuning.</aside>
+</section>
+
+<!-- YAWPOL 9 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Yaw along a trajectory: three sensible policies</h2>
+  <table class="data">
+    <tr><th>Policy</th><th>\( \psi_r(t) \)</th><th>Used for</th><th>Watch out for</th></tr>
+    <tr><td>Fixed heading</td><td>constant</td><td>inspection, stable video</td><td>none — the simplest choice</td></tr>
+    <tr><td>Tangent to path</td><td>\( \arctan(\dot y/\dot x) \)</td><td>'fly like an aeroplane', FPV</td><td><b>undefined at zero speed</b>; spins at waypoints</td></tr>
+    <tr><td>Point at a target</td><td>\( \arctan\frac{y_t - y}{x_t - x} \)</td><td>cinematography, tracking</td><td>fast yaw demands near the target</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">The zero-speed trap.</span>
+  Tangent-following divides by velocity. At a waypoint where the aircraft momentarily stops, \( \dot x = \dot y = 0 \) and the heading command becomes noise — the aircraft pirouettes unpredictably.<br/><br/>Cure: freeze \( \psi_r \) whenever \( \lVert\dot{\mathbf p}\rVert &lt; v_{thresh} \) (say 0.15 m/s). Two lines, and it removes a spectacular failure mode.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">For Week 10.</span>
+  <b>Use fixed heading.</b> Yaw is your weakest axis (Week 3), it contributes nothing to the L1–L5 tasks, and every degree of yaw activity is authority spent for no marks.<br/><br/>Deliberately not using a capability is an engineering decision, and a defensible one.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The zero-speed pirouette is a real and memorable bug; the Wk-10 recommendation saves teams from self-inflicted difficulty.</aside>
+</section>
+
+<!-- READ 9 -->
+<section class="dense">
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Reading a tracking plot like a clinician</h2>
+  <div class="fig plain" data-diagram="trajlayers"><p class="cap">Where an error originates tells you which layer to fix — and the shape of the error tells you where it originated.</p></div>
+  <table class="data">
+    <tr><th>Error shape</th><th>Origin</th><th>Fix at which layer</th></tr>
+    <tr><td>Constant inward offset on curves</td><td>missing feed-forward</td><td>controller (add \( \ddot{\mathbf p}_r \))</td></tr>
+    <tr class="hl"><td>Growing lag at higher speed</td><td>reference infeasible for the tilt limit</td><td><b>planner</b> (slow it down)</td></tr>
+    <tr><td>Oscillation at ~0.5 Hz</td><td>outer-loop gains too hot</td><td>controller (Week 6)</td></tr>
+    <tr class="hl"><td>Sharp spike at each waypoint</td><td>C¹ discontinuity in the reference</td><td><b>planner</b> (stitch with C²)</td></tr>
+    <tr><td>Drift in one direction only</td><td>estimator bias or wind</td><td>estimator / integral action</td></tr>
+  </table>
+  <p class="small">Note that two of the five are <b>planner</b> problems that look exactly like controller problems. Diagnosing the wrong layer is how teams spend an evening retuning a perfectly good controller.</p>
+
+  <aside class="notes">The two planner rows are the week's practical payoff; students will meet both in Lab 7.</aside>
+</section>
+
+<!-- F570 9b -->
+<section>
+  <p class="eyebrow">The instructor's aircraft</p>
+  <h2>What a 3 m box does to a demonstration</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>The F570 you will watch next week cannot fly a waypoint mission — its working volume in B201a is a 3 m box at the front of the room.</li>
+    <li>But it can show <b>every other</b> element of this lecture and the next: a smooth altitude profile, a hover under a hand push, a line-and-back that overshoots, a take-off with extra mass that sags.</li>
+    <li>So the demonstration uses short trajectories, and each one is chosen to make one hidden effect of the team plant visible.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">And the team plant does the rest.</span>
+  The real aircraft has the physics but not the volume or the repeatability; the team plant has the volume, the repeatability and the same five effects — with their sizes hidden. Between the two you see every idea in this lecture demonstrated, just not on the same instrument.<br/><br/><b>Real programmes almost always split capability across rigs</b>, and knowing which rig answers which question is a large part of experimental engineering.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Sets expectations for what the demonstration can show, and generalises to how real test programmes are organised.</aside>
+</section>
+
+<!-- TH 9 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Derive the 7th-order polynomial for a 1 m rest-to-rest move in 2 s with zero velocity, acceleration and jerk at both ends. Plot all four derivatives and mark the peak of each.</li>
+    <li>Prove the steady tracking error of a PD controller on a circular reference is \( A\omega^2/K_p \), directed inward.</li>
+    <li>For the figure-eight (\( A = 1.2 \) m, \( \omega = 0.8 \)), compute peak velocity, acceleration and tilt; repeat at \( \alpha = 1.5 \) and \( 2 \), and find where a 25° clamp is exceeded.</li>
+    <li>Implement carrot guidance with \( L \in \{0.2, 0.5, 1.0\} \) m on a square. Measure corner-cutting and path RMSE; recommend a value with reasoning.</li>
+    <li>Inject a 2 s position-measurement dropout mid-mission. Describe what your state machine does, and what it <i>should</i> do.</li>
+    <li>Using your own measured position noise, choose the acceptance radius and timeouts for the Week-10 box mission. Justify every number.</li>
+  </ol>
+  <div class="box warn">Question 6 is not hypothetical — those are the parameters your mission script carries into next week's workshop. Bring your numbers to today's dry-run.</div>
+
+  <aside class="notes">Q6 ties the take-home directly to the workshop, which sharply raises completion.</aside>
+</section>
+
+<!-- 13 LAB BRIEFING -->
+<section>
+  <p class="eyebrow">Lab briefing · 01:40</p>
+  <h2>Labs 6+7 graded — mission, then racetrack</h2>
+  <div class="cols top">
+    <ol class="small">
+      <li><b>Lab 6:</b> waypoint mission — takeoff → 4 waypoints → land, via <code>trajectories.waypoints([...])</code>; acceptance radius + state machine + abort edge.</li>
+      <li><b>Lab 7:</b> <code>figure_eight()</code> with velocity + acceleration feedforward; then <code>--wind 0.5</code>.</li>
+      <li>Metrics script on both: RMSE, max deviation, effort.</li>
+    </ol>
+    <div class="box"><b>Pass graded:</b> mission completes with a 3-D plot; figure-eight RMSE &lt; 0.1 m (no wind); wind run analyzed (where does the error grow, and why <i>there</i>?).<br/><br/><b>Predict first:</b> write your expected RMSE with FF off before you run it.</div>
+  </div>
+  <p class="muted">Traps: acceptance radius 0 → waypoint orbit · FF wired into the wrong frame (world, not body!) · comparing wind runs across different seeds.</p>
+</section>
+
+<!-- 14 LAB SESSION -->
+<section>
+  <div class="labwrap">
+    <p class="eyebrow" style="color:#1ec8c8">Lab session · 01:50 → 02:50</p>
+    <h3>Labs 6+7, then the dry-run</h3>
+    <p class="cp"><b>Labs 6+7</b> — 02:05 mission flies · 02:20 fig-8 &lt; 0.1 m · 02:30 wind analyzed, metrics in report</p>
+    <p class="cp"><b>Team dry-run</b> (02:30 → 02:50) — <code>python examples/08_team_mission.py --team T&lt;n&gt; --dry-run</code> on every team member's laptop: nominal model only, RMSE 0.226 m for every team. Environment, team-id string and roles settled <i>today</i>, so next week's sixty minutes are all diagnosis.</p>
+    <p style="margin-top:.8em"><a class="btn" href="../labs/week09-trajectory-tracking.html">Open the Week 9 lab sheet →</a></p>
+    <span class="assess" style="background:#2a4463;border-color:#3d5a7d;color:#f5d28a">Assessed: Lab Report 6 — 5% (last of the six lab reports). Marked on: mission completes with abort edge in code · fig-8 RMSE &lt; 0.1 m · wind analysis explains *where* and *why* error grows.</span>
+  </div>
+  <aside class="notes">Two dry-run numbers that differ between teams means one team used its own StudentController and one used cascade — both are fine, but the report must say which. The nominal column is identical for everyone by construction.</aside>
+</section>
+
+<!-- 15 MILESTONE -->
+<section>
+  <p class="eyebrow">Team project · Wk 9 of 10 — the workshop is in 7 days</p>
+  <h2>Go / no-go board</h2>
+  <div class="miles">
+    <div class="m due"><b>1 · Controller</b>One <code>student.py</code> (or the decision to use <code>cascade</code>) on <code>main</code>, git hash recorded — <b>frozen after today</b></div>
+    <div class="m due"><b>2 · Environment</b><code>--dry-run</code> passes on every member's laptop; team-id string agreed and written down</div>
+    <div class="m due"><b>3 · Plots</b>The four diagnostic snippets (commanded vs applied, error heading, take-off z, estimate vs truth) copied into a <code>gap.py</code> skeleton</div>
+    <div class="m due"><b>4 · Roles</b>Who runs, who plots, who writes each mechanism paragraph, who presents the 5-minute debrief</div>
+    <div class="m due"><b>5 · Reading</b>Instructor-demo table (five flights, five effects) read, predictions written</div>
+  </div>
+  <p class="muted" style="margin-top:.6em">No-go on card 1 or 2 → the workshop hour is spent debugging instead of diagnosing, and the case study has no "before" column. Everything else can be fixed on the day.</p>
+</section>
+
+<!-- MISCONCEPTIONS -->
+<section>
+  <p class="eyebrow">Before you leave</p>
+  <h2>The traps, named</h2>
+  <table class="data">
+    <tr><th>The trap</th><th>The truth</th></tr>
+    <tr><td>"Feedback with high gains ≈ feedforward."</td><td>Feedback needs an <i>error</i> to act; on a moving target that error is structural (the inward lag you measured). FF supplies what is <i>known</i>; no gain substitutes for knowledge.</td></tr>
+    <tr><td>"A path is a trajectory."</td><td>Only after time-parameterisation — and the clock is where feasibility lives (×2 tempo = ×4 acceleration).</td></tr>
+    <tr><td>"Waypoint reached ⇒ e = 0 exactly."</td><td>Acceptance radius, or orbit forever. Guidance is hysteresis and state machines, not equalities.</td></tr>
+    <tr><td>"The abort path can be added after the mission works."</td><td>Safety code untested is safety theatre. The abort edge runs in <i>every</i> Lab-6 run, deliberately triggered at least once, trace in the report.</td></tr>
+  </table>
+  <aside class="notes">Row 4 is a hard rule for Lab 6: each team must show a deliberately triggered abort in the trace.</aside>
+</section>
+
+<!-- 16 SUMMARY -->
+<section>
+  <p class="eyebrow">Wrap-up</p>
+  <h2>What to remember</h2>
+  <ul>
+    <li>Trajectory = path + clock; its derivatives are the <b>feedforward</b> that lets feedback do its real job: disturbances.</li>
+    <li>Guidance is a state machine; the <b>abort edge</b> is a first-class citizen.</li>
+    <li>Smoothness is feasibility: aggressiveness scales ×\( \omega^2 \); the chain differentiates your reference four times.</li>
+    <li>Benchmark like a scientist: fixed trajectory, limits, seeds, metrics. This becomes law in the final project.</li>
+    <li><b>Next week:</b> the reality-gap workshop. Fly the controller you froze today. Log everything.</li>
+  </ul>
+  <p class="muted" style="margin-top:1em">Reading: Mellinger &amp; Kumar 2011 (min-snap, skim §III) · lab report 6 (Labs 6+7) due before Wk 10 · <b>bring: a laptop where the dry-run passes, and your frozen controller</b>.</p>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+  Reveal.on("ready", () => { window.MLTEWidgets && MLTEWidgets.init(); window.MLTEDiagrams && MLTEDiagrams.init(); });
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

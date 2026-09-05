@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 11 — Verification &amp; Certification · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 11 · Certification<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1 TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Controller Verification &amp; Certification</h1>
+    <p class="tp-sub">控制器驗證與認證</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 11 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. Last week they flew. This week we ask whether flying once proves anything.</aside>
+</section>
+
+<!-- 2 AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan</h2>
+  <table class="agenda">
+    <tr><th>Clock</th><th>Segment</th><th></th></tr>
+    <tr><td class="t">00:00</td><td>Case-study reports in · workshop debrief: <i>did it work?</i></td><td>10′</td></tr>
+    <tr><td class="t">00:10</td><td><b>Block A</b> — demonstration vs certification; requirement → method → evidence</td><td>35′</td></tr>
+    <tr><td class="t">00:45</td><td>Concept check: repair three broken requirements</td><td>10′</td></tr>
+    <tr><td class="t">00:55</td><td><b>Block B</b> — the harness: <code>certify.py</code>, <b>your own vehicle</b>, the M3 spec, reading a report</td><td>35′</td></tr>
+    <tr class="break"><td class="t">01:30</td><td>Break</td><td>10′</td></tr>
+    <tr><td class="t">01:40</td><td><b>Block C</b> — two traps: the seed is data, and a requirement can be wrong</td><td>30′</td></tr>
+    <tr><td class="t">02:10</td><td><b>Lab</b> — certify your own Week-9 autopilot; find your red line</td><td>40′</td></tr>
+    <tr><td class="t">02:50</td><td>Project gate: proposals · what Week 12 needs from you</td><td>10′</td></tr>
+  </table>
+  <aside class="notes">Reports collected at the door. The lab is the point of the session — protect the 40 minutes.</aside>
+</section>
+
+<!-- 3 RECAP -->
+<section>
+  <p class="eyebrow">Recap · Week 10</p>
+  <h2>It flew. Did it work?</h2>
+  <p>Every team flew the same mission twice last week: on the nominal model, and on a plant it had never seen.</p>
+  <ul class="small">
+    <li>Nominal model: RMSE 0.226 m, landed on the pad — for <b>every</b> team, identically.</li>
+    <li>Team plants: 0.26–0.65 m, landings up to 0.9 m off, one team's own controller hunting at every corner.</li>
+    <li>Nobody crashed. Every team could name three mechanisms.</li>
+  </ul>
+  <div class="box warn">So: <b>does your autopilot work?</b> On Week 9's evidence every one of you would have said yes. Hold that thought for forty minutes.</div>
+
+  <aside class="notes">Use their real numbers from the debriefs. The point is that 0.226 m felt like proof — and one plant swap showed it was one observation.</aside>
+</section>
+
+<!-- 4 OBJECTIVES -->
+<section>
+  <p class="eyebrow">Objectives</p>
+  <h2>By the end of today you can…</h2>
+  <ol class="small">
+    <li>State the difference between a <b>demonstration</b> and a <b>certification</b>, and say why industry never accepts the first.</li>
+    <li>Read a requirement and judge whether it is <b>verifiable at all</b> — before anyone writes a test for it.</li>
+    <li>Trace a requirement to its verification method to its evidence, and spot a broken link.</li>
+    <li>Run <code>certify.py</code> against your own controller and interpret every line of the report.</li>
+    <li>Explain why <b>one PASS is not evidence</b>, using your own numbers.</li>
+  </ol>
+
+  <aside class="notes">Objective 2 is the one they will find genuinely new. Flag it now; it pays off in Block C.</aside>
+</section>
+
+<!-- 4b ORIENTATION -->
+<section>
+  <p class="eyebrow">Orientation</p>
+  <h2>Where this week sits</h2>
+  <div class="fig plain" data-diagram="coursearc"><p class="cap">Weeks 1–9 built an autopilot. Week 10 flew it. Weeks 11–14 make it better — and prove it.</p></div>
+  <p class="muted">The classical arc is finished: you have a complete autopilot and you have seen it meet a plant it was not built for. Everything from here is about <b>evidence</b> — first the standard (today), then the method that meets it (Week 12), then the proof (Weeks 13–14).</p>
+
+  <aside class="notes">Orientation slide. Some students think the course peaked at the workshop; reframe the last third as the professional half.</aside>
+</section>
+
+<!-- 5 TWO QUESTIONS -->
+<section>
+  <p class="eyebrow">The two questions</p>
+  <h2>&ldquo;Does it work?&rdquo; is not the question</h2>
+  <div class="cols top">
+    <div>
+  <div class="box bad"><b>Does it work?</b><br/><span class='small'>You ran it. It looked fine. You believe it.<br/>Evidence: your memory, and everyone who was watching.</span></div>
+    </div>
+    <div>
+  <div class="box ok"><b>Is it certified?</b><br/><span class='small'>It was run against a <i>written specification</i>, by a <i>procedure anyone can repeat</i>, and every requirement has a recorded pass/fail with evidence attached.</span></div>
+    </div>
+  </div>
+  <p class="muted">Real flight software is never accepted on the first kind of answer. Not once, anywhere, for any aircraft that carries people.</p>
+
+  <aside class="notes">Let this sit. Ask: which one did Week 9's 0.226 m give us? Answer: the left column, once, on one plant.</aside>
+</section>
+
+<!-- 6 BEST OF THREE -->
+<section>
+  <p class="eyebrow">Block A · the standard</p>
+  <h2>A demonstration is one observation</h2>
+  <p>Suppose the Week-10 workshop had let you take <b>three runs</b> with three seeds and keep the best. Consider what that means as evidence.</p>
+  <div class="env exm"><span class="eh">The arithmetic of a lucky run.</span>
+  Suppose your controller clears a threshold on any given seed with probability \(p = 0.5\) — a coin flip. The chance that at least one of three runs looks perfect is \(1-0.5^3 = 87.5\%\). You would almost certainly have gone home believing it works. (The eight-seed table in §6 of the spec is this arithmetic with real numbers: CascadePID fails REQ-M3-1 on two seeds of eight.)</div>
+  <div class="box warn">A demonstration selects for luck. A certification is designed to <i>not</i> let you do that.</div>
+
+  <aside class="notes">This is the hinge of the whole session. If they get this, everything else follows.</aside>
+</section>
+
+<!-- 7 CHAIN -->
+<section>
+  <p class="eyebrow">Block A · the chain</p>
+  <h2>Requirement → verification method → evidence</h2>
+  <p>Three artifacts, in a fixed order. Every safety-critical industry uses this shape.</p>
+  <table class="data">
+    <tr><th>Artifact</th><th>The question it answers</th><th>Example from your project</th></tr>
+    <tr class="hl"><td><b>Requirement</b></td><td>What must be true?</td><td>REQ-M3-1: max deviation after the drop &lt; 0.50 m</td></tr>
+    <tr><td><b>Verification method</b></td><td>How do we check it?</td><td>Test: run mission M3 in <code>certify.py</code>, seed 0</td></tr>
+    <tr><td><b>Evidence</b></td><td>What is the record that it held?</td><td><code>[PASS] REQ-M3-1  max = 0.473 m</code></td></tr>
+  </table>
+  <p class="muted">The links between them are called <b>traceability</b>. Every requirement traces to a method; every method produces evidence; nothing ships on &ldquo;it worked when I ran it.&rdquo;</p>
+
+  <aside class="notes">Traceability is the single word that carries the discipline. Say it twice.</aside>
+</section>
+
+<!-- 7b TRACE -->
+<section class="dense">
+  <p class="eyebrow">Block A · traceability</p>
+  <h2>Following one requirement all the way down</h2>
+  <table class="data">
+    <tr><th>Level</th><th>Artifact</th></tr>
+    <tr><td><b>Need</b></td><td>&ldquo;The aircraft must survive releasing its payload.&rdquo;</td></tr>
+    <tr><td><b>Requirement</b></td><td>REQ-M3-1: max deviation after the mass step &lt; 0.50 m</td></tr>
+    <tr><td><b>Method</b></td><td>Test — mission M3, <code>certify.py</code>, estimator seed 0</td></tr>
+    <tr><td><b>Procedure</b></td><td><code>python certify.py --controller &lt;yours&gt; --student &lt;your ID&gt; --mission M3</code></td></tr>
+    <tr><td><b>Evidence</b></td><td><code>[PASS] REQ-M3-1  max = 0.473 m</code>, pasted verbatim in §3 of the report</td></tr>
+  </table>
+  <div class="box warn">An auditor picks any row and asks &ldquo;show me the row below.&rdquo; If you cannot, the chain is broken and the requirement is unverified — <i>even if the aircraft flies perfectly</i>.</div>
+
+  <aside class="notes">Walk down the rows with a finger. This is the clearest single picture of traceability in the deck.</aside>
+</section>
+
+<!-- 8 METHODS -->
+<section class="dense">
+  <p class="eyebrow">Block A · the four methods</p>
+  <h2>You can verify four ways — a single run is none of them</h2>
+  <table class="data">
+    <tr><th>Method</th><th>What it means</th><th>When it is the right choice</th></tr>
+    <tr><td><b>Test</b></td><td>Run it, measure, compare to the threshold</td><td>Anything with a number. Your whole project.</td></tr>
+    <tr><td><b>Analysis</b></td><td>Prove it mathematically or by modelling</td><td>Stability margins; worst cases you cannot fly.</td></tr>
+    <tr><td><b>Inspection</b></td><td>Read the design or the code</td><td>Coding standards; a bound that is structural.</td></tr>
+    <tr><td><b>Demonstration</b></td><td>Show it working, qualitatively</td><td>Last resort. Weakest evidence of the four.</td></tr>
+  </table>
+  <div class="env rmk"><span class="eh">Note where the nominal-model run sat.</span>
+  At the bottom row. That is not a criticism of Weeks 4–9 — building the loop taught you things no lecture can. It is a statement about what one successful run can and cannot support; Week 10 showed you exactly how little.</div>
+
+  <aside class="notes">DO-178C names exactly these four. Students often assume 'verification' means 'testing'; it does not.</aside>
+</section>
+
+<!-- 9 STANDARDS -->
+<section class="dense">
+  <p class="eyebrow">Block A · where this comes from</p>
+  <h2>The same shape in every safety-critical industry</h2>
+  <table class="data">
+    <tr><th>Standard</th><th>Domain</th><th>What it governs</th></tr>
+    <tr><td><b>DO-178C</b></td><td>Civil avionics software</td><td>Everything flying in certified airspace</td></tr>
+    <tr><td><b>ISO 26262</b></td><td>Automotive</td><td>Anything that can steer or brake a car</td></tr>
+    <tr><td><b>IEC 62304</b></td><td>Medical devices</td><td>Software in devices that touch patients</td></tr>
+    <tr><td><b>MIL-STD-882</b></td><td>Defence systems</td><td>System safety across the lifecycle</td></tr>
+  </table>
+  <p class="muted">Different words, same skeleton: written requirements, an assigned verification method per requirement, recorded evidence, and an auditable trace between them.</p>
+  <div class="env rmk"><span class="eh">Why a drone course cares.</span>
+  Regulators are converging on exactly this for UAS. If you work on anything that flies, drives, or carries a patient, this is the vocabulary of your working life.</div>
+
+  <aside class="notes">Do not go deep into any one standard. The point is the shape is universal, not the clause numbers.</aside>
+</section>
+
+<!-- 10 GOOD REQ -->
+<section>
+  <p class="eyebrow">Block A · writing one</p>
+  <h2>What makes a requirement usable</h2>
+  <ul class="small">
+    <li><b>Falsifiable</b> — there is an outcome that would clearly break it.</li>
+    <li><b>Quantified</b> — a number and a unit, not an adjective.</li>
+    <li><b>Bounded</b> — it says over what window, under what conditions.</li>
+    <li><b>Verifiable</b> — some method could actually check it, with the equipment you have.</li>
+    <li><b>Singular</b> — one claim, so a failure points at one thing.</li>
+  </ul>
+  <div class="env defn"><span class="eh">Requirement.</span>
+  A statement of what the system must do, written so that a competent stranger could check it and reach the same verdict you would.</div>
+
+  <aside class="notes">The 'competent stranger' test is the practical one. If two engineers could disagree about the verdict, it is not a requirement yet.</aside>
+</section>
+
+<!-- 11 BAD REQ -->
+<section>
+  <p class="eyebrow">Block A · the anti-pattern</p>
+  <h2>Three requirements that cannot be verified</h2>
+  <table class="data">
+    <tr><th>Written as</th><th>What is wrong</th></tr>
+    <tr><td>&ldquo;The controller shall be stable.&rdquo;</td><td>No condition, no window, no measurement. Stable under what?</td></tr>
+    <tr><td>&ldquo;Tracking shall be accurate.&rdquo;</td><td>No number. Accurate is an opinion until it has a unit.</td></tr>
+    <tr><td>&ldquo;The drone shall recover quickly from disturbances.&rdquo;</td><td>Two undefined terms and no threshold. Quickly? Which disturbances?</td></tr>
+  </table>
+  <div class="box warn">Each of these <i>sounds</i> like an engineering requirement and none can be tested. Writing them is the most common failure in a first specification.</div>
+
+  <aside class="notes">Ask the room to fix one aloud before showing the exercise slide.</aside>
+</section>
+
+<!-- 12 EXERCISE -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Repair these three</h2>
+  <p>On paper, in pairs. Rewrite each so it is falsifiable, quantified and bounded. You may invent reasonable numbers — but say what they are.</p>
+  <ol class="small">
+    <li>&ldquo;The controller shall be stable.&rdquo;</li>
+    <li>&ldquo;Tracking shall be accurate.&rdquo;</li>
+    <li>&ldquo;The drone shall recover quickly from disturbances.&rdquo;</li>
+  </ol>
+  <div class="turn"><span class="tt">(10 min)</span> — Rewrite all three, then swap with the pair beside you and try to break theirs.</div>
+  <p class="muted">A good repair of the third looks like REQ-M3-1, which you will meet in twenty minutes.</p>
+
+  <aside class="notes">Circulate. The usual miss is forgetting the condition (under what wind? from what initial error?).</aside>
+</section>
+
+<!-- 13 HARNESS -->
+<section>
+  <p class="eyebrow">Block B · the harness</p>
+  <h2><code>certify.py</code> — one script, every student</h2>
+  <pre><code class="language-python"># from the simulator/ directory
+python certify.py --controller quadsim.controllers.student:StudentController \
+                  --student S12345678 --mission M3</code></pre>
+  <ul class="small">
+    <li><code>--controller</code> is <code>module.path:ClassName</code> — wherever your controller lives.</li>
+    <li><code>--student</code> is <b>your student ID</b>, and it is <b>required for the graded run</b>: it builds <i>your</i> aircraft. Three slides from here.</li>
+    <li>The mission spec is <b>written down</b> (<code>CERTIFICATION.md</code>) and implemented in the script.</li>
+    <li>Same script, same thresholds, same seed, <b>same procedure for all 35 of you</b>.</li>
+    <li>It prints a verdict per requirement, by ID, with the measured number beside it.</li>
+  </ul>
+  <div class="box ok">Nobody is watching you run it, and that is the point — the evidence is the report, not the performance.</div>
+
+  <aside class="notes">Have this open in a terminal. You will run it live in four slides.</aside>
+</section>
+
+<!-- 13b PER-STUDENT VEHICLE -->
+<section class="dense">
+  <p class="eyebrow">Block B · <code>--student</code></p>
+  <h2>You are each certifying a different aircraft</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">Your vehicle, from your student ID.</span>
+  The final project is <b>individual</b>. <code>--student &lt;your ID&gt;</code> builds <i>your</i> quadcopter before the mission runs: your <b>mass</b> (and your mass step), your <b>arm length</b>, your <b>yaw-torque ratio</b> \( k_\tau \), your <b>inertia</b>. It is <b>required</b> for the graded run.</div>
+  <pre><code class="language-python"># see your own numbers, before you design anything
+python -m quadsim.student_params &lt;your ID&gt;
+
+# the graded command — the ID is not optional
+python certify.py --controller &lt;yours&gt; --student &lt;your ID&gt; --mission M3</code></pre>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Deterministic, not random.</span>
+  The same ID gives the same aircraft on any machine, forever — so your result reproduces exactly, and mine reproduces yours. A different ID never gives your aircraft.</div>
+  <div class="box warn"><b>The requirements do not change.</b> Same three bars, same 0.50 m, same seed 0, for everyone. Only the airframe underneath differs — which is why <b>the numbers on my slides are not your numbers</b>.</div>
+  <p class="small">Talk to each other about the theory all you like. Just do not copy tuning: gains that close REQ-M3-1 on my vehicle are not guaranteed to close it on yours.</p>
+    </div>
+  </div>
+
+  <aside class="notes">Run `python -m quadsim.student_params` live with two different IDs so the room sees the numbers move. Then say the sentence that prevents a term of confusion: every reference number in this deck is the COURSE DEFAULT vehicle, and nobody's personal result should match it.</aside>
+</section>
+
+<!-- 14 M3 -->
+<section>
+  <p class="eyebrow">Block B · the mission</p>
+  <h2>M3 — the payload drop</h2>
+  <div class="cols top">
+    <div>
+  <p>The quadrotor holds position at \([0,\,0,\,1.5]\).</p>
+  <p>At \(t = 5\) s <b>its mass steps down</b> — a package released. (<b>0.65 kg → 0.45 kg</b> on the course default vehicle; <i>your</i> two masses come from your student ID.)</p>
+  <div class="box warn">Your controller is <b>never told</b>. One continuous instance, whole flight. It has to notice through feedback, like a real flight computer.</div>
+    </div>
+    <div>
+  <p>Why this mission:</p>
+  <ul class="small">
+    <li>Physically obvious — everyone can picture it.</li>
+    <li>The failure is directional: too much thrust for the new mass ⇒ it climbs.</li>
+    <li>A fixed-gain loop <i>does</i> recover — just not tightly enough.</li>
+    <li>Small enough that the <b>process</b> is the hard part, not the control theory.</li>
+  </ul>
+    </div>
+  </div>
+
+  <aside class="notes">This is the ONLY project mission this term. Say so explicitly — there is no menu to choose from.</aside>
+</section>
+
+<!-- 15 M3 SPEC -->
+<section>
+  <p class="eyebrow">Block B · the spec</p>
+  <h2>M3, written out</h2>
+  <p>15 s total. Mass steps down at t = 5 s. Graded on estimator <b>seed 0</b>, on <b>your own vehicle</b> — <code>--student &lt;your ID&gt;</code>.</p>
+  <table class="data">
+    <tr><th>ID</th><th>Requirement</th><th>Threshold</th></tr>
+    <tr><td>REQ-M3-1</td><td>Max deviation across the entire post-drop window</td><td>&lt; 0.50 m</td></tr>
+    <tr><td>REQ-M3-2</td><td>Max transient deviation in the first 3 s after the drop</td><td>&lt; 0.50 m</td></tr>
+    <tr><td>REQ-M3-3</td><td>Position RMSE over the last 5 s of the run</td><td>&lt; 0.50 m</td></tr>
+  </table>
+  <div class="env rmk"><span class="eh">Read them as a set.</span>
+  REQ-M3-2 asks <i>how bad does it get immediately</i>. REQ-M3-3 asks <i>did it actually settle</i>. REQ-M3-1 covers the whole window and catches anything the other two miss. Together they describe &lsquo;recovered properly&rsquo; without ever using that phrase.</div>
+
+  <aside class="notes">Point out that each requirement is singular — a failure tells you which aspect broke.</aside>
+</section>
+
+<!-- 16 REPORT -->
+<section class="dense">
+  <p class="eyebrow">Block B · reading a report</p>
+  <h2>What the harness prints</h2>
+  <pre><code class="language-text">=== M3 (seed 0) — NOT CERTIFIED ===
+  [FAIL] REQ-M3-1  Max deviation across the full post-drop window &lt; 0.50 m
+         max = 0.540 m
+  [PASS] REQ-M3-2  Transient deviation &lt; 0.50 m in the first 3 s
+         max transient = 0.155 m
+  [PASS] REQ-M3-3  Post-recovery RMSE &lt; 0.50 m (last 5 s)
+         tail rmse = 0.213 m</code></pre>
+  <p class="muted">The <b>real output of the course reference <code>CascadePID</code></b> — the controller you have been building since Week 5 — on the <b>course default vehicle</b> (no <code>--student</code> flag). <b>Your own numbers will differ</b>; the shape of the result will not.</p>
+
+  <aside class="notes">Let them absorb that the instructor's own controller fails. It de-personalises failure immediately.</aside>
+</section>
+
+<!-- 17 DIAGNOSIS -->
+<section>
+  <p class="eyebrow">Block B · what that report says</p>
+  <h2>It failed exactly one requirement</h2>
+  <ul class="small">
+    <li>It <b>did</b> recover — REQ-M3-2 and REQ-M3-3 both pass comfortably.</li>
+    <li>It <b>did not</b> recover tightly enough — REQ-M3-1 misses by 0.04 m.</li>
+    <li>That is a diagnosis, not a verdict. You know precisely what to attack.</li>
+  </ul>
+  <div class="box ok">A good specification does not just tell you that you failed. It tells you <b>which part</b> failed, and by how much.</div>
+  <div class="env exm"><span class="eh">Compare.</span>
+  &ldquo;It didn't work&rdquo; vs &ldquo;max deviation was 0.540 m against a 0.50 m bar, but the transient and the settle were both fine.&rdquo; Only one of those sentences suggests what to do on Monday.</div>
+
+  <aside class="notes">This slide is the argument for specifications, made concrete. Slow down here.</aside>
+</section>
+
+<!-- 18 BEFORE AFTER -->
+<section class="dense">
+  <p class="eyebrow">Block B · the whole project</p>
+  <h2>Red, then green</h2>
+  <div class="cols top">
+    <div>
+  <div class="box bad"><b>BASELINE</b> — your Week-9 cascade PID<br/><code>=== M3 — NOT CERTIFIED ===</code><br/><code>[FAIL] REQ-M3-1  max = 0.540 m</code><br/><code>[PASS] REQ-M3-2</code><br/><code>[PASS] REQ-M3-3</code></div>
+    </div>
+    <div>
+  <div class="box ok"><b>UPGRADE</b> — the same loop, with MPC<br/><code>=== M3 — CERTIFIED ===</code><br/><code>[PASS] REQ-M3-1  max = 0.473 m</code><br/><code>[PASS] REQ-M3-2</code><br/><code>[PASS] REQ-M3-3</code></div>
+    </div>
+  </div>
+  <p class="muted">That is your final project, entire. Certify the baseline, see the red line, change the controller, certify again, and <b>explain why the number moved</b>.</p>
+  <p class="small muted">Both columns are the <b>course default vehicle</b> — the shared worked example. Your digits will be different, because your aircraft is. <b>The pattern is not:</b> across 200 synthetic student IDs the baseline fails REQ-M3-1 and the MPC upgrade closes it.</p>
+
+  <aside class="notes">Both columns are verified numbers from the reference controllers. Promise them Week 12 delivers the right column.</aside>
+</section>
+
+<!-- 19 ESTIMATED -->
+<section class="dense">
+  <p class="eyebrow">Block B · no shortcuts</p>
+  <h2>The loop closes on the <i>estimate</i></h2>
+  <p>Every mission wraps your controller in <code>EstimatedStateController</code>. You get the same noisy IMU and low-rate GPS you fused in Week 8 — never the simulator's ground truth.</p>
+  <div class="fig plain" data-diagram="fusion"><p class="cap">Your controller sees the output of the estimator, not the truth the simulator holds.</p></div>
+  <div class="box warn">The Week-8 rule still applies. A controller that peeks at true state is not a flight controller, and it will not certify anything.</div>
+
+  <aside class="notes">Ground-truth leakage is the most common integrity problem in submissions. Name it now, not in Week 14.</aside>
+</section>
+
+<!-- 20 LIVE -->
+<section>
+  <p class="eyebrow">Block B · try it</p>
+  <h2>Live: certify the reference controller</h2>
+  <pre><code class="language-python"># no --student: the course default vehicle, the shared example
+python certify.py --controller quadsim.controllers.cascade_pid:CascadePID --mission M3
+python certify.py --controller quadsim.controllers.cascade_pid:CascadePID --mission M4</code></pre>
+  <div class="turn"><span class="tt">(5 min)</span> — Watch M4 come back CERTIFIED and M3 come back NOT CERTIFIED. Predict, before I press enter, which requirement M3 will fail.</div>
+
+  <aside class="notes">Run it for real. If the projector allows, run M4 first so they see green before red.</aside>
+</section>
+
+<!-- 21 M4 -->
+<section>
+  <p class="eyebrow">Block B · the warm-up</p>
+  <h2>M4 — bank a green report first</h2>
+  <p><b>M4, the constrained corridor.</b> A rectangular route at 1.5 m, 0.5 m/s, with a hard lateral bound.</p>
+  <table class="data">
+    <tr><th>ID</th><th>Requirement</th><th>Threshold</th></tr>
+    <tr><td>REQ-M4-1</td><td>Max lateral deviation from the nearest route segment</td><td>&lt; 0.30 m</td></tr>
+    <tr><td>REQ-M4-2</td><td>Final position error from the last waypoint</td><td>&lt; 0.20 m</td></tr>
+  </table>
+  <div class="box ok">Your Week-9 controller should already certify M4 — on your own vehicle, with <code>--student</code>. Run it today. Seeing the harness say <b>CERTIFIED</b> once makes the red on M3 legible rather than demoralising.</div>
+  <p class="muted">M4 is not graded and is not your project mission. It is a calibration for your own confidence.</p>
+
+  <aside class="notes">Genuinely useful pedagogically — a green report first changes how they read the red one.</aside>
+</section>
+
+<!-- 22 BREAK -->
+<section>
+  <p class="eyebrow">Break</p>
+  <h2>Ten minutes</h2>
+  <p class="muted">When we come back: two ways a certification result can lie to you.</p>
+
+</section>
+
+<!-- 23 SEED -->
+<section>
+  <p class="eyebrow">Block C · trap one</p>
+  <h2>The seed is part of the experiment</h2>
+  <p>Your controller does not fly on the truth — it flies on an estimate built from <b>simulated noisy sensors</b>, driven by a seeded random generator.</p>
+  <p>Change the seed and you change the exact noise history your controller had to survive.</p>
+  <div class="box warn"><b>A single run is a single sample.</b></div>
+  <div class="env rmk"><span class="eh">This is not a machine-learning problem.</span>
+  There is nothing random inside <code>CascadePID</code>. It is fully deterministic given its input. The randomness is in the <i>world</i>, and that is enough.</div>
+
+  <aside class="notes">Pre-empt the assumption that variance only afflicts learned controllers. Next slide kills it with data.</aside>
+</section>
+
+<!-- 24 SEED TABLE -->
+<section class="vdense">
+  <p class="eyebrow">Block C · the evidence</p>
+  <h2>Same controller, eight seeds</h2>
+  <table class="data">
+    <tr><th>Seed</th><th>REQ-M3-1 max deviation (bar &lt; 0.50 m)</th><th>Verdict</th></tr>
+    <tr class="hl"><td><b>0</b> <span class='small'>(graded)</span></td><td><b>0.540 m</b></td><td><b>NOT CERTIFIED</b></td></tr>
+    <tr><td>1</td><td>0.721 m</td><td>NOT CERTIFIED</td></tr>
+    <tr><td>2</td><td>0.211 m</td><td>CERTIFIED</td></tr>
+    <tr><td>3</td><td>0.278 m</td><td>CERTIFIED</td></tr>
+    <tr><td>4</td><td>0.255 m</td><td>CERTIFIED</td></tr>
+    <tr><td>5</td><td>0.388 m</td><td>CERTIFIED</td></tr>
+    <tr><td>6</td><td>0.277 m</td><td>CERTIFIED</td></tr>
+    <tr><td>7</td><td>0.306 m</td><td>CERTIFIED</td></tr>
+  </table>
+  <p class="muted">Reference <code>CascadePID</code>, mission M3, course default vehicle — nothing changed but the noise seed.</p>
+
+  <aside class="notes">Give them a moment to find the 0.211 and the 0.721 themselves.</aside>
+</section>
+
+<!-- WIDGET seeds -->
+<section>
+  <p class="eyebrow">Block C · interactive</p>
+  <h2>Seed spread, live — one run is one observation</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="seeds"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> With one seed the widget says PASS. Before sliding to 8: how many of eight will pass at the 0.50 m bar if the mean is 0.42 and σ is 0.12? Then slide to 200.</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#seeds">Digital Lab → seeds</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">The real eight-seed CascadePID data is quoted in the note. Graded on seed 0 + one sentence of spread — this is why.</aside>
+</section>
+
+<!-- 25 SEED LESSONS -->
+<section class="dense">
+  <p class="eyebrow">Block C · read it properly</p>
+  <h2>Three lessons in one table</h2>
+  <ol class="small">
+    <li><b>The verdict flips.</b> Seed 1 misses by 44%. Seed 2 passes with room to spare. One run is a coin toss reported as a result.</li>
+    <li><b>The spread is 3.4×.</b> 0.211 m to 0.721 m. A controller is characterised by its <i>distribution</i>, not its best day.</li>
+    <li><b>The typical case hides the bad case.</b> It passes on six of eight. Sample three at random and you would conclude it passes comfortably — and miss the tail that matters.</li>
+  </ol>
+  <div class="box warn">You are graded on <b>seed 0</b> — one fixed draw, the same for everyone. <code>--seeds 0,1,2</code> measures the spread for your report; it is <b>not</b> the grading rule. On this vehicle seed 0 is one of the two the baseline fails. Your report must say so.</div>
+
+  <aside class="notes">Be honest that seed 0 is a harsh draw for the baseline. That honesty is itself the lesson.</aside>
+</section>
+
+<!-- 26 SPREAD -->
+<section>
+  <p class="eyebrow">Block C · what to do</p>
+  <h2>Report the spread, not the best run</h2>
+  <pre><code class="language-python"># graded — the one that counts, seed 0, your vehicle
+python certify.py --controller mypkg:MyController --student &lt;your ID&gt; --mission M3
+
+# and once, for your report — measures spread, does NOT change the grade
+python certify.py --controller mypkg:MyController --student &lt;your ID&gt; --mission M3 --seeds 0,1,2</code></pre>
+  <div class="env exm"><span class="eh">One sentence, worth more than a page of tuning narrative.</span>
+  &ldquo;My margin on REQ-M3-1 is 0.47 m on the graded seed, but ranges 0.21–0.72 m across seeds 0–2, so I would not claim a robust pass.&rdquo;</div>
+  <p class="muted">That sentence is <b>required</b> in your report. It is the honest version of the claim.</p>
+
+  <aside class="notes">Show that --seeds prints every seed's number and names which one failed.</aside>
+</section>
+
+<!-- 27 TRAP TWO -->
+<section>
+  <p class="eyebrow">Block C · trap two</p>
+  <h2>The requirement itself can be wrong</h2>
+  <p>So far we have assumed the specification is correct and asked whether the controller meets it. Now invert the question.</p>
+  <div class="env defn"><span class="eh">Requirements review.</span>
+  Checking that a requirement is <b>verifiable at all</b> — before anyone writes a test for it. In DO-178C this happens <i>before</i> verification, not after.</div>
+  <div class="box warn">A requirement that no implementation could ever satisfy is a defect. It is a defect in the <b>requirement</b>, not in your controller.</div>
+
+  <aside class="notes">This is the slide that separates a student who follows a spec from an engineer who owns one.</aside>
+</section>
+
+<!-- 28 M2 DEFECT -->
+<section class="dense">
+  <p class="eyebrow">Block C · a real defect</p>
+  <h2>Mission M2 asks the impossible</h2>
+  <p><b>REQ-M2-1</b> demands tracking RMSE below <b>0.15 m</b> on a fast figure-eight.</p>
+  <p>But the loop closes on the <i>estimate</i>. So measure the estimator itself on that same trajectory:</p>
+  <table class="data">
+    <tr><th></th><th>M2 tracking RMSE</th><th>vs the 0.15 m bar</th></tr>
+    <tr class="hl"><td><b>Estimation noise floor</b></td><td><b>0.147 m</b></td><td>the hard physical limit</td></tr>
+    <tr><td>Best tuned <code>LinearMPC</code></td><td>0.258 m</td><td>1.7× over</td></tr>
+    <tr><td>Stock <code>LinearMPC</code></td><td>0.364 m</td><td>2.4× over</td></tr>
+    <tr><td><code>CascadePID</code> baseline</td><td>0.464 m</td><td>3.1× over</td></tr>
+  </table>
+  <div class="box bad">A controller that tracked its own estimate <i>perfectly</i> would still miss the truth by ≈0.147 m. The requirement asks you to fly more accurately than you can perceive.</div>
+
+  <aside class="notes">Emphasise the first row is a property of the sensors, not of any controller. No tuning reaches it.</aside>
+</section>
+
+<!-- 28b TOO LOOSE -->
+<section>
+  <p class="eyebrow">Block C · the other direction</p>
+  <h2>A requirement can also be too loose</h2>
+  <p>An unreachable bar is one failure mode. The opposite is quieter and more dangerous.</p>
+  <div class="cols top">
+    <div>
+  <div class="box amber"><b>Too tight</b><br/><span class='small'>Nothing can pass. Obvious quickly — everybody fails, somebody complains, it gets found.</span></div>
+    </div>
+    <div>
+  <div class="box bad"><b>Too loose</b><br/><span class='small'>Everything passes, including things that should not. Nobody complains. It is found by an accident.</span></div>
+    </div>
+  </div>
+  <div class="env exm"><span class="eh">In your own spec.</span>
+  REQ-M3-2 (transient &lt; 0.50 m) is passed by every controller we have tried, including the deliberately-broken one. It is carrying almost no weight. That is worth knowing about your own evidence: a requirement everything passes is not protecting you from anything.</div>
+
+  <aside class="notes">Genuinely true of REQ-M3-2 in the current spec. Honest, and it sets up viva question B8.</aside>
+</section>
+
+<!-- 29 FOOTNOTE -->
+<section>
+  <p class="eyebrow">Block C · the honest footnote</p>
+  <h2>How this was found</h2>
+  <p>This defect was in the course specification until <b>2026-08-25</b>, when a seed flag was added to the harness and the floor was measured for the first time.</p>
+  <ul class="small">
+    <li>The bars were set so the classical baseline would fail them — and it does.</li>
+    <li>They were <b>never checked</b> against what <i>any</i> controller could achieve on estimated state.</li>
+    <li>M1 and M2 were therefore unreachable by construction, and nobody had noticed.</li>
+  </ul>
+  <div class="box ok">It is documented rather than quietly deleted, because the mistake teaches more than its absence. M1 and M2 stay in the harness as your worked example.</div>
+
+  <aside class="notes">Modelling intellectual honesty. Students remember the instructor admitting a spec bug far longer than the bug.</aside>
+</section>
+
+<!-- 30 MISSION STATUS -->
+<section>
+  <p class="eyebrow">Block C · so which missions count</p>
+  <h2>One graded mission, two demonstrations</h2>
+  <table class="data">
+    <tr><th>Mission</th><th>Status</th><th>Why</th></tr>
+    <tr class="hl"><td><b>M3</b> — payload drop</td><td><b>your project</b></td><td>Baseline fails exactly one requirement; MPC fixes it</td></tr>
+    <tr><td>M4 — constrained corridor</td><td>warm-up, ungraded</td><td>Your Week-9 controller should already pass it</td></tr>
+    <tr><td>M1 — gust hold</td><td>demonstration only</td><td>Bar sits near the same estimation floor</td></tr>
+    <tr><td>M2 — figure-eight</td><td>demonstration only</td><td>Bar is <i>below</i> the floor — unreachable by anything</td></tr>
+  </table>
+  <p class="muted">Viva question <b>B8</b> asks you to argue about a threshold this way. It is a real exam question, not a rhetorical one.</p>
+
+  <aside class="notes">Make sure everyone leaves knowing their project mission is M3 and only M3.</aside>
+</section>
+
+<!-- 30b QUIZ -->
+<section>
+  <p class="eyebrow">Assessment</p>
+  <h2>Quiz Q-Wk12 — what it will ask</h2>
+  <p>Ten minutes, start of next week's session. Best 3 of 4 quizzes count toward your 10 individual marks.</p>
+  <ul class="small">
+    <li>Given a badly-written requirement, say what makes it unverifiable and <b>rewrite it</b> with a threshold and a verification method.</li>
+    <li>Name the evidence that would close it.</li>
+    <li>One sentence: why is a successful demonstration not evidence?</li>
+  </ul>
+  <div class="box ok">If you can do today's concept check and explain your own lab report, you are ready. There is nothing to memorise.</div>
+
+  <aside class="notes">Reassure them it is not a recall test. It is the same skill they practised in the concept check.</aside>
+</section>
+
+<!-- 31 LAB BRIEF -->
+<section class="dense">
+  <p class="eyebrow">Lab briefing</p>
+  <h2>Certify your own autopilot</h2>
+  <ol class="small">
+    <li>Look up your own aircraft first: <code>python -m quadsim.student_params &lt;your ID&gt;</code>.</li>
+    <li>Point the harness at <b>your</b> Week-9 controller, not the reference one — and pass <b>your student ID</b>.</li>
+    <li>Run <code>--mission M4</code> first. Expect green. Confirm your setup works.</li>
+    <li>Run <code>--mission M3</code>. Expect red on at least one requirement.</li>
+    <li>Record the exact numbers — this is your baseline evidence and it goes in your report.</li>
+    <li>Write one paragraph per failed requirement: <i>what physically caused this?</i></li>
+  </ol>
+  <pre><code class="language-python">python certify.py --controller quadsim.controllers.student:StudentController --student &lt;your ID&gt; --mission M4
+python certify.py --controller quadsim.controllers.student:StudentController --student &lt;your ID&gt; --mission M3</code></pre>
+
+  <aside class="notes">Some students will hit import errors from a messy repo. That is a useful failure — it is the same one that bites in Week 14.</aside>
+</section>
+
+<!-- 31b TROUBLESHOOT -->
+<section class="dense">
+  <p class="eyebrow">Lab · if it will not run</p>
+  <h2>Three failures you may hit</h2>
+  <table class="data">
+    <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+    <tr><td><code>ModuleNotFoundError</code></td><td>Running from the wrong directory</td><td>Run from <code>simulator/</code>, or set <code>PYTHONPATH=.</code></td></tr>
+    <tr><td><code>--controller must be module:Class</code></td><td>Missing the colon, or a path instead of a module</td><td><code>quadsim.controllers.student:StudentController</code></td></tr>
+    <tr><td>Every mission fails identically, huge errors</td><td>Controller returns the wrong shape, or never initialised</td><td>Check <code>control()</code> returns 4 values: \([T, \tau_x, \tau_y, \tau_z]\)</td></tr>
+  </table>
+  <p class="muted">All three are import-and-interface problems, not control problems. They are also exactly what breaks a fresh-clone run in Week 14 — fixing them today is not wasted time.</p>
+
+  <aside class="notes">Have these three ready; they cover most of what goes wrong in the room.</aside>
+</section>
+
+<!-- 32 LAB SESSION -->
+<section>
+  <p class="eyebrow">Lab · 40 minutes</p>
+  <h2>Find your red line</h2>
+  <p>Everyone works on their own vehicle. Talk to each other; I circulate.</p>
+  <ul class="small">
+    <li>Check your ID before anything else. <b>Wrong ID = somebody else's aircraft</b>, and the numbers do not count.</li>
+    <li>If M4 fails, fix that first — something is wrong with your controller or your import path, not with M3.</li>
+    <li>If M3 passes outright, tell me. That is unexpected and worth looking at together.</li>
+    <li>Save the raw report text. <b>Do not retype it</b> — you will paste it verbatim into your report.</li>
+  </ul>
+  <div class="turn"><span class="tt">(exit ticket)</span> — Before you leave: every student tells me their vehicle's mass step, which requirement they failed, and by how much.</div>
+
+  <aside class="notes">The exit ticket is the real assessment of the session. It takes thirty seconds each.</aside>
+</section>
+
+<!-- 33 DELIVERABLE -->
+<section class="dense">
+  <p class="eyebrow">Lab · what good looks like</p>
+  <h2>Your Week-11 deliverable</h2>
+  <ul class="small">
+    <li>Both certification reports, <b>pasted verbatim</b> — M4 (green) and M3 (red).</li>
+    <li>One paragraph per failed requirement diagnosing the <i>physical</i> cause.</li>
+    <li>One sentence on which requirement you intend to attack, and your first guess at how.</li>
+  </ul>
+  <div class="env exm"><span class="eh">A diagnosis that scores.</span>
+  &ldquo;REQ-M3-1 fails at 0.54 m. After the drop the loop is still commanding thrust for 0.65 kg, so it accelerates upward for roughly 0.4 s before the integrator unwinds. The peak is the overshoot, not the settling.&rdquo;</div>
+  <div class="env rmk"><span class="eh">A diagnosis that does not.</span>
+  &ldquo;REQ-M3-1 failed because our controller was not good enough.&rdquo;</div>
+
+  <aside class="notes">Contrast these two aloud. The gap between them is most of the report mark.</aside>
+</section>
+
+<!-- 34 GATE -->
+<section class="dense">
+  <p class="eyebrow">Project gate</p>
+  <h2>Proposals due — today</h2>
+  <p>One page <b>per person</b>, handed in before you leave.</p>
+  <ul class="small">
+    <li>Your <b>student ID and your vehicle's parameters</b> — the aircraft you are certifying.</li>
+    <li>Your <b>baseline certification numbers</b> from today's lab — the real ones, from your own run.</li>
+    <li>Which requirement you are attacking, and why that one.</li>
+    <li>Your intended approach in two sentences. (It will be MPC. Week 12 teaches it.)</li>
+    <li>Your risk and your fallback: what you do if the upgrade does not close the gap.</li>
+  </ul>
+  <div class="box ok">Note the change: your proposal is justified <b>by your own measured numbers, on your own aircraft</b>, not by an intention. That is the whole method, applied to your own planning.</div>
+
+  <aside class="notes">Collect these physically. Anyone who cannot fill in the numbers — or cannot say their own vehicle's mass step — did not do the lab.</aside>
+</section>
+
+<!-- 35 ROADMAP -->
+<section>
+  <p class="eyebrow">The road here</p>
+  <h2>Weeks 11 to 15</h2>
+  <table class="data">
+    <tr><th>Week</th><th>Session</th><th>Gate</th></tr>
+    <tr class="hl"><td><b>11</b></td><td><b>Certification &amp; verification</b> ← you are here</td><td>Individual proposal + your own baseline certified</td></tr>
+    <tr><td>12</td><td>Model Predictive Control</td><td>Baseline <b>frozen</b> (script + student ID + seeds committed)</td></tr>
+    <tr><td>13</td><td>Building the evidence</td><td>Method running + evidence kit v1</td></tr>
+    <tr><td>14</td><td>Final-project clinic (workshop)</td><td>Results complete + certification dry run</td></tr>
+    <tr><td>15</td><td><b>Individual viva</b> — 5 min, hard cut</td><td>Report submitted before, in the zip</td></tr>
+  </table>
+
+  <aside class="notes">Point out there is no lecture in Week 14 — it is theirs to build in, supervised.</aside>
+</section>
+
+<!-- 36 THREE THINGS -->
+<section class="dense">
+  <p class="eyebrow">What the project is</p>
+  <h2>Three things in the report, and that is all</h2>
+  <ol class="small">
+    <li><b>The two certification reports, verbatim</b> — your frozen baseline and your final submission, both run with <code>--student &lt;your ID&gt;</code>.</li>
+    <li><b>What you changed, written as engineering</b> — the MPC formulation, its horizon, its cost, what you constrained and whether it was hard or soft.</li>
+    <li><b>One figure and one paragraph on the mechanism</b> — a plot that shows <i>why</i> the number moved, and a paragraph naming the feature of MPC responsible.</li>
+  </ol>
+  <p class="muted">Plus one honest sentence on the seed spread. <b>Six pages is plenty.</b></p>
+  <div class="box ok">Activation plots, timing histograms and ablation tables are <b>optional</b> stretch work. Do the three required items properly first.</div>
+
+  <aside class="notes">Say the word 'optional' clearly. Last year's equivalent spec was seven items and it crowded out the thinking.</aside>
+</section>
+
+<!-- 37 MARKS -->
+<section class="dense">
+  <p class="eyebrow">How it is marked</p>
+  <h2>Where the 40 course points go</h2>
+  <p class="small">The project is <b>individual</b> this year: all 100 marks are yours, there is no team block and no peer rating.</p>
+  <table class="data">
+    <tr><th>Item — all individual</th><th>Marks</th></tr>
+    <tr><td>Certification results</td><td>20</td></tr>
+    <tr><td>Improvement over baseline</td><td>15</td></tr>
+    <tr><td>Report depth</td><td>15</td></tr>
+    <tr><td>Code quality &amp; reproducibility</td><td>10</td></tr>
+    <tr class="hl"><td><b>Viva — 5 min, hard cut</b></td><td><b>20</b></td></tr>
+    <tr><td><b>Engineering log + git trail</b></td><td>10</td></tr>
+    <tr><td>Concept quizzes (Wks 12–14, best 2 of 3)</td><td>10</td></tr>
+  </table>
+  <div class="env rmk"><span class="eh">The fallback exists on purpose.</span>
+  If your upgrade does not close the gap, submit the baseline's certification with a rigorous negative-result analysis. The four artifact items (20 + 15 + 15 + 10 = 60) cap at <b>45/60</b> — viva, engineering log and quizzes are untouched. A well-understood failure can still earn full viva marks.</div>
+
+  <aside class="notes">Read the fallback aloud. It is what stops a struggling student from faking a result.</aside>
+</section>
+
+<!-- 38 INTEGRITY -->
+<section>
+  <p class="eyebrow">Integrity</p>
+  <h2>How the certification run actually happens</h2>
+  <ul class="small">
+    <li><code>certify.py --student &lt;your ID&gt; --mission M3</code> is run <b>once, by me</b>, from a <b>fresh clone</b> of your repo at tag <code>final</code>, with the <b>network off</b>.</li>
+    <li>Same command shape, same seed, same procedure for every student — with <b>your</b> ID, so it is <b>your</b> aircraft.</li>
+    <li>Put your student ID in your README. A run with the wrong ID certifies an aircraft that is not yours and does not count.</li>
+    <li>&ldquo;It worked on my machine&rdquo; scores nothing. The submitted code is what gets tested.</li>
+    <li>Run it yourself first, so my run is a confirmation and not a surprise.</li>
+  </ul>
+  <div class="box warn">If your report's numbers and my run disagree, that is an integrity matter, not a bug report.</div>
+
+  <aside class="notes">State this plainly and early. It is much kinder now than in Week 15.</aside>
+</section>
+
+<!-- 38b QUESTIONS -->
+<section class="dense">
+  <p class="eyebrow">Before you go</p>
+  <h2>Questions worth asking now</h2>
+  <ul class="small">
+    <li>&ldquo;What if my baseline already passes M3?&rdquo; — Tell me. We will look at it together; it usually means a leak.</li>
+    <li>&ldquo;Can I change my Week-9 controller before freezing it?&rdquo; — Yes, until Week 12. After the freeze, only with sign-off.</li>
+    <li>&ldquo;Can I work with a classmate?&rdquo; — Discuss the theory freely, read each other's code. But you each certify your <i>own</i> vehicle, and copied tuning does not transfer.</li>
+    <li>&ldquo;Why are my numbers not 0.540 m?&rdquo; — Because 0.540 m is the default vehicle's. Yours is a different aircraft.</li>
+    <li>&ldquo;What if MPC does not help?&rdquo; — Then you write that up rigorously and it can still score well. See the fallback rule.</li>
+    <li>&ldquo;Do I need do-mpc or CasADi?&rdquo; — No. Everything works in <code>quadsim</code> with NumPy.</li>
+  </ul>
+
+  <aside class="notes">Pre-empting the four questions that otherwise arrive by email at midnight.</aside>
+</section>
+
+<!-- 39 SUMMARY -->
+<section class="dense">
+  <p class="eyebrow">Wrap-up</p>
+  <h2>What to remember</h2>
+  <ul class="small">
+    <li>A <b>demonstration</b> selects for luck. A <b>certification</b> is built so it cannot.</li>
+    <li>Requirement → verification method → evidence, with <b>traceability</b> between them. Nothing ships on &ldquo;it worked when I ran it.&rdquo;</li>
+    <li>A requirement that cannot be verified is a <b>defect in the requirement</b> — M2 is your worked example.</li>
+    <li><b>One PASS is not evidence.</b> The seed is part of the experiment; report the spread.</li>
+    <li>The reference baseline fails REQ-M3-1 at <b>0.540 m on the default vehicle</b>; <b>yours</b> fails at your own number, on your own aircraft. <b>Next week: the method that closes it.</b></li>
+  </ul>
+  <p class="muted">Reading: <code>simulator/CERTIFICATION.md</code> §1–§2 and §6 · quiz on today's material opens Week 12.</p>
+
+  <aside class="notes">Hand off to Week 12: they now have a measured, personal reason to care about MPC.</aside>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+  Reveal.on("ready", () => { window.MLTEWidgets && MLTEWidgets.init(); window.MLTEDiagrams && MLTEDiagrams.init(); });
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 7 — Optimal Control: LQR · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 7 · LQR<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1 TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Optimal Control: LQR</h1>
+    <p class="tp-sub">最優控制:線性二次調節器</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 7 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. The session plan follows; keep this up while people settle.</aside>
+</section>
+
+<!-- 2 AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan</h2>
+  <table class="agenda">
+    <tr><th>Clock</th><th>Segment</th><th></th></tr>
+    <tr><td class="t">00:00</td><td>Recap: six PID gains, tuned how, exactly?</td><td>10′</td></tr>
+    <tr><td class="t">00:10</td><td><b>Block A</b> — control as optimization: cost, Riccati, gain</td><td>40′</td></tr>
+    <tr><td class="t">00:50</td><td>Concept check + the Q/R dial, live</td><td>10′</td></tr>
+    <tr><td class="t">01:00</td><td><b>Block B</b> — LQR on the quadrotor; properties &amp; limits</td><td>30′</td></tr>
+    <tr class="break"><td class="t">01:30</td><td>Break</td><td>10′</td></tr>
+    <tr><td class="t">01:40</td><td>Lab briefing — Lab 4</td><td>10′</td></tr>
+    <tr class="lab"><td class="t">01:50</td><td><b>Lab session</b>: design K, race it against your PID</td><td>60′</td></tr>
+    <tr><td class="t">02:50</td><td>Debrief + milestone check</td><td>10′</td></tr>
+  </table>
+</section>
+
+<!-- 3 RECAP -->
+<section>
+  <p class="eyebrow">Recap → today</p>
+  <h2>Confession time: how did you pick \(K_p = 180\)?</h2>
+  <div class="cols">
+    <ul>
+      <li>Wks 5–6: two loops, six-plus gains, tuned by iteration and folklore (\( \zeta\approx 1 \), separation ×5…).</li>
+      <li>It works. But: <b>is it good?</b> Compared to what? Using how much motor authority?</li>
+      <li>And it treats axes one at a time — the model (Wk 4) says they're one 12-state system.</li>
+    </ul>
+    <div class="box"><b>Today's reframe:</b> stop choosing <i>gains</i>. Choose a <i>cost</i>:
+    how much do you dislike state error vs control effort? Then let algebra find the unique best linear feedback.</div>
+  </div>
+</section>
+
+<!-- 4 OBJECTIVES -->
+<section>
+  <p class="eyebrow">Learning objectives</p>
+  <h2>By the end of today you can…</h2>
+  <ul>
+    <li>Formulate control as minimizing \( J=\int (\mathbf{x}^\top Q\mathbf{x} + \mathbf{u}^\top R\mathbf{u})\,dt \) — and defend each term.</li>
+    <li>State what the <b>algebraic Riccati equation</b> delivers and where it comes from (DP sketch).</li>
+    <li>Choose \(Q, R\) with <b>Bryson's rule</b>, and iterate them like an engineer, not a mystic.</li>
+    <li>Name LQR's guarantees — and its three blind spots (constraints, nonlinearity, missing state).</li>
+    <li><span class="pill">Lab 4</span> Design \(K\) for the hover model; beat (or tie) your hand-tuned PID on a step, using less effort.</li>
+  </ul>
+</section>
+
+<!-- 4b. APOLLO -->
+<section class="dense">
+  <p class="eyebrow">Mental picture first · where this mathematics has flown</p>
+  <h2>Optimal control got humans to the Moon before it got to your quad</h2>
+  <div class="cols">
+    <figure class="photo"><img src="../assets/img/apollo.jpg" alt=""/><figcaption>Apollo 11's Lunar Module in lunar orbit, 1969. Its guidance and autopilot problems — steer with limited fuel, on a computer with 4 kB of RAM — were formulated in exactly the state-space language of this week. <span class="cr">Photo: NASA / Michael Collins, public domain.</span></figcaption></figure>
+    <ul class="small">
+      <li>The 1960s space program is why \( \dot{\mathbf x} = A\mathbf x + B\mathbf u \), Kalman filtering and LQR matured when they did: fuel-optimal steering was not a preference, it was mission survival.</li>
+      <li>Kalman's 1960 papers + the LQR theory behind today = the "modern control" that displaced frequency-domain design for multivariable systems.</li>
+      <li>Sixty years on, the same three-line recipe runs in your \( \$419 \) aircraft's toolchain. Cheap compute democratised optimality.</li>
+    </ul>
+  </div>
+  <aside class="notes">30-second history beat; it reframes Q,R from "homework" to "fuel and error, priced". Kalman returns in person next week.</aside>
+</section>
+
+<!-- FP 7 -->
+<section>
+  <p class="eyebrow">First principles</p>
+  <h2>From 'place the poles' to 'state what you want'</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Week 5 gave you pole placement: pick \( \omega_n, \zeta \), solve for gains. It works — for <b>one axis at a time</b>.</li>
+    <li>Twelve states and four coupled inputs make 'pick the poles' an under-determined wish: which of the twelve should be fast? At what cost to the others?</li>
+    <li>LQR answers by changing the question. Instead of specifying <i>where the poles go</i>, you specify <b>what you dislike</b> — and the optimum places the poles for you.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The reframing, concretely.</span>
+  Pole placement asks: 'put the position pole at \( -2 \) and the attitude pole at \( -13 \)'.<br/><br/>LQR asks: 'I can tolerate 0.5 m of position error and 20° of tilt, and I have 2.4 N of spare thrust per motor.' <b>The second is a statement about the mission; the first is a statement about mathematics.</b> Engineers can defend the second one in a design review.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Framing LQR as a change of question (not a fancier algorithm) is what makes it click for students who already know pole placement.</aside>
+</section>
+
+<!-- QR 7 -->
+<section>
+  <p class="eyebrow">Term by term</p>
+  <h2>Reading \( Q \) and \( R \) as engineering statements</h2>
+  <table class="data">
+    <tr><th>Symbol</th><th>Reads as</th><th>Units of the entry</th><th>Set it from</th></tr>
+    <tr><td>\( Q_{ii} \)</td><td>'how much I dislike error in state \( i \)'</td><td>1/(state unit)²</td><td>the largest deviation you would tolerate</td></tr>
+    <tr><td>\( R_{jj} \)</td><td>'how expensive input \( j \) is'</td><td>1/(input unit)²</td><td>the actuator headroom you own</td></tr>
+    <tr class="hl"><td>\( Q/R \) ratio</td><td>the <b>only</b> thing that matters</td><td>—</td><td>scale both, nothing changes</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">Bryson's rule, and why it works.</span>
+  \( Q_{ii} = 1/x_{i,max}^2 \), \( R_{jj} = 1/u_{j,max}^2 \).<br/><br/>Each term then contributes \( \approx 1 \) to the cost when that variable sits at its tolerance. <b>It non-dimensionalises the problem</b>, so metres, radians and newtons become comparable — which is the only honest way to add them.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">On our aircraft.</span>
+  Position 0.5 m ⇒ \( Q = 4 \). Tilt 20° = 0.35 rad ⇒ \( Q = 8.2 \). Thrust headroom 9.6 N total ⇒ \( R = 0.011 \).<br/><br/>Now every number in the cost function traces to a physical tolerance you could defend to a customer.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The non-dimensionalisation argument is the intellectual content of Bryson's rule; without it the rule looks arbitrary.</aside>
+</section>
+
+<!-- WEX 7 -->
+<section>
+  <p class="eyebrow">Worked example · by hand</p>
+  <h2>LQR on the vertical axis, start to finish</h2>
+  <p>Two states \( (z, v_z) \), one input \( T \). Small enough to do completely.</p>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>\( A = \begin{bmatrix}0&1\\0&0\end{bmatrix} \), \( B = \begin{bmatrix}0\\1/m\end{bmatrix} \) — a double integrator.</li>
+    <li>Bryson: \( Q = \mathrm{diag}(1/0.5^2, 1/1^2) = \mathrm{diag}(4,1) \), \( R = 1/9.6^2 = 0.011 \).</li>
+    <li>Solve the ARE numerically ⇒ \( K \approx [19.4,\ 10.9] \).</li>
+    <li>Closed loop: \( s^2 + (K_2/m)s + K_1/m = s^2 + 16.8s + 29.8 \).</li>
+    <li>\( \omega_n = 5.5 \) rad/s, \( \zeta = 1.54 \) — <b>overdamped, ~1.2 s settle</b>.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Now interrogate the answer.</span>
+  Overdamped and gentle. Is that what we wanted? For altitude near the ground — <b>yes</b>: overshoot means either a ceiling strike or a hard landing.<br/><br/>Want it faster? Tighten the tolerance: \( x_{max} = 0.2 \) m ⇒ \( Q_{11} = 25 \) ⇒ \( \omega_n \approx 8.7 \) rad/s. <b>One number changed, one physical justification given, and the design moved.</b></div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — What happens to \( K \) if you keep \( Q \) and multiply \( R \) by 100? Predict the direction before computing. <span class="muted">(Control became 100× more expensive ⇒ gains shrink by roughly \( \sqrt{100} = 10 \) ⇒ \( \omega_n \) drops ~3×. The square-root scaling is worth remembering.)</span></div>
+
+  <aside class="notes">A complete, hand-checkable LQR design. The 'interrogate the answer' step is what separates using a solver from doing engineering.</aside>
+</section>
+
+<!-- HIST 7 -->
+<section class="dense">
+  <p class="eyebrow">History, in one minute</p>
+  <h2>Where 'modern control' came from</h2>
+  <div class="cols top">
+    <div>
+  <figure class="photo"><img src="../assets/img/apollo.jpg" alt="" style="max-height:260px"/><figcaption>Apollo 11's Lunar Module. Its descent guidance was posed and solved in exactly the state-space language of this week — on a computer with 4 kB of RAM. <span class="cr">NASA / M. Collins, public domain.</span></figcaption></figure>
+    </div>
+    <div>
+  <ul class="small">
+    <li><b>1957–60</b> — Bellman's dynamic programming and Pontryagin's maximum principle arrive within three years of each other, from opposite sides of the Cold War.</li>
+    <li><b>1960</b> — Kálmán publishes both the filter and the LQR duality. State space displaces frequency-domain methods for multivariable problems.</li>
+    <li><b>1960s</b> — Apollo. Fuel-optimal steering was not an academic exercise; the margins were measured in seconds of hover time.</li>
+    <li><b>Now</b> — the same three-line recipe runs on a ¥419 aircraft. What changed is not the mathematics but the price of computing it.</li>
+  </ul>
+    </div>
+  </div>
+  <div class="env rmk"><span class="eh">Why the history is worth a minute.</span>
+  Because it explains the <i>shape</i> of the theory: LQR is quadratic and linear not because engineers like parabolas, but because that was the largest class solvable in closed form on 1960s hardware. Weeks 11–14 are what becomes possible when you can afford to solve harder problems <b>every millisecond</b>.</div>
+
+  <aside class="notes">This slide reframes the whole second half of the course as 'what compute made possible', which is the honest historical story.</aside>
+</section>
+
+<!-- 5 COST -->
+<section>
+  <p class="eyebrow">Block A · 00:10</p>
+  <h2>Say what you want: the quadratic cost</h2>
+  \[ J = \int_0^\infty \Big( \underbrace{\mathbf{x}^\top Q\, \mathbf{x}}_{\text{state displeasure}} + \underbrace{\mathbf{u}^\top R\, \mathbf{u}}_{\text{effort displeasure}} \Big)\, dt \]
+  <div class="cols">
+    <ul>
+      <li>\(Q \succeq 0\): how much each state's deviation hurts. Diagonal in practice — one number per state.</li>
+      <li>\(R \succ 0\): how much control costs — battery, heat, <b>saturation risk</b>.</li>
+      <li>Only the <b>ratio</b> matters: scale both, same controller.</li>
+    </ul>
+    <div class="box"><b>Why quadratic?</b> Honest answer, master's edition: (1) penalizes big errors superlinearly, ignores tiny ones; (2) it's the largest class where the optimum stays a <i>linear</i> law — the math closes; (3) it linearizes the true nonlinear objective near hover, which is where we live.</div>
+  </div>
+  <aside class="notes">Push on point 2: "optimal" always means optimal *for a stated J on a stated model*. Change J, change the controller. There is no free objectivity — LQR just makes the subjectivity explicit and low-dimensional.</aside>
+</section>
+
+<!-- 6 RESULT -->
+<section class="dense">
+  <p class="eyebrow">Block A</p>
+  <h2>The result: solve once, feed back forever</h2>
+  <p>For \( \dot{\mathbf{x}}=A\mathbf{x}+B\mathbf{u} \), the minimizing control is pure state feedback:</p>
+  \[ \mathbf{u}^\ast = -K\mathbf{x}, \qquad K = R^{-1}B^\top P \]
+  <p>where \(P \succ 0\) solves the <b>algebraic Riccati equation</b>:</p>
+  \[ A^\top P + PA - PBR^{-1}B^\top P + Q = 0 \]
+  <div class="cols">
+    <div class="box"><b>What \(P\) <i>is</i>:</b> the optimal cost-to-go, \( J^\ast(\mathbf{x}_0)=\mathbf{x}_0^\top P\,\mathbf{x}_0 \).
+    A quadratic bowl over state space; the controller always slides downhill. (File this shape away — MPC's terminal cost, Wk 12, is exactly this bowl.)</div>
+    <div class="box">In code, the whole theory is:
+    <pre style="font-size:.9em"><code class="language-python">P = scipy.linalg.solve_continuous_are(A, B, Q, R)
+K = np.linalg.solve(R, B.T @ P)</code></pre></div>
+  </div>
+  <aside class="notes">Conditions worth stating precisely once: (A,B) stabilizable, (A,Q^1/2) detectable → unique stabilizing solution. Our Wk-4 controllability check bought exactly this.</aside>
+</section>
+
+<!-- 6b. THEOREM + BRYSON -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>The guarantee, stated like adults — and \( Q,R \) with real units</h2>
+  <div class="env defn"><span class="eh">Theorem <em>(LQR existence/uniqueness)</em>.</span>
+  If \( (A,B) \) is stabilisable and \( (A, Q^{1/2}) \) detectable, the ARE has a unique stabilising \( P \succ 0 \); \( \mathbf u = -K\mathbf x \) with \( K = R^{-1}B^\top P \) minimises \( J \) and the closed loop is asymptotically stable. <span class="muted">(Wk-4's controllability check was the entry ticket.)</span></div>
+  <div class="env exm" style="margin-top:.4em"><span class="eh">Worked example <em>(Bryson's rule on the quad's z-axis)</em>.</span>
+  Tolerances: height error 0.5 m, climb rate 1 m/s, per-motor headroom \( \Delta f = 2.4 \) N (4 × that in T):
+  \[ Q_z = \mathrm{diag}\Big(\tfrac{1}{0.5^2}, \tfrac{1}{1^2}\Big) = \mathrm{diag}(4, 1), \qquad R_T = \tfrac{1}{9.6^2} \approx 0.011 \]
+  Solve: \( K_z \approx [19.4,\ 10.9] \) ⇒ \( \omega_n \approx 5.5 \) rad/s, \( \zeta \approx 0.99 \) — a sane, nearly-critical altitude loop <i>derived from stated tolerances</i>, no folklore consumed. Change your tolerance, re-solve, done.</div>
+  <div class="env rmk" style="margin-top:.3em"><span class="eh">Remark <em>(robustness — the famous fine print)</em>.</span>
+  Full-state LQR enjoys textbook margins (GM \( \in [\tfrac12, \infty) \), PM \( \ge 60^\circ \) per channel). The moment an estimator supplies \( \hat{\mathbf x} \) (LQG, next week) those guarantees <b>vanish</b> — Doyle 1978's abstract is one sentence: "There are none." Design margins must then be <i>checked</i>, not assumed.</div>
+  <aside class="notes">The Bryson numbers are reproducible in the lab in 5 minutes — assign as the warm-up. Doyle's one-liner is the best-known abstract in control; quote it verbatim for flavour.</aside>
+</section>
+
+<!-- 7 WHERE FROM -->
+<section class="dense">
+  <p class="eyebrow">Block A · the 5-minute derivation sketch</p>
+  <h2>Where Riccati comes from (dynamic programming)</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span><b>Bellman:</b> the tail of an optimal path is optimal ⇒ define cost-to-go \( V(\mathbf x) \)</span>
+      <span class="dwhy"><b>The one idea.</b> If the remainder weren't optimal, you'd swap it and do better — contradiction. Everything else is bookkeeping.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span><b>Guess</b> \( V = \mathbf x^\top P\, \mathbf x \)</span>
+      <span class="dwhy"><b>Why dare?</b> Linear dynamics + quadratic cost keep quadratics closed under the recursion. Guess-and-verify is a *method*, not a cheat.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">3</span>HJB: \( 0 = \min_{\mathbf u}\big[\, \mathbf x^\top Q\mathbf x + \mathbf u^\top R\mathbf u + \nabla V^{\top}(A\mathbf x + B\mathbf u) \,\big] \)</span>
+      <span class="dwhy"><b>Instantaneous consistency:</b> present cost + drift of future cost must cancel along the optimum.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">4</span>\( \partial/\partial \mathbf u = 0 \Rightarrow \mathbf u^\ast = -R^{-1}B^\top P \mathbf x \)</span>
+      <span class="dwhy"><b>The minimization is a parabola in u</b> — differentiate, set to zero, done. Linear feedback wasn't assumed; it *emerged*.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">5</span>substitute back \( \Rightarrow A^\top P + PA - PBR^{-1}B^\top P + Q = 0 \)</span>
+      <span class="dwhy"><b>The ARE, term for term.</b> Riccati is just "the guess must be self-consistent", written out.</span></div>
+  </div>
+  <div class="box warn" style="margin-top:.4em"><b>Why show you this at all:</b> the same three moves — value function, one-step optimality, minimize-and-substitute — are Wk 11's MPC (finite horizon, constraints keep it numeric) and Wk 13's Bellman equation (unknown model makes it sampled). LQR is the one case with a closed form. Everything after is this slide, relaxed.</div>
+  <aside class="notes">Do not grind the algebra live; the arc matters more than the steps. Full derivation: MIT 16.323 Lec 3–4, linked in teaching resources.</aside>
+</section>
+
+<!-- 8 QUIZ A -->
+<section>
+  <p class="eyebrow">Concept check · 00:50</p>
+  <h2>Predict before you compute</h2>
+  <div class="quiz">
+    <div class="q">Q1 — You multiply \(R\) by 100 and re-solve. The new closed loop is…</div>
+    <div class="opt">A. faster, with bigger control peaks</div>
+    <div class="opt">B. slower, with smaller control peaks</div>
+    <div class="opt">C. unchanged — only the cost value changes</div>
+    <p class="fragment"><span class="ok">B.</span> <span class="why">Effort became expensive; the optimum spends less of it. "Expensive control" ⇒ gentle gains — this is the dial you'll drag in a minute.</span></p>
+    <div class="q fragment">Q2 — True or false: LQR with a huge \(Q\) can command more torque than the mixer can deliver.</div>
+    <p class="fragment"><span class="ok">True — and nothing in the theory warns you.</span> <span class="why">LQR is optimal on a model with <b>no input limits</b>. Saturation silently breaks the optimality story. Hold that thought four weeks: MPC exists because of this question.</span></p>
+  </div>
+</section>
+
+<!-- 9 WIDGET -->
+<section>
+  <p class="eyebrow">Interactive</p>
+  <h2>The Q/R dial</h2>
+  <div class="widget" data-widget="lqr" style="max-width:800px;margin:0 auto"></div>
+  <p class="muted" style="font-size:.55em">Find a setting that settles in &lt; 2 s with peak |u| &lt; 3; then make the classic mistake — state-obsessed, effort-blind.</p>
+  <aside class="notes">Point at K changing as one coherent object while sliders move — nobody is tuning two numbers "by feel", the *preference* is being tuned and K follows.</aside>
+</section>
+
+<!-- ARE 7 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Solving the Riccati equation — what the solver is doing</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>The ARE is <b>quadratic in the unknown matrix</b> \( P \), so there is no formula — but there is structure.</li>
+    <li><b>Iterative view:</b> run the finite-horizon recursion backwards from \( P_N = Q \) until it stops moving. That is literally dynamic programming, and it converges because the map is a contraction.</li>
+    <li><b>Eigen view:</b> the stabilising \( P \) can be read off the stable eigenvectors of a \( 2n \times 2n \) Hamiltonian matrix — the route <code>scipy.linalg.solve_continuous_are</code> takes.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The iteration, in five lines.</span>
+  <code>P = Q</code><br/><code>for _ in range(2000):</code><br/><code>&nbsp;&nbsp;K = inv(R + B.T@P@B) @ B.T@P@A</code><br/><code>&nbsp;&nbsp;P = Q + K.T@R@K + (A-B@K).T@P@(A-B@K)</code><br/><br/>This is exactly what the LQR widget runs live, 800 iterations per slider move. <b>The 'optimal' controller is a fixed point you can watch converge.</b></div>
+    </div>
+  </div>
+  <p class="small muted">Backward-in-time recursion, converging to a fixed point, is the same computational skeleton as Week 13's value iteration. One algorithm, two costumes.</p>
+
+  <aside class="notes">Showing the five-line iteration demystifies the solver and sets up the Wk-13 parallel explicitly.</aside>
+</section>
+
+<!-- WIDGET riccati -->
+<section>
+  <p class="eyebrow">Block A · interactive</p>
+  <h2>The Riccati recursion, one press at a time</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="riccati"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> From P₀ = 0, will K start large and shrink, or start at zero and grow? Roughly how many iterations to converge at Δt = 0.05 s? Guess, then press ×10.</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#riccati">Digital Lab → riccati</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">Dynamic programming backwards in time, made visible. Converged P is the terminal cost Week 12 uses — say so now.</aside>
+</section>
+
+<!-- P 7 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>\( P \) is the cost-to-go — and you can read it</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">What \( P \) means.</span>
+  \( J^\ast(\mathbf x_0) = \mathbf x_0^\top P \mathbf x_0 \): the total future cost of being at \( \mathbf x_0 \) and behaving optimally forever after. A quadratic bowl over state space.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Reading its entries.</span>
+  For the vertical axis, \( P \approx \begin{bmatrix} 21 & 6 \\ 6 & 4 \end{bmatrix} \).<br/><br/>• \( P_{11} = 21 \): being 1 m off costs 21 units.<br/>• \( P_{22} = 4 \): moving at 1 m/s costs 4.<br/>• \( P_{12} = 6 \): the <b>cross term</b> — being high <i>and</i> climbing is worse than either alone, because you must undo both.<br/><br/>Cross terms are where the interesting information lives.</div>
+    </div>
+  </div>
+  <ul class="small">
+    <li>The bowl's shape <i>is</i> the controller's worldview: it slides downhill on this surface, always.</li>
+    <li>Week 11 will reuse \( P \) as MPC's terminal cost — 'beyond my horizon, assume LQR takes over'.</li>
+    <li>Week 13 will <b>learn</b> this same object from experience, without ever writing \( A \) or \( B \).</li>
+  </ul>
+
+  <aside class="notes">Reading P's entries out loud — especially the cross term — turns an abstract matrix into a legible statement.</aside>
+</section>
+
+<!-- AUG 7 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Integral action inside LQR: state augmentation</h2>
+  <div class="cols top">
+    <div>
+  <p>LQR is proportional in spirit: it drives \( \mathbf x \to \mathbf 0 \) but leaves a steady offset under a constant disturbance. The fix is not to bolt on an integrator — it is to <b>put the integrator in the state</b>:</p>
+  \[ \mathbf x_{aug} = \begin{bmatrix} \mathbf x \\ \int e_z\,dt \end{bmatrix}, \quad A_{aug} = \begin{bmatrix} A & \mathbf 0 \\ C & 0 \end{bmatrix}, \quad B_{aug} = \begin{bmatrix} B \\ \mathbf 0 \end{bmatrix} \]
+  <ul class="small">
+    <li>Now weight the integral state in \( Q \) and the optimisation <b>designs the integral gain for you</b> — correctly traded against everything else.</li>
+    <li>This is how production LQR/LQG controllers get offset-free tracking.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why this is better than bolting one on.</span>
+  A bolted-on integrator is tuned separately and can fight the optimal gains. An augmented one is <i>part of the optimisation</i>, so the trade-off between steady accuracy and control effort is made once, coherently.<br/><br/>Cost: one more state, and \( Q \) grows by one entry. Cheap.</div>
+    </div>
+  </div>
+
+  <aside class="notes">State augmentation is a genuinely useful trick students can apply immediately in the lab extension.</aside>
+</section>
+
+<!-- AXIS 7 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>LQR on our quadrotor: per-axis or all twelve at once?</h2>
+  <table class="data">
+    <tr><th></th><th>Per-axis (4 small LQRs)</th><th>Full 12-state LQR</th></tr>
+    <tr><td>Design size</td><td>2×2 and 4×4 problems</td><td>12×12</td></tr>
+    <tr><td>Cross-coupling</td><td>ignored (fine at hover)</td><td>handled by construction</td></tr>
+    <tr><td>Interpretability</td><td><b>high — you can read every gain</b></td><td>low</td></tr>
+    <tr class="hl"><td>Result at hover</td><td><b>nearly identical</b></td><td>nearly identical</td></tr>
+    <tr><td>Away from hover</td><td>degrades first</td><td>degrades later</td></tr>
+    <tr class="hl"><td>Recommended for Lab 4</td><td><b>yes — start here</b></td><td>do it after, and compare</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">Why they agree.</span>
+  Week 4 showed \( A \) is block-diagonal at hover. A block-diagonal system with a block-diagonal \( Q \) gives a block-diagonal \( P \) — <b>the algebra decouples exactly as the physics does</b>. The two designs are not similar by luck.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The lab exercise worth doing.</span>
+  Compute both and compare \( K \) entry by entry. The off-block entries of the full solution will be small but not zero — and their size <i>is</i> a measure of how much coupling your operating point has. A one-line experiment with a real answer.</div>
+    </div>
+  </div>
+
+  <aside class="notes">This comparison makes Wk-4's decomposition pay off concretely and gives a satisfying lab extension.</aside>
+</section>
+
+<!-- 10 QUAD LQR -->
+<section>
+  <p class="eyebrow">Block B · 01:00</p>
+  <h2>LQR on the quadrotor: the recipe</h2>
+  <ol class="small">
+    <li><b>Model:</b> Wk-4's \( (A,B) \) at hover — 12 states, 4 inputs, \( \Delta\mathbf{u} \) about trim.</li>
+    <li><b>Structure:</b> at hover, \(A\) block-decouples: x-pitch, y-roll, z, yaw. Design one \(K\) for all 12 states, or per-axis — same answer, and seeing <i>why</i> is a good exam question.</li>
+    <li><b>Bryson's rule</b> to start: \( Q_{ii}=1/x_{i,\max}^2 \), \( R_{jj}=1/u_{j,\max}^2 \) — "normalize by what you'd tolerate": 0.5 m position, 20° tilt, per-motor headroom to \(f_{\max}=4\) N.</li>
+    <li><b>Iterate on the closed loop</b>, not on gut: too slow → shrink the offending \(x_{\max}\); motors clipping → raise \(R\).</li>
+    <li><b>Steady error?</b> LQR is proportional in spirit — augment the state with \( \int e_z \) (and friends) to build the integrator <i>into</i> the design.</li>
+  </ol>
+  <div class="box" style="margin-top:.3em">Full-state feedback \( \mathbf{u}=-K\mathbf{x} \) quietly assumes you <i>have</i> \( \mathbf{x} \). In quadsim you do. On the aircraft you have sensors. Week 8 fills exactly that gap — LQR + estimator = LQG.</div>
+</section>
+
+<!-- DUAL 7 -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>Duality: the filter and the controller are the same problem</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Control (LQR)</th><th>Estimation (Kalman)</th></tr>
+    <tr><td>\( A, B \)</td><td>\( A^\top, C^\top \)</td></tr>
+    <tr><td>\( Q \) — state cost</td><td>\( Q \) — process noise</td></tr>
+    <tr><td>\( R \) — control cost</td><td>\( R \) — measurement noise</td></tr>
+    <tr><td>\( K = R^{-1}B^\top P \)</td><td>\( L = P C^\top R^{-1} \)</td></tr>
+    <tr><td>controllability</td><td>observability</td></tr>
+    <tr><td>solves an ARE backwards in time</td><td>solves an ARE forwards in time</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Kálmán's observation, 1960.</span>
+  The two Riccati equations are the <b>same equation with the matrices transposed</b>. Design a controller, transpose the problem, and you have designed an estimator.<br/><br/>This is not a curiosity — it means every intuition you build this week transfers directly to next week. Expensive control ⇔ trusted model. Cheap control ⇔ trusted sensor. The Q/R dial you dragged in the widget is the same dial you will drag in the Kalman widget.</div>
+    </div>
+  </div>
+  <p class="small muted">Two of the three great results of 1960 control theory, and they turn out to be one result seen from two sides.</p>
+
+  <aside class="notes">Preview duality now so Wk 8 feels like a continuation rather than a new subject. Students find this genuinely elegant.</aside>
+</section>
+
+<!-- OPT 7 -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>What 'optimal' does not mean</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Not</b> best for every trajectory — best <i>on average</i>, weighted by the cost you wrote.</li>
+    <li><b>Not</b> robust to model error by construction — that came free, and only for full-state feedback.</li>
+    <li><b>Not</b> respectful of limits — the optimisation is over an unconstrained input space.</li>
+    <li><b>Not</b> unique as an engineering answer — a different \( Q, R \) is a different, equally 'optimal', controller.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The professional formulation.</span>
+  Never say 'we used an optimal controller'. Say: <b>'we minimised \( \int \mathbf x^\top Q\mathbf x + \mathbf u^\top R\mathbf u \) with \( Q \) and \( R \) chosen from stated tolerances, on the hover linearisation.'</b><br/><br/>The second sentence is checkable, defensible, and reproducible. The first is marketing. Your final-project viva will reward the second and probe the first.</div>
+    </div>
+  </div>
+  <p class="small">Every method in the second half of this course claims optimality with respect to something. Learning to ask 'optimal for what, on what model, subject to what?' is the transferable skill.</p>
+
+  <aside class="notes">This slide is genuinely about intellectual honesty and directly prepares viva question C3.</aside>
+</section>
+
+<!-- 11 VS PID -->
+<section>
+  <p class="eyebrow">Block B</p>
+  <h2>LQR vs your cascade PID — an honest scorecard</h2>
+  <table class="data">
+    <tr><th></th><th>Cascade PID (Wks 5–6)</th><th>LQR (today)</th></tr>
+    <tr><td>Tuning surface</td><td>6+ gains, coupled, folklore</td><td>Handful of \(Q,R\) weights with physical units</td></tr>
+    <tr><td>Uses the model</td><td>Barely (structure only)</td><td>Fully — gains <i>derived</i> from \( (A,B) \)</td></tr>
+    <tr><td>Cross-axis coupling</td><td>Ignored</td><td>Handled by design (one multivariable \(K\))</td></tr>
+    <tr><td>Guarantees</td><td>None beyond what you test</td><td>Stabilizing; classic margins (GM \( \infty \), PM ≥ 60° per SISO channel)</td></tr>
+    <tr class="hl"><td>Input limits</td><td>Clamps bolted on (the seven fixes)</td><td><b>Not represented at all</b> — its blind spot</td></tr>
+    <tr class="hl"><td>Valid region</td><td>Wherever you tuned it</td><td>Near hover — it is the <i>linearization's</i> optimum</td></tr>
+    <tr><td>Runs on the STM32?</td><td>Yes — it's what ships</td><td>Yes — \(K\mathbf{x}\) is one matrix multiply (WHEELTEC ep 10 does it)</td></tr>
+  </table>
+  <aside class="notes">The two hl rows are the entire motivation for Wk 11 (constraints) and Wks 13–14 (beyond the linearization). Say that sentence now; it makes the course arc visible.</aside>
+</section>
+
+<!-- READK 7 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Reading a \( K \) matrix like prose</h2>
+  <div class="cols top">
+    <div>
+  <p>For the lateral block \( (y, v_y, \phi, p) \) with input \( \tau_x \), a typical result:</p>
+  \[ K \approx [\,-0.9,\; -1.4,\; 0.31,\; 0.043\,] \]
+  <ul class="small">
+    <li><b>Signs first:</b> position and velocity gains are negative because a positive \( y \) error needs a <i>negative</i> roll. A sign error here is Week 5's polarity problem, arriving through algebra instead of wiring.</li>
+    <li><b>Magnitudes:</b> attitude gains are far larger relative to their states — attitude is the fast, high-authority axis, exactly as \( B \)'s \( 1/I \approx 435 \) predicted.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The ratio that reveals the architecture.</span>
+  \( K_\phi/K_y \approx 0.35 \) — but \( \phi \) is in radians and \( y \) in metres. Convert to comparable units and the attitude loop is roughly <b>six times stiffer</b> than the position loop.<br/><br/><b>LQR rediscovered the cascade's timescale separation on its own</b>, from a cost function that never mentioned it. The architecture we imposed by hand in Week 6 is what optimality wanted anyway.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The most satisfying result of the week: the optimiser independently reproduces the hand-designed architecture.</aside>
+</section>
+
+<!-- THREE 7 -->
+<section>
+  <p class="eyebrow">Looking back</p>
+  <h2>Three ways to get gains, and when each is right</h2>
+  <table class="data">
+    <tr><th>Method</th><th>You specify</th><th>Best when</th><th>Weakness</th></tr>
+    <tr><td>Hand tuning</td><td>nothing — you turn knobs</td><td>no model, hardware in hand</td><td>unrepeatable, no guarantees</td></tr>
+    <tr><td>Pole placement</td><td>exact closed-loop poles</td><td>one axis, clear spec</td><td>meaningless for 12 coupled states</td></tr>
+    <tr class="hl"><td><b>LQR</b></td><td>tolerances and effort budget</td><td><b>a model exists, axes couple</b></td><td>ignores constraints; needs full state</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">They are not rivals.</span>
+  On a single axis all three give the same numbers — you saw it today: \( (180,28) \) from \( \omega_n,\zeta \), the same from pole placement, near-identical from LQR.<br/><br/>What differs is <b>what you had to say to get there</b>, and whether the method survives the problem growing.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">In your final project.</span>
+  Your MPC states a stage cost — \( Q, R \) again — and a terminal cost, which is this week's \( P \). <b>You have already written the objective function of the entire second half of the course.</b></div>
+    </div>
+  </div>
+
+  <aside class="notes">Closing back to Wk 5 and forward to Wks 11-14 shows the cost function as the course's spine.</aside>
+</section>
+
+<!-- 12 QUIZ B -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Design judgment</h2>
+  <div class="quiz">
+    <div class="q">Your Lab-4 LQR beats PID on settle time but the motor traces show hard clipping at \(f_{\max}\) during the transient. Your report should conclude…</div>
+    <div class="opt">A. LQR wins — ship it</div>
+    <div class="opt">B. The comparison is invalid until \(R\) is raised (or \(x_{\max}\) relaxed) so the design respects the true actuator budget</div>
+    <div class="opt">C. PID wins — LQR is unusable with saturation</div>
+    <p class="fragment"><span class="ok">B.</span> <span class="why">A saturating LQR is operating <i>outside its own assumptions</i> — its optimality claim is void there, and the clipped response can even go unstable for bigger steps. Retune until commands stay inside limits, <i>then</i> compare. This exact judgment shows up again in your final-project benchmarking protocol.</span></p>
+  </div>
+</section>
+
+<!-- ROB 7 -->
+<section class="dense">
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Robustness margins: the good news, precisely stated</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">The classical LQR margins.</span>
+  For full-state feedback with \( R \) diagonal, every input channel enjoys: gain margin \( \in [\tfrac12, \infty) \) and phase margin \( \ge 60^\circ \). You may halve or arbitrarily increase any channel's gain and remain stable.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What that buys on hardware.</span>
+  Your motor thrust constant \( k_f \) is uncertain by perhaps ±15%; the battery sags 10% over a flight; a propeller wears. All of these are <b>gain perturbations</b> — and an infinite upper gain margin means none of them destabilises the loop.<br/><br/>That is a genuinely strong statement, and it is <i>free</i>: you did not design for robustness, you designed for a cost, and robustness arrived.</div>
+    </div>
+  </div>
+  <p class="small">Compare with hand-tuned PID, where robustness is whatever your testing happened to cover. This is the concrete engineering value of an optimality principle.</p>
+  <div class="env rmk"><span class="eh">And the fine print, restated.</span>
+  These margins hold for \( \mathbf u = -K\mathbf x \) with the <b>true</b> state. Feed an estimate instead (Week 8) and Doyle's 1978 result applies: <i>there are no guaranteed margins for LQG</i>. Robustness must then be checked, and recovered deliberately (loop-transfer recovery, or simply more conservative weights).</div>
+
+  <aside class="notes">Give the concrete hardware reading of the margins; it converts a theorem into a reason they will trust the controller on their aircraft.</aside>
+</section>
+
+<!-- DISC 7 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Discrete-time LQR — what actually runs on the aircraft</h2>
+  <div class="cols top">
+    <div>
+  <p>Your controller is a sampled system, so the honest design is discrete:</p>
+  \[ \min \sum_{k=0}^{\infty}\big(\mathbf x_k^\top Q_d \mathbf x_k + \mathbf u_k^\top R_d \mathbf u_k\big), \quad \mathbf x_{k+1} = A_d\mathbf x_k + B_d\mathbf u_k \]
+  <ul class="small">
+    <li>\( A_d = e^{A\Delta t} \), \( B_d = \int_0^{\Delta t}e^{As}ds\,B \) — Week 4's discretisation, used in earnest.</li>
+    <li><code>scipy.linalg.solve_discrete_are</code>; the gain is then applied as \( \mathbf u_k = -K_d\mathbf x_k \), held constant across the step.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Does it matter at 200 Hz?.</span>
+  Barely: \( \omega_n \Delta t \approx 0.07 \), so continuous and discrete gains differ by ~3%. <b>At 50 Hz it matters</b> (~12%), and at 20 Hz the continuous design can be visibly wrong.<br/><br/>Rule: if your loop rate is more than ~20× the closed-loop bandwidth, design continuous and sleep well. Otherwise, design discrete.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Gives them a decision rule rather than dogma; the 20× threshold is the practical takeaway.</aside>
+</section>
+
+<!-- FAIL 7 -->
+<section>
+  <p class="eyebrow">Common failure gallery</p>
+  <h2>Four ways Lab 4 goes wrong</h2>
+  <table class="data">
+    <tr><th>Symptom</th><th>Cause</th><th>Check</th></tr>
+    <tr><td>\( K \) has huge entries; the quad twitches</td><td>\( R \) far too small — control priced at nothing</td><td>print peak \( |u| \); compare with \( f_{max} \)</td></tr>
+    <tr><td>Solver raises 'not stabilisable'</td><td>\( (A,B) \) built with a bug — often a zero column in \( B \)</td><td>re-run Week 4's rank test first</td></tr>
+    <tr><td>Flies, but sinks slowly</td><td>no integral action and mass slightly wrong</td><td>augment the state (previous slide)</td></tr>
+    <tr class="hl"><td>Eigenvalues look great, aircraft is unstable</td><td>fed back <b>absolute</b> state instead of deviation from trim</td><td>\( \mathbf u = \mathbf u_{hover} - K(\mathbf x - \mathbf x_0) \)</td></tr>
+  </table>
+  <p class="small">The last row is the week's signature bug: LQR is designed in <b>\( \delta \)-coordinates</b>, and the hover input must be added back. Every year, several teams discover this at 1 a.m. You have now been warned in daylight.</p>
+
+  <aside class="notes">Say the delta-coordinates warning twice — it is the single most common Lab-4 failure.</aside>
+</section>
+
+<!-- TH 7 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Solve the scalar ARE by hand for \( A=0, B=1, Q=q, R=r \). Show \( K = \sqrt{q/r} \) and interpret the square root.</li>
+    <li>For the vertical axis, sweep \( r \) over four decades. Plot \( \omega_n \) and peak \( |u| \) against \( r \) on log axes and identify the slopes.</li>
+    <li>Verify the gain-margin claim numerically: multiply your \( K \) by \( 0.4, 0.5, 2, 10 \) and check closed-loop eigenvalues each time.</li>
+    <li>Design a full 12-state LQR and compare its \( K \) with four per-axis designs. Quantify the largest off-block entry and comment.</li>
+    <li>Augment the vertical axis with an integral state. Show it removes the steady error under a 10% mass error, and report the settling-time cost.</li>
+    <li>Discretise the vertical axis at 200 Hz and at 20 Hz. Compare \( K \) with the continuous design and comment on when discrete design becomes mandatory.</li>
+  </ol>
+  <div class="box warn">Question 1 is worth doing on paper: \( K = \sqrt{q/r} \) is the entire intuition of LQR compressed into four symbols.</div>
+
+  <aside class="notes">Q1's square-root result explains the widget's behaviour analytically and is a favourite exam question.</aside>
+</section>
+
+<!-- MAP 7 -->
+<section class="dense">
+  <p class="eyebrow">Concept map</p>
+  <h2>Week 7, in one page</h2>
+  <div class="fig plain" data-diagram="methods"><p class="cap">Where LQR sits: it demands a model and buys optimality plus margins, but is blind to constraints — the gap Weeks 11–12 fill.</p></div>
+  <table class="data">
+    <tr><th>Concept</th><th>One-line statement</th><th>Where it returns</th></tr>
+    <tr><td>cost \( J = \int \mathbf x^\top Q\mathbf x + \mathbf u^\top R\mathbf u \)</td><td>state preferences, not gains</td><td>Wk 11 (stage cost), Wk 13 (reward)</td></tr>
+    <tr><td>ARE ⇒ \( K = R^{-1}B^\top P \)</td><td>solve once, feed back forever</td><td>Wk 11 terminal cost</td></tr>
+    <tr><td>\( P \) = cost-to-go bowl</td><td>the controller's worldview</td><td>Wk 13's value function</td></tr>
+    <tr><td>Bryson's rule</td><td>tolerances → weights</td><td>every weight you ever choose</td></tr>
+    <tr><td>margins (GM ∞, PM 60°)</td><td>optimality buys robustness — free</td><td>lost under LQG (Wk 8)</td></tr>
+    <tr class="hl"><td>blind to constraints</td><td>the one real weakness</td><td><b>the reason MPC exists</b></td></tr>
+  </table>
+
+  <aside class="notes">The last row is the bridge to Wk 11; end the lecture pointing at it.</aside>
+</section>
+
+<!-- AHEAD 7 -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: the state you have been assuming</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Every controller so far — PID, cascade, LQR — has read \( \mathbf x \) straight from the simulator. That is a fiction.</li>
+    <li>Week 8 removes it: noisy gyros, low-rate position fixes, and a filter that must reconstruct twelve states from an incomplete, corrupted view.</li>
+    <li>You will also learn why your beautifully-tuned controller gets <i>worse</i> when it starts eating estimates — and how much worse is acceptable.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Bring to Week 8:</b> Lab 4's comparison table (PID vs LQR, same step, same limits) — Week 8 re-runs the winner on estimated state and we compare all three.<br/><br/><b>Team:</b> the PID-vs-LQR table reproduced by a teammate from the shared repo, same numbers.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Framing Wk 8 as 'removing the fiction' gives it dramatic weight, which it deserves.</aside>
+</section>
+
+<!-- CQ 7 -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Two questions before the lab</h2>
+  <div class="quiz">
+    <div class="q">Q1 — Two teams use identical \( Q \) but one scales \( R \) by \( 10^6 \) and also scales \( Q \) by \( 10^6 \). Do they get the same controller?</div>
+    <p class="fragment"><span class="ok">Yes — identical \( K \).</span> <span class="why">Only the ratio enters the ARE. This is worth knowing because it means you can normalise your weights to whatever scale reads nicely without changing the design at all.</span></p>
+    <div class="q fragment">Q2 — Your LQR yields \( \zeta = 1.5 \) on altitude, which feels sluggish. A teammate proposes adding a derivative term on top of \( -K\mathbf x \). Respond.</div>
+    <p class="fragment"><span class="ok">There is already one — \( K \) contains the velocity gain.</span> <span class="why">\( \mathbf u = -K\mathbf x \) with \( \mathbf x = (z, v_z) \) <i>is</i> PD, with gains chosen optimally. Wanting it faster means changing \( Q \) or \( R \), not bolting on a term the optimisation already accounted for.</span></p>
+  </div>
+
+  <aside class="notes">Q2 is the conceptual leap: state feedback subsumes PD. Make sure they see K's second entry IS the D gain.</aside>
+</section>
+
+<!-- WILD 7 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>LQR in the wild: three places you have already flown on it</h2>
+  <table class="data">
+    <tr><th>System</th><th>What LQR (or its cousin) does there</th><th>Why not PID</th></tr>
+    <tr><td>Airliner autopilots</td><td>multivariable trim and turbulence rejection across a flight envelope</td><td>dozens of coupled states; hand-tuning does not scale</td></tr>
+    <tr><td>Segway / self-balancing robots</td><td>the textbook inverted pendulum, stabilised in one gain matrix</td><td>the states are strongly coupled</td></tr>
+    <tr><td>Camera gimbals</td><td>3-axis stabilisation against a moving base</td><td>cross-axis coupling matters at video framerates</td></tr>
+    <tr><td>Falcon 9 landing (LQR/MPC family)</td><td>fuel-optimal descent with terminal constraints</td><td>optimality is the mission</td></tr>
+  </table>
+  <p class="small">The common thread is not difficulty — it is <b>coupling and cost</b>. When axes interact and effort genuinely matters, stating a cost is easier than choosing twenty gains.</p>
+
+  <aside class="notes">Concrete examples make the method feel like an industry tool rather than a course exercise.</aside>
+</section>
+
+<!-- TH 7 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Solve the scalar ARE by hand for \( A=0, B=1, Q=q, R=r \). Show \( K = \sqrt{q/r} \) and explain the square root physically.</li>
+    <li>Sweep \( r \) over four decades on the vertical axis. Plot \( \omega_n \) and peak \( |u| \) on log axes; identify the slopes and relate them to Q1.</li>
+    <li>Verify the gain-margin claim numerically: scale your \( K \) by \( 0.4, 0.5, 2, 10 \) and check the closed-loop eigenvalues each time. At which factor does it fail, and does that match theory?</li>
+    <li>Design a full 12-state LQR and compare its \( K \) with four per-axis designs. Report the largest off-block entry and interpret it.</li>
+    <li>Augment the vertical axis with an integral state. Show it removes the steady error under a 10% mass error, and report the settling-time cost.</li>
+    <li>Discretise the vertical axis at 200 Hz and 20 Hz. Compare both with the continuous design and state when discrete design becomes mandatory.</li>
+  </ol>
+  <div class="box warn">Question 1 is worth doing on paper: \( K = \sqrt{q/r} \) is the whole intuition of LQR compressed into four symbols.</div>
+
+  <aside class="notes">Q1's square-root result explains the widget analytically and is a favourite exam question.</aside>
+</section>
+
+<!-- MAP 7 -->
+<section class="dense">
+  <p class="eyebrow">Concept map</p>
+  <h2>Week 7, in one page</h2>
+  <div class="fig plain" data-diagram="methods"><p class="cap">Where LQR sits: demands a model, buys optimality and margins, blind to constraints — the gap Weeks 11–12 fill.</p></div>
+  <table class="data">
+    <tr><th>Concept</th><th>One-line statement</th><th>Where it returns</th></tr>
+    <tr><td>\( J = \int \mathbf x^\top Q\mathbf x + \mathbf u^\top R\mathbf u \)</td><td>state preferences, not gains</td><td>Wk 11 stage cost, Wk 13 reward</td></tr>
+    <tr><td>ARE ⇒ \( K = R^{-1}B^\top P \)</td><td>solve once, feed back forever</td><td>Wk 11 terminal cost</td></tr>
+    <tr><td>\( P \) = cost-to-go bowl</td><td>the controller's worldview</td><td>Wk 13's value function</td></tr>
+    <tr><td>Bryson's rule</td><td>tolerances → weights</td><td>every weight you ever choose</td></tr>
+    <tr><td>margins (GM ∞, PM 60°)</td><td>optimality buys robustness, free</td><td>lost under LQG (Wk 8)</td></tr>
+    <tr class="hl"><td>blind to constraints</td><td>the one real weakness</td><td><b>the reason MPC exists</b></td></tr>
+  </table>
+
+  <aside class="notes">Sixty seconds; end pointing at the last row, which is the bridge to Wk 11.</aside>
+</section>
+
+<!-- AHEAD 7 -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: the state you have been assuming</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Every controller so far has read \( \mathbf x \) straight from the simulator. That is a fiction.</li>
+    <li>Week 8 removes it: noisy gyros, low-rate position fixes, and a filter that must reconstruct twelve states from a partial, corrupted view.</li>
+    <li>You will also learn why a well-tuned controller gets <i>worse</i> on estimated state — and how much worse is acceptable.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Bring to Week 8:</b> Lab 4's comparison table (PID vs LQR, same step, same limits). Week 8 re-runs the winner on estimated state and we compare all three.<br/><br/><b>Team:</b> the PID-vs-LQR table reproduced by a teammate from the shared repo, same numbers.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Framing Wk 8 as 'removing the fiction' gives it the weight it deserves.</aside>
+</section>
+
+<!-- WILD 7 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>LQR in the wild — three systems you have flown on</h2>
+  <table class="data">
+    <tr><th>System</th><th>What LQR (or a cousin) does there</th><th>Why not PID</th></tr>
+    <tr><td>Airliner autopilots</td><td>multivariable trim and gust rejection across an envelope</td><td>dozens of coupled states; hand-tuning does not scale</td></tr>
+    <tr><td>Self-balancing robots</td><td>the inverted pendulum, stabilised in one gain matrix</td><td>states are strongly coupled</td></tr>
+    <tr><td>3-axis camera gimbals</td><td>stabilisation against a moving base</td><td>cross-axis coupling at video framerates</td></tr>
+    <tr><td>Rocket landing (LQR/MPC family)</td><td>fuel-optimal descent with terminal constraints</td><td>optimality <i>is</i> the mission</td></tr>
+  </table>
+  <p class="small">The common thread is not difficulty — it is <b>coupling and cost</b>. When axes interact and effort genuinely matters, stating a cost is easier than choosing twenty gains.</p>
+
+  <aside class="notes">Concrete industry examples make the method feel like a tool rather than an exercise.</aside>
+</section>
+
+<!-- F570 7a -->
+<section class="dense">
+  <p class="eyebrow">The instructor's aircraft</p>
+  <h2>The F570's LQR, weight by weight</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Subsystem</th><th>\( Q \)</th><th>\( R \)</th><th>\( Q_{11}/R \)</th></tr>
+    <tr><td>x / y position</td><td>diag(5, 10)</td><td>\( 10^2 \)</td><td>0.05</td></tr>
+    <tr><td>height</td><td>diag(30, 40)</td><td>\( 10^2 \)</td><td>0.30</td></tr>
+    <tr><td>roll / pitch</td><td>diag(500, 10)</td><td>\( 5\times10^4 \)</td><td>0.01</td></tr>
+    <tr class="hl"><td>yaw</td><td>diag(100, 10)</td><td>\( 10^5 \)</td><td>0.001</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Read the last column.</span>
+  It is the <b>aggressiveness ratio</b>, and it ranks the axes:<br/><br/><b>height (0.30)</b> most aggressive — falling is unacceptable.<br/><b>position (0.05)</b> moderate.<br/><b>attitude (0.01)</b> gentle in these units, but note \( Q_{11}=500 \) against a state measured in <i>radians</i> — a 0.1 rad error already costs 5 units.<br/><b>yaw (0.001)</b> deliberately the softest — because yaw authority is a tenth of roll's (Week 3), and weighting what you cannot deliver is the mistake we named earlier.<br/><br/><b>The vendor weighted by authority.</b></div>
+    </div>
+  </div>
+  <p class="small">Also note \( R \) is 500× larger on attitude than on position. Attitude torque is expensive because it is <i>scarce</i> — the same reasoning, applied consistently.</p>
+
+  <aside class="notes">Real shipped weights, and they follow exactly the authority principle taught two slides earlier. Have students verify the ranking themselves.</aside>
+</section>
+
+<!-- F570 7b -->
+<section class="dense">
+  <p class="eyebrow">The aircraft in this room</p>
+  <h2>Their design script — every line is this lecture</h2>
+  <pre><code class="language-matlab">Ts = 0.005;                       % 200 Hz — same as quadsim
+A  = [0 1; 0 0];   B = [0; 1/I_xx];     % roll subsystem (Wk 4)
+[G,H] = c2d(A,B,Ts);              % discretise (Wk 4, ZOH)
+Tc = ctrb(G,H);
+if (rank(Tc) == 2)                % <-- controllability CHECK (Wk 4)
+    Q = [500 0; 0 10];  R = 5e4;  % preferences (Wk 7)
+    K2 = dlqr(G,H,Q,R);           % discrete LQR  (Wk 7)
+    G2 = G - H*K2;                % closed loop
+    y  = dlsim(G2,H,C,D,u,x0);    % simulate from 5 deg initial error
+end</code></pre>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Line 5 is the one to notice:</b> they <i>test controllability before designing</i>, and skip the axis if the rank is wrong. That is Week 4's abstract rank condition, used as a production guard.</li>
+    <li><code>c2d</code> then <code>dlqr</code>: discrete design at 200 Hz, exactly the choice we justified with the \( \omega_n\Delta t \) rule.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Their initial condition.</span>
+  <code>x0 = [0.0873; 0]</code> — that is <b>5 degrees</b> in radians. They simulate recovery from a 5° attitude error, which is precisely the step response you will produce in today's lab.<br/><br/>Nothing in this script is beyond you. That is the point of showing it.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Walking through a vendor's real design script line by line, naming the week each line came from, is the most convincing possible summary of the course so far.</aside>
+</section>
+
+<!-- F570 7c -->
+<section>
+  <p class="eyebrow">The aircraft in this room</p>
+  <h2>The vendor's own explanation of Q and R</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Transport</th><th>Time / min</th><th>Money / \( \$ \)</th><th>\( J \) with \( Q{=}10, R{=}1 \)</th><th>\( J \) with \( Q{=}5, R{=}5 \)</th></tr>
+    <tr class="hl"><td>Car</td><td>20</td><td>45</td><td><b>245</b> ← best</td><td>325</td></tr>
+    <tr><td>Bike</td><td>75</td><td>0</td><td>750</td><td>375</td></tr>
+    <tr><td>Bus</td><td>30</td><td>12</td><td>312</td><td><b>210</b> ← best</td></tr>
+    <tr><td>Helicopter</td><td>4</td><td>2578</td><td>2618</td><td>12910</td></tr>
+  </table>
+  <p class="small muted">From WHEELTEC's manual (after a MATLAB tutorial): \( J = Q \cdot \text{Time} + R \cdot \text{Money} \).</p>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why this analogy is genuinely good.</span>
+  There is no 'best way to commute' until you say what you value. Value time heavily and you take the helicopter; value money and you cycle. <b>Change the weights, change the optimum — and neither answer is wrong.</b><br/><br/>That is exactly the status of \( Q \) and \( R \) in a control design: they are not tuning parameters to be optimised, they are <b>a statement of preference to be defended</b>.<br/><br/>Use this analogy in your final-project report when you justify your weights. It is clearer than anything in the textbooks.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Borrowing the vendor's commute analogy (with credit) gives students a ready-made way to explain Q and R to a non-specialist — a viva-useful skill.</aside>
+</section>
+
+<!-- 13 BREAK -->
+<section class="divider">
+  <h2><span class="tchip">01:30</span> Break — 10 minutes</h2>
+  <hr class="drule"/>
+  <p>When we return: Lab 4 — your Wk-4 \( (A,B) \) finally earns its keep.</p>
+</section>
+
+<!-- WMIS 7 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Weight-tuning mistakes, and what each looks like</h2>
+  <table class="data">
+    <tr><th>Mistake</th><th>What you see</th><th>Why</th><th>Fix</th></tr>
+    <tr><td>All \( Q_{ii} = 1 \)</td><td>erratic priorities</td><td>1 metre and 1 radian treated as equally bad</td><td>Bryson's rule, always</td></tr>
+    <tr><td>\( R \to 0 \)</td><td>huge gains, motors clipping</td><td>control priced at zero</td><td>raise \( R \) until peak \( |u| \) fits</td></tr>
+    <tr><td>Weighting positions only</td><td>sloppy, oscillatory approach</td><td>rates unpenalised ⇒ no damping</td><td>weight velocities too</td></tr>
+    <tr class="hl"><td>\( Q \) huge on yaw</td><td>yaw fights everything else</td><td>yaw has 1/10 the authority</td><td>weight by <i>authority</i>, not importance</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">The authority principle.</span>
+  Weighting a state highly gives the controller more <i>desire</i>, not more <i>power</i>. If yaw authority is a tenth of roll's, a large \( Q_\psi \) just means yaw errors dominate a cost the actuators cannot satisfy — and the optimiser sacrifices axes it <b>could</b> have fixed.<br/><br/><b>Weight what you can control, in proportion to what you can control it with.</b></div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">A diagnostic worth keeping.</span>
+  After every LQR design, print peak \( |u| \) for your worst expected disturbance. If it exceeds the actuator, the design is fiction no matter how pretty the eigenvalues look.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The 'desire vs power' distinction prevents a whole class of weight-tuning failures.</aside>
+</section>
+
+<!-- TRADE 7 -->
+<section>
+  <p class="eyebrow">Worked example · read the trade</p>
+  <h2>One aircraft, three personalities</h2>
+  <table class="data">
+    <tr><th>Design</th><th>\( x_{max} \)</th><th>\( u_{max} \)</th><th>Result</th><th>Suits</th></tr>
+    <tr><td>Gentle</td><td>1.0 m</td><td>4.8 N</td><td>\( \omega_n = 2.8 \), peak 3.1 N</td><td>indoor demo, novices watching</td></tr>
+    <tr class="hl"><td><b>Balanced</b></td><td>0.5 m</td><td>9.6 N</td><td>\( \omega_n = 5.5 \), peak 6.4 N</td><td><b>our default</b></td></tr>
+    <tr><td>Aggressive</td><td>0.2 m</td><td>9.6 N</td><td>\( \omega_n = 8.7 \), peak 11.2 N</td><td>tracking; <b>clips on large steps</b></td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Note the third row's honesty.</span>
+  Peak 11.2 N against 9.6 N of headroom means it <b>saturates on its own design case</b>. Excellent eigenvalues, unacceptable behaviour — the guarantees evaporate exactly where you wanted them.<br/><br/>Two legitimate responses: soften the design, or move to a method that knows about limits. <b>The second is Week 11.</b></div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">How to present this.</span>
+  Three designs, stated tolerances, resulting bandwidth and peak effort — that is a <i>design study</i>. It shows you explored the trade rather than tuning until it stopped crashing, and it is what earns marks in the final-project rubric.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Model the reporting standard you expect; this table transfers straight into their project.</aside>
+</section>
+
+<!-- 14 LAB BRIEFING -->
+<section>
+  <p class="eyebrow">Lab briefing · 01:40</p>
+  <h2>Lab 4 — design \(K\), race your PID</h2>
+  <div class="cols top">
+    <ol class="small">
+      <li>Load your Wk-4 \( (A,B) \). Build \(Q,R\) by Bryson's rule from stated maxima.</li>
+      <li><code>solve_continuous_are</code> → \(K\). Check closed-loop eigenvalues before flying it.</li>
+      <li>Drop \( \mathbf{u} = \mathbf{u}_{\text{hover}} - K\Delta\mathbf{x} \) into <code>StudentController</code>.</li>
+      <li>Same step as Lab 3: \([0,0,2] \to [2,1,3]\). Log both controllers.</li>
+    </ol>
+    <div class="box"><b>Deliverable table (the whole point):</b><br/>
+    overshoot · settle time · peak per-motor thrust · \( \int \lVert u\rVert^2 \) — PID vs LQR, same step, same limits.<br/><br/>
+    <b>Pass:</b> LQR stable with all motors inside \([0,4]\) N, and you can say <i>which</i> design wins on <i>which</i> metric and why.</div>
+  </div>
+  <p class="muted">Trap list: forgetting \(\Delta\) coordinates (feed back <i>deviation</i> from trim, add hover thrust back) · eigenvalues fine but motors clipping (Q/R, not a bug) · yaw weight too low → lazy heading.</p>
+</section>
+
+<!-- 15 LAB SESSION -->
+<section>
+  <div class="labwrap">
+    <p class="eyebrow" style="color:#1ec8c8">Lab session · 01:50 → 02:50</p>
+    <h3>Build order &amp; checkpoints</h3>
+    <p class="cp"><b>02:05</b> — \(K\) computed; closed-loop eigenvalues all in the left half-plane</p>
+    <p class="cp"><b>02:20</b> — LQR flies the step; motor traces inside limits</p>
+    <p class="cp"><b>02:35</b> — comparison table filled, both controllers, same conditions</p>
+    <p class="cp"><b>02:50</b> — one-paragraph verdict written: which wins, on what, and why</p>
+    <p style="margin-top:.8em"><a class="btn" href="../labs/week07-lqr-optimal-control.html">Open the Week 7 lab sheet →</a></p>
+    <span class="assess" style="background:#2a4463;border-color:#3d5a7d;color:#f5d28a">Assessed: Lab Report 4 — 5% of the course grade. Marked on: K derived from *your* (A,B) · all motors inside limits · the verdict paragraph (which controller wins on which metric, and why).</span>
+  </div>
+  <aside class="notes">Fast teams: (a) integral augmentation on z, watch steady error die under a mass mismatch; (b) push Q until motors clip and document the failure — that figure is gold for the Wk-12 MPC comparison.</aside>
+</section>
+
+<!-- 16 MILESTONE -->
+<section>
+  <p class="eyebrow">Team project · Wk 7 of 10</p>
+  <h2>Milestone check</h2>
+  <div class="miles">
+    <div class="m"><b>1 · Modeling</b>Bryson&#39;s rule applied to <i>your</i> tolerances; \( Q, R \) with a sentence each</div>
+    <div class="m due"><b>2 · Inner loop</b><b>This week: Lab 4</b> — PID vs LQR on the same step, same limits; the <code>riccati</code> widget&#39;s convergence watched once</div>
+    <div class="m"><b>3 · Outer loop</b>integral augmentation understood: which state you would add, and why</div>
+    <div class="m"><b>4 · Estimation</b>the &ldquo;needs full state&rdquo; blind spot written down — it is next week&#39;s whole topic</div>
+    <div class="m"><b>5 · Integration</b>the comparison table reproduced by a teammate from the repo; CI green</div>
+  </div>
+  <p class="muted" style="margin-top:.6em">Three weeks to the reality-gap workshop. If Lab 3 is still red, escalate — office hours, not heroics at midnight.</p>
+</section>
+
+<!-- MISCONCEPTIONS -->
+<section>
+  <p class="eyebrow">Before you leave</p>
+  <h2>The traps, named</h2>
+  <table class="data">
+    <tr><th>The trap</th><th>The truth</th></tr>
+    <tr><td>"Optimal means best, full stop."</td><td>Optimal <b>for the stated \(J\), on the stated model, unconstrained</b>. Change any of the three and the crown moves. Every "optimal" in your report must name its \(J\).</td></tr>
+    <tr><td>"Bigger \(Q\) ⇒ faster, always."</td><td>Until the commands hit \( f_{max} \) — then the theory is void and behaviour can degrade non-monotonically. Saturation is LQR's silent exit clause (and Wk-11's entrance).</td></tr>
+    <tr><td>"LQR replaces the cascade."</td><td>It replaces the cascade's <i>gain-picking</i>. Architecturally you may still run it per-axis inside the same loops — same wires, chosen weights.</td></tr>
+    <tr><td>"State feedback is free — we have the state."</td><td>quadsim has it; the aircraft has sensors. \( \mathbf u = -K\hat{\mathbf x} \) is a different animal (LQG) with different guarantees — next week is not optional.</td></tr>
+  </table>
+  <aside class="notes">Row 1 recurs in final-project vivas as C-track question C3's cousin — flag it.</aside>
+</section>
+
+<!-- 17 SUMMARY -->
+<section>
+  <p class="eyebrow">Wrap-up</p>
+  <h2>What to remember</h2>
+  <ul>
+    <li>LQR = <b>state a preference</b> \( (Q,R) \), solve the ARE, feed back \( \mathbf{u}=-K\mathbf{x} \). Unique, stabilizing, one matrix multiply at runtime.</li>
+    <li>\(P\) is the <b>cost-to-go bowl</b> — the same object MPC uses as its terminal cost.</li>
+    <li>Bryson's rule turns "what would I tolerate" into a first \(Q,R\). Iterate on the closed loop.</li>
+    <li>Blind spots, memorized: <b>constraints · nonlinearity · needs full state</b> → MPC (Wk 12), model mismatch (Wk 10), estimation (<b>next week</b>).</li>
+  </ul>
+  <p class="muted" style="margin-top:1em">Reading: MIT 16.323 Lec 3–4 · Brunton Control Bootcamp (LQR) · Lab 4 report due before Wk 8.</p>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+  Reveal.on("ready", () => { window.MLTEWidgets && MLTEWidgets.init(); window.MLTEDiagrams && MLTEDiagrams.init(); });
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

@@ -1,0 +1,355 @@
+/* ==========================================================================
+   MLTE03 deck.css — shared styling for all reveal.js lecture decks.
+   Loaded AFTER reveal's theme + ../assets/css/site.css (for the tokens).
+   ========================================================================== */
+
+:root { --r-main-font: var(--sans); --r-heading-font: var(--sans); }
+
+.reveal { font-size: 29px; color: var(--ink); }
+.reveal .slides section { text-align: left; }
+.reveal h1, .reveal h2, .reveal h3 { color: var(--navy); text-transform: none; letter-spacing: 0; font-weight: 800; }
+.reveal h1 { font-size: 1.7em; }
+.reveal h2 { font-size: 1.22em; }
+.reveal h3 { font-size: .95em; }
+.reveal a { color: var(--cyan-dk); }
+.reveal strong, .reveal b { color: var(--navy); }
+.reveal ul { margin-left: 1em; }
+.reveal li { margin: .32em 0; }
+.reveal .katex { font-size: 1.03em; }
+.reveal pre { box-shadow: none; width: 100%; font-size: .55em; }
+.reveal pre code { border-radius: 10px; padding: 14px 16px; max-height: 440px; }
+
+.reveal .eyebrow { color: var(--cyan-dk); font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; font-size: .5em; margin-bottom: .2em; }
+.reveal .zh     { color: var(--cyan-dk); font-weight: 600; }
+.reveal .accent { color: var(--cyan-dk); }
+.reveal .muted  { color: var(--muted); font-size: .8em; }
+.reveal .small  { font-size: .78em; }
+.reveal .pill   { display: inline-block; background: var(--navy); color: #fff; border-radius: 999px;
+  padding: 2px 12px; font-size: .55em; font-weight: 700; vertical-align: middle; }
+.reveal .pill.cyan  { background: var(--cyan-dk); }
+.reveal .pill.amber { background: var(--amber-dk); }
+
+.reveal .cols  { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: center; }
+.reveal .cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; align-items: stretch; }
+.reveal .cols.top { align-items: start; }
+
+.reveal .box { background: #f1fbfb; border: 1px solid #bfe9ea; border-radius: 12px;
+  padding: 14px 18px; font-size: .8em; }
+.reveal .box.warn { background: #fff7e6; border-color: #f5d28a; }
+.reveal .box.ok   { background: #eefaf2; border-color: #b9e4c8; }
+.reveal .box.bad  { background: #fdf0ee; border-color: #efc2ba; }
+
+/* Session-timing chip, used on section dividers and the agenda */
+.reveal .tchip { display: inline-block; font-family: var(--mono); font-size: .5em; font-weight: 700;
+  color: var(--navy); background: var(--cyan-lt); border: 1px solid #bfe9ea; border-radius: 8px;
+  padding: 2px 10px; margin-right: 8px; vertical-align: middle; }
+
+/* Agenda table */
+.reveal table.agenda { width: 100%; border-collapse: collapse; font-size: .62em; }
+.reveal table.agenda th { text-align: left; border-bottom: 2px solid #bfe9ea; padding: 5px 10px; color: var(--navy); }
+.reveal table.agenda td { border-bottom: 1px solid var(--line); padding: 5px 10px; }
+.reveal table.agenda td.t { font-family: var(--mono); white-space: nowrap; color: var(--cyan-dk); font-weight: 700; }
+.reveal table.agenda tr.lab   td { background: #f1fbfb; }
+.reveal table.agenda tr.break td { background: #fafafa; color: var(--muted); }
+
+/* Generic data table */
+.reveal table.data { width: 100%; border-collapse: collapse; font-size: .58em; }
+.reveal table.data th { text-align: left; border-bottom: 2px solid #bfe9ea; padding: 5px 9px; color: var(--navy); }
+.reveal table.data td { border-bottom: 1px solid var(--line); padding: 5px 9px; }
+.reveal table.data tr.hl td { background: #fff7e6; }
+
+/* Concept-check quiz */
+.reveal .quiz { background: var(--violet-lt); border: 1px solid #d9cdf2; border-radius: 12px;
+  padding: 16px 20px; font-size: .85em; }
+.reveal .quiz .q { font-weight: 800; color: var(--navy); margin-bottom: .35em; }
+.reveal .quiz .opt { margin: .22em 0 .22em 1em; }
+.reveal .quiz .why { margin-top: .5em; font-size: .85em; color: var(--muted); }
+.reveal .quiz .ok  { color: var(--ok); font-weight: 800; }
+
+/* ASCII / block diagrams */
+.reveal pre.flow { font-size: .5em; background: #0e1a26; color: #e6edf3; border-radius: 12px;
+  padding: 18px; line-height: 1.5; }
+
+/* Lab-session slide */
+.reveal .labwrap { background: linear-gradient(160deg, #0b1f33, #1d3a57); border-radius: 14px;
+  color: #eaf3fb; padding: 20px 26px; }
+.reveal .labwrap h3 { color: #fff; }
+.reveal .labwrap code { color: #bfe9ea; }
+.reveal .labwrap .cp { margin: .3em 0; }
+.reveal .labwrap .cp b { color: #1ec8c8; }
+
+/* Milestone slide */
+.reveal .miles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; font-size: .5em; }
+.reveal .miles .m { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.reveal .miles .m b { display: block; color: var(--cyan-dk); margin-bottom: .3em; }
+.reveal .miles .m.due { border-color: #f5d28a; background: var(--amber-lt); }
+
+/* Widget shell (canvas + sliders), sized for a projector */
+.reveal .widget { font-size: 15px; background: #fff; border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 14px; }
+.reveal .widget canvas { width: 100%; height: auto; display: block; }
+.reveal .widget .wrow { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.reveal .widget label { font-weight: 600; color: var(--navy); white-space: nowrap; }
+.reveal .widget input[type=range] { width: 130px; vertical-align: middle; accent-color: var(--cyan-dk); }
+.reveal .widget .val { font-family: var(--mono); color: var(--cyan-dk); font-weight: 700; min-width: 3.5em; display: inline-block; }
+.reveal .widget button { font: inherit; font-weight: 700; color: #fff; background: var(--navy);
+  border: 0; border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+.reveal .widget button.alt { background: var(--cyan-dk); }
+.reveal .widget .note { color: var(--muted); margin-top: 4px; }
+
+.reveal .footer { position: fixed; bottom: 8px; left: 16px; font-size: 13px; color: var(--muted); z-index: 5; }
+/* Centred so it clears the footer (bottom-left) and reveal's controls +
+   slide number (bottom-right); survives into the print/PDF export. */
+/* Rides inside .footer so it inherits the footer's placement and cannot collide
+   with reveal's controls / slide number at bottom-right. Chrome repeats
+   position:fixed elements on every printed page, so the mark lands on all 662
+   PDF pages. (Verifying that in extracted text needs whitespace-normalised
+   matching — the glyphs come out letter-spaced, e.g. "D r  K e n  L a i".) */
+.reveal .footer .copyright { margin-left: .5em; opacity: .72; font-size: .85em; }
+.reveal .btn { display: inline-block; background: var(--cyan-dk); color: #fff; font-weight: 700;
+  border-radius: 10px; padding: 8px 18px; text-decoration: none; }
+
+/* ===================== visual-polish layer (2026-08-24) ===================== */
+
+/* Title slides: subtle quad line-art watermark + refined type */
+.reveal section.title-slide {
+  background-repeat: no-repeat !important;
+}
+.reveal .title-slide h1 { font-size: 2.1em; letter-spacing: -0.015em; margin: .15em 0 .1em; }
+.reveal .title-slide h3 { font-weight: 600; }
+.reveal .titleart { position: absolute; right: -40px; top: 40px; width: 380px; opacity: .16; pointer-events: none; }
+
+/* Figure container: white card + caption */
+.reveal .fig { background: #fff; border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px 18px 8px; box-shadow: var(--shadow-sm); }
+.reveal .fig svg { width: 100%; height: auto; display: block; }
+.reveal .fig .cap { text-align: center; color: var(--muted); font-size: .55em; margin: 6px 0 4px; }
+.reveal .fig.plain { background: transparent; border: 0; box-shadow: none; padding: 0; }
+
+/* Softer cards */
+.reveal .box { box-shadow: var(--shadow-sm); border-width: 1px; line-height: 1.45; }
+.reveal .quiz { box-shadow: var(--shadow-sm); }
+.reveal table.agenda tr:nth-child(even):not(.lab):not(.break) td { background: #fbfdff; }
+.reveal table.data tr:nth-child(even):not(.hl) td { background: #fbfdff; }
+
+/* SVG text inherits the deck face */
+.reveal .fig svg text, .reveal svg.inline-d text { font-family: var(--sans); }
+
+/* Section-divider (break) slides get a little air */
+.reveal .tchip { box-shadow: none; }
+
+/* Interactive derivation steps (reveal fragments) */
+.reveal .derive { border-left: 3px solid var(--cyan); padding-left: 18px; }
+.reveal .derive .dstep { margin: .45em 0; display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,1fr); gap: 18px; align-items: center; }
+.reveal .derive .dstep .dwhy { font-size: .62em; color: var(--muted); border-left: 2px solid var(--line); padding-left: 12px; }
+.reveal .derive .dstep .dwhy b { color: var(--cyan-dk); }
+.reveal .derive .dstep.key .dwhy b { color: var(--amber-dk); }
+.reveal .derive .dnum { display: inline-block; background: var(--cyan-dk); color: #fff; border-radius: 50%;
+  width: 1.35em; height: 1.35em; line-height: 1.35em; text-align: center; font-size: .55em; font-weight: 800; margin-right: 8px; }
+
+/* "Your turn" in-lecture hands-on box */
+.reveal .turn { background: #eefaf2; border: 1px solid #b9e4c8; border-radius: 12px; padding: 12px 18px;
+  font-size: .74em; box-shadow: var(--shadow-sm); }
+.reveal .turn .tt { font-weight: 800; color: var(--ok); }
+.reveal .turn .tt::before { content: "✏ "; }
+
+/* assessment line on lab-briefing slides */
+.reveal .assess { display: block; margin-top: 10px; padding: 8px 14px; border-radius: 10px;
+  background: var(--amber-lt); border: 1px solid #f5d28a; font-size: .66em; color: var(--amber-dk); font-weight: 700; }
+
+/* ==========================================================================
+   BEAMER LAYER (2026-08-24) — academic LaTeX-like restyle.
+   Loaded last, overrides the earlier card/gradient look.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,600;0,700;1,400;1,600&display=swap');
+
+:root {
+  --serif: 'STIX Two Text', 'Times New Roman', Georgia, serif;
+  --rule:  #9aa7b8;
+  --thm:   #1f3864;   /* structure color, beamer-ish deep blue */
+  --defn:  #145a5a;
+  --exm:   #4a5568;
+}
+
+.reveal { font-family: var(--serif); font-size: 28px; color: #14202e; }
+.reveal h1, .reveal h2, .reveal h3 { font-family: var(--serif); font-weight: 700; color: var(--thm); letter-spacing: 0; }
+.reveal h2 { font-size: 1.28em; margin-bottom: .5em; }
+.reveal .eyebrow { font-family: var(--serif); font-weight: 600; font-style: normal; letter-spacing: .14em;
+  text-transform: uppercase; font-size: .48em; color: #5a6b80; }
+.reveal .zh { font-family: var(--sans); font-weight: 500; color: #5a6b80; }
+.reveal .accent { color: var(--thm); font-weight: 600; }
+.reveal strong, .reveal b { color: #101b28; }
+.reveal .muted { color: #66788d; }
+.reveal .katex { font-size: 1.08em; }
+.reveal li { margin: .38em 0; line-height: 1.42; }
+.reveal p { line-height: 1.45; }
+
+/* LaTeX-like blocks: quiet, sharp, no shadow */
+.reveal .box, .reveal .quiz, .reveal .turn, .reveal .fig, .reveal .widget {
+  box-shadow: none; border-radius: 4px; }
+.reveal .box { background: #f7f9fc; border: 1px solid #d7dfe9; font-family: var(--serif); }
+.reveal .box.warn { background: #faf6ec; border-color: #e3d5ad; }
+.reveal .box.ok { background: #f2f8f4; border-color: #c8ddcd; }
+.reveal .box.bad { background: #faf1ef; border-color: #e4c4bc; }
+
+/* amsthm-style environments */
+.reveal .env { border: 1px solid #c9d4e2; border-left: 4px solid var(--thm); border-radius: 3px;
+  background: #f8fafd; padding: 12px 18px; font-size: .82em; margin: .4em 0; }
+.reveal .env .eh { font-weight: 700; color: var(--thm); }
+.reveal .env .eh em { font-weight: 400; }
+.reveal .env.defn { border-left-color: var(--defn); }
+.reveal .env.defn .eh { color: var(--defn); }
+.reveal .env.exm { border-left-color: var(--exm); background: #f7f8fa; }
+.reveal .env.exm .eh { color: var(--exm); }
+.reveal .env.rmk { border-left-color: #8a97a8; background: #f9fafb; }
+.reveal .env.rmk .eh { color: #5a6b80; }
+
+/* booktabs tables — no vertical rules, no zebra */
+.reveal table.data, .reveal table.agenda { font-family: var(--serif); font-size: .62em; }
+.reveal table.data th, .reveal table.agenda th { border-top: 2px solid #2c3e50; border-bottom: 1px solid #2c3e50;
+  background: none; color: #14202e; padding: 6px 10px; }
+.reveal table.data td, .reveal table.agenda td { border-bottom: 1px solid #e2e8f0; background: none !important; }
+.reveal table.data tr:last-child td, .reveal table.agenda tr:last-child td { border-bottom: 2px solid #2c3e50; }
+.reveal table.data tr.hl td { background: #f5f2e8 !important; }
+.reveal table.agenda tr.lab td { background: #f2f6f9 !important; }
+.reveal table.agenda tr.break td { background: none !important; color: #8a97a8; }
+.reveal table.agenda td.t { font-family: var(--mono); color: var(--thm); }
+
+/* quiet the pills into small-caps tags */
+.reveal .pill, .reveal .pill.cyan, .reveal .pill.amber { background: none; color: var(--thm);
+  border: 1px solid var(--rule); border-radius: 3px; font-family: var(--serif); font-weight: 600;
+  letter-spacing: .06em; font-size: .5em; padding: 1px 9px; text-transform: uppercase; }
+.reveal .tchip { background: none; border: 1px solid var(--rule); color: #5a6b80; font-size: .48em; }
+
+/* quiz → concept check, serif */
+.reveal .quiz { background: #f7f8fb; border: 1px solid #d5d9e8; }
+.reveal .quiz .q { color: var(--thm); }
+.reveal .quiz .ok { color: #1c6b45; }
+
+/* exercise block, no emoji */
+.reveal .turn { background: #f4f8f5; border: 1px solid #cfe0d3; }
+.reveal .turn .tt { color: #1c6b45; }
+.reveal .turn .tt::before { content: "Exercise — "; font-weight: 700; }
+.reveal .turn .tt.noex::before { content: ""; }
+
+/* assessment note */
+.reveal .assess { background: #f5f2e8 !important; border: 1px solid #ddd0a8 !important; color: #6b5b1e !important;
+  border-radius: 3px; font-family: var(--serif); }
+
+/* lab session panel: light academic frame instead of dark card */
+.reveal .labwrap { background: #f7f9fc; border: 1px solid #c9d4e2; border-top: 3px solid var(--thm);
+  border-radius: 4px; color: #14202e; }
+.reveal .labwrap h3 { color: var(--thm); }
+.reveal .labwrap code { color: #145a5a; }
+.reveal .labwrap .cp b { color: var(--thm); }
+.reveal .labwrap .eyebrow { color: #5a6b80 !important; }
+
+/* derivation steps keep structure, serif why-column */
+.reveal .derive { border-left: 3px solid var(--thm); }
+.reveal .derive .dnum { background: var(--thm); font-family: var(--serif); }
+.reveal .derive .dstep .dwhy b { color: var(--thm); }
+.reveal .derive .dstep.key .dwhy b { color: #8a5a00; }
+
+/* divider slides (breaks): light, ruled */
+.reveal section.divider h2 { color: var(--thm); }
+.reveal section.divider { text-align: left; }
+.reveal section.divider .drule { border: 0; border-top: 1.5px solid #2c3e50; margin: .6em 0; }
+
+/* beamer-like titlepage */
+.reveal section.title-slide { text-align: center; }
+.reveal .tp { max-width: 900px; margin: 0 auto; }
+.reveal .tp .tp-course { font-variant: small-caps; letter-spacing: .1em; color: #43536a; font-size: .62em; }
+.reveal .tp hr { border: 0; border-top: 1.5px solid #2c3e50; margin: 14px 0; }
+.reveal .tp hr.thin { border-top-width: .8px; }
+.reveal .tp h1 { color: #14202e; font-size: 1.9em; margin: .25em 0 .1em; }
+.reveal .tp .tp-sub { font-style: italic; color: #43536a; font-size: .85em; margin: .2em 0 .6em; }
+.reveal .tp .tp-meta { color: #66788d; font-size: .6em; line-height: 1.6; }
+.reveal .tp .tp-cr { display: inline-block; margin-top: .5em; font-size: .92em; color: #8496a9; }
+.reveal .tp .titleart-inline { width: 200px; opacity: .5; margin: 6px auto 0; display: block; }
+
+/* figure captions: LaTeX style */
+.reveal .fig { border-color: #d7dfe9; }
+.reveal .fig .cap { font-size: .56em; color: #43536a; }
+.reveal .fig .cap::before { content: "Figure. "; font-weight: 700; color: #14202e; }
+
+/* milestones grid: quiet */
+.reveal .miles .m { box-shadow: none; border-radius: 3px; border-color: #d7dfe9; font-family: var(--serif); }
+.reveal .miles .m b { color: var(--thm); }
+.reveal .miles .m.due { background: #faf6ec; border-color: #e3d5ad; }
+
+/* photographs */
+.reveal figure.photo { margin: 0; }
+.reveal figure.photo img { max-width: 100%; max-height: 430px; display: block; margin: 0 auto;
+  border: 1px solid #c9d4e2; border-radius: 3px; }
+.reveal figure.photo figcaption { text-align: center; font-size: .52em; color: #66788d; margin-top: 8px; }
+.reveal figure.photo figcaption .cr { font-size: .92em; color: #8a97a8; }
+.reveal .cols figure.photo img { max-height: 360px; }
+
+/* ===== density control (2026-08-24): keep every slide inside 1100x720 ===== */
+/* SVG figures scale to fit BOTH width and a height cap, preserving aspect. */
+.reveal .fig svg {
+  width: auto; max-width: 100%; height: auto; max-height: 420px;
+  display: block; margin: 0 auto;
+}
+.reveal .cols .fig svg, .reveal .cols3 .fig svg { max-height: 260px; }
+
+/* photos inside two-column layouts stay modest */
+.reveal .cols figure.photo img { max-height: 300px; }
+.reveal figure.photo img { max-height: 380px; }
+
+/* dense slides: opt-in tightening */
+.reveal section.dense { font-size: .92em; }
+.reveal section.dense .box, .reveal section.dense .env { font-size: .76em; padding: 10px 14px; }
+.reveal section.dense table.data { font-size: .55em; }
+.reveal section.dense li { margin: .24em 0; }
+.reveal section.dense h2 { margin-bottom: .35em; }
+
+/* tables never push a slide over: cap and scroll if truly huge */
+.reveal table.data, .reveal table.agenda { display: table; }
+.reveal .env { line-height: 1.4; }
+
+/* figure + two-column on the same slide: tighten further */
+.reveal section.dense .fig svg { max-height: 300px; }
+.reveal section.dense .cols .fig svg { max-height: 215px; }
+.reveal section.dense figure.photo img { max-height: 260px; }
+.reveal section.dense .fig .cap { font-size: .5em; margin: 4px 0 2px; }
+.reveal section.dense .turn { font-size: .68em; padding: 8px 14px; }
+.reveal section.dense p { line-height: 1.35; }
+.reveal section.dense .katex { font-size: .95em; }
+
+/* code-heavy slides: shrink listing, cap its height */
+.reveal pre { font-size: .5em; }
+.reveal pre code { max-height: 330px; }
+.reveal section.dense pre { font-size: .45em; }
+.reveal section.dense pre code { max-height: 260px; }
+
+/* three-env slides and long quizzes */
+.reveal section.dense .quiz { font-size: .72em; padding: 12px 16px; }
+.reveal section.dense .env .eh { font-size: .95em; }
+.reveal .quiz .why { line-height: 1.35; }
+
+/* ===== print / PDF export: one slide per page ===== */
+@media print {
+  .reveal { font-size: 26px; }
+  .reveal .fig svg { max-height: 360px; }
+  .reveal section.dense .fig svg { max-height: 260px; }
+  .reveal pre code { max-height: none; }
+  .reveal .slides section { padding-top: 0 !important; }
+}
+
+/* very dense tier: figure + two columns + exercise on one slide */
+.reveal section.vdense { font-size: .84em; }
+.reveal section.vdense .fig svg { max-height: 175px; }
+.reveal section.vdense .cols .fig svg { max-height: 150px; }
+.reveal section.vdense .box, .reveal section.vdense .env { font-size: .72em; padding: 8px 12px; }
+.reveal section.vdense .turn { font-size: .62em; padding: 6px 12px; }
+.reveal section.vdense li { margin: .18em 0; }
+.reveal section.vdense .katex { font-size: .9em; }
+
+/* interactive-widget slides: cap the canvas so the slide fits one page */
+.reveal .widget canvas { width: auto; max-width: 100%; height: auto; margin: 0 auto; }
+.reveal section.dense .widget { font-size: 13px; padding: 6px 10px; }
+.reveal section.dense .widget canvas { max-height: 235px; }
+.reveal section.dense .widget input[type=range] { width: 108px; }
+.reveal section.vdense .widget canvas { max-height: 195px; }

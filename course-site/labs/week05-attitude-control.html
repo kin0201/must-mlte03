@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 5 Lab — Attitude Control · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css?v=5" />
+<!-- KaTeX for the bit of math in the recap -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+</head>
+<body data-lab="week05-attitude">
+
+<div class="lab-progress"><i></i></div>
+
+<!-- ============ HEADER ============ -->
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Week 5 · Lab (second half of session)</div>
+    <h1>Attitude Control — the inner loop</h1>
+    <div class="sub">Make the quad return to level. You write your first controller into <code>quadsim</code>.</div>
+    <div class="meta">
+      <span>⏱ <b>~75 min</b></span>
+      <span>🧩 Edit <b>quadsim/controllers/student.py</b></span>
+      <span>📦 Deliverable: <b>student.py + a plot</b></span>
+      <span>⭐ <b>Graded checkpoint</b></span>
+    </div>
+    <p style="margin-top:14px"><a class="btn ghost" href="../slides/week05-attitude-control.html">← Back to the Week 5 slides</a>
+       <a class="btn ghost" href="../index.html">Course home</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Goal</span>
+  Start the quad tilted (e.g. rolled 20°). By the end of this lab your controller drives it back to
+  <b>level</b> in well under a second, with no overshoot — using exactly the PD attitude law from lecture.
+  Holding <em>position</em> is next week; today we only stabilise <em>attitude</em>.
+</div>
+
+<!-- ============ 1. RECAP ============ -->
+<h2>1 · The 5-minute recap</h2>
+<p>A quadrotor is <b>underactuated</b>: 4 motors give you total thrust \(T\) and three body torques
+   \( \boldsymbol\tau=(\tau_x,\tau_y,\tau_z) \), but you have 6 DOF to manage. You can't push sideways —
+   you <b>tilt, then thrust</b>. So <b>attitude is the innermost, fastest loop</b>; everything else rides on it.</p>
+
+<p>To drive the attitude \( \boldsymbol\eta=(\phi,\theta,\psi) \) to a desired \( \boldsymbol\eta_d \), use a
+   <b>PD law</b> (the rate \( \boldsymbol\omega \) is the damping term):</p>
+<p style="text-align:center">
+  \[ \boldsymbol\tau = \mathbf{I}\Big( K_p^{\text{att}}(\boldsymbol\eta_d-\boldsymbol\eta) - K_d^{\text{att}}\,\boldsymbol\omega \Big) \]
+</p>
+<p>Per axis this is a second-order system: \( \omega_n=\sqrt{K_p},\ \zeta=K_d/(2\sqrt{K_p}) \). Aim for
+   \( \zeta\approx 1 \) — fast with no overshoot. Build the intuition here first:</p>
+
+<div class="widget" data-widget="pid"></div>
+
+<div class="callout">
+  <span class="ttl">Predict before you code</span>
+  Set <b>K<sub>d</sub> = 0</b> → the quad oscillates forever (no damping). Push <b>K<sub>p</sub></b> high with low
+  K<sub>d</sub> → fast but it overshoots and rings. The pair <b>K<sub>p</sub>=180, K<sub>d</sub>=28</b> (the
+  reference autopilot) gives \( \zeta\approx1.04 \) — note how clean that response is. Those are good starting gains.
+</div>
+
+<!-- ============ 2. SETUP ============ -->
+<h2>2 · Setup (2 min)</h2>
+<p>From the <code>simulator/</code> directory, in your virtual environment:</p>
+<div class="code"><pre><span class="cm"># one-time</span>
+python -m venv .venv &amp;&amp; source .venv/bin/activate   <span class="cm"># Windows: .venv\Scripts\activate</span>
+pip install -r requirements.txt
+<span class="cm"># every session — so `import quadsim` works</span>
+export PYTHONPATH=.                                <span class="cm"># Windows: set PYTHONPATH=.</span></pre></div>
+<p>The file you edit all term is <code>quadsim/controllers/student.py</code>. Open it now — you'll see a
+   <code>StudentController</code> with a hover-thrust stub and two <code>TODO</code>s. We fill the Week-5 one.</p>
+
+<!-- ============ 3. THE TASK ============ -->
+<h2>3 · Build the inner loop</h2>
+<p>Work through the steps. Each adds a few lines to <code>StudentController.control(self, t, x, ref)</code>.
+   Recall the state layout: <code>x[0:3]</code> position, <code>x[3:6]</code> velocity,
+   <code>x[6:9]</code> Euler \((\phi,\theta,\psi)\), <code>x[9:12]</code> body rates \((p,q,r)\).</p>
+
+<details class="step" open>
+  <summary><span class="num">1</span> Pull out attitude &amp; rate from the state <span class="tag">edit control()</span></summary>
+  <div class="step-body">
+    <p>The torque law only needs the orientation and how fast it's rotating:</p>
+    <div class="code"><pre>euler = x[6:9]            <span class="cm"># (phi, theta, psi)  [rad]</span>
+omega = x[9:12]           <span class="cm"># body rates (p, q, r) [rad/s]</span></pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">2</span> Choose the desired attitude <span class="tag">hold level</span></summary>
+  <div class="step-body">
+    <p>This week there is no outer loop yet, so command <b>level</b> (zero roll &amp; pitch) and follow the
+       commanded yaw. Next week the position loop will <em>compute</em> <code>phi_des, theta_des</code> instead.</p>
+    <div class="code"><pre>yaw_ref  = float(ref.get(<span class="st">"yaw"</span>, 0.0))
+att_des  = np.array([0.0, 0.0, yaw_ref])   <span class="cm"># level, hold yaw</span></pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">3</span> The PD law → body torques <span class="tag">the core</span></summary>
+  <div class="step-body">
+    <p>Attitude error, with the yaw error <b>wrapped</b> to \((-\pi,\pi]\) so 359° → −1°, not +359°. Then the
+       PD law from lecture. Damping uses the measured rate directly (<code>-omega</code>) — lower noise than
+       differentiating the angle error.</p>
+    <div class="code"><pre>e_att = att_des - euler
+e_att[2] = (e_att[2] + np.pi) % (2*np.pi) - np.pi      <span class="cm"># wrap yaw error</span>
+tau = self.p.inertia * (self.kp_att * e_att + self.kd_att * (-omega))</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">4</span> Thrust, then assemble the wrench <span class="tag">return</span></summary>
+  <div class="step-body">
+    <p>Hold enough thrust to carry the weight (so it doesn't sink while levelling), then return
+       \( [T,\tau_x,\tau_y,\tau_z] \). The simulator mixes &amp; saturates the motors for you.</p>
+    <div class="code"><pre>T = self.p.weight                       <span class="cm"># = mass * g</span>
+return np.array([T, tau[0], tau[1], tau[2]])</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">5</span> Pick your gains in <code>__init__</code> <span class="tag">tune</span></summary>
+  <div class="step-body">
+    <p>Add attitude gains next to the existing <code>TODO (Week 5)</code>. Start from the values you liked in
+       the widget; roll &amp; pitch are symmetric, yaw is softer:</p>
+    <div class="code"><pre>self.kp_att = np.array([180.0, 180.0, 80.0])
+self.kd_att = np.array([ 28.0,  28.0, 20.0])</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">✓</span> Stuck? Reveal the full Week-5 <code>control()</code></summary>
+  <div class="step-body">
+    <div class="callout warn"><span class="ttl">Try first</span> You learn the loop by writing it. Peek only after a genuine attempt.</div>
+    <div class="code"><pre>def control(self, t, x, ref):
+    p = self.p
+    euler = x[6:9]
+    omega = x[9:12]
+
+    yaw_ref = float(ref.get(<span class="st">"yaw"</span>, 0.0))
+    att_des = np.array([0.0, 0.0, yaw_ref])        <span class="cm"># hold level</span>
+
+    e_att = att_des - euler
+    e_att[2] = (e_att[2] + np.pi) % (2*np.pi) - np.pi
+    tau = p.inertia * (self.kp_att * e_att + self.kd_att * (-omega))
+
+    T = p.weight
+    return np.array([T, tau[0], tau[1], tau[2]])</pre></div>
+  </div>
+</details>
+
+<!-- ============ 4. RUN & VERIFY ============ -->
+<h2>4 · Run &amp; verify</h2>
+<p>Save this as <code>examples/wk5_attitude.py</code>. It starts the quad <b>tilted</b> and watches it level out —
+   the exact checkpoint for this lab:</p>
+<div class="code"><pre><span class="cm"># examples/wk5_attitude.py — Week 5 checkpoint: return to level from a tilt</span>
+import numpy as np
+from quadsim import Simulator, QuadParams
+from quadsim.dynamics import hover_state
+from quadsim.controllers import StudentController
+
+sim = Simulator(QuadParams())
+x0 = hover_state(position=(0, 0, 1.0))
+x0[6] = np.deg2rad(20.0)     <span class="cm"># start rolled  +20 deg</span>
+x0[7] = np.deg2rad(-15.0)    <span class="cm"># start pitched -15 deg</span>
+
+log = sim.run(x0=x0, controller=StudentController(sim.params),
+              reference=lambda t: dict(pos=[0, 0, 1.0], yaw=0.0), t_final=4.0)
+
+roll  = np.rad2deg(log.euler[:, 0])
+pitch = np.rad2deg(log.euler[:, 1])
+print(f"start  roll/pitch = {roll[0]:6.1f} / {pitch[0]:6.1f} deg")
+print(f"final  roll/pitch = {roll[-1]:6.3f} / {pitch[-1]:6.3f} deg")
+
+from quadsim.plotting import plot_states
+plot_states(log, save=<span class="st">"wk5_attitude.png"</span>, show=False)
+print(<span class="st">"saved wk5_attitude.png"</span>)</pre></div>
+
+<div class="code"><pre>export PYTHONPATH=.
+python examples/wk5_attitude.py</pre></div>
+
+<div class="callout goal">
+  <span class="ttl">Expected — your graded checkpoint ⭐</span>
+  <ul style="margin:6px 0 0">
+    <li><b>Final roll/pitch ≈ 0.000 / 0.000°</b> — it returns to level.</li>
+    <li>Settles within ~<b>0.4 s</b> and does <b>not overshoot</b> past the starting tilt (with \(K_p=180,K_d=28\)).</li>
+    <li>The saved <code>wk5_attitude.png</code> shows roll &amp; pitch decaying smoothly to zero.</li>
+  </ul>
+</div>
+
+<p>Also run the shared hover example to see the bigger picture — it levels and stays airborne, but
+   <b>drifts in position</b> (there's no outer loop yet — that's Week 6's job, and the motivation for it):</p>
+<div class="code"><pre>python examples/02_hover_pid.py --controller student</pre></div>
+
+<h2 class="dl-h">Try it live — the Digital Lab</h2>
+<p class="muted" style="margin:-4px 0 10px">The same physics as the lab, with sliders. Predict, then check; the full catalogue is in the <a href="../digital-lab.html">Digital Lab</a>.</p>
+<div class="callout"><span class="ttl">pid</span>Lab 2's two fixes are clamping and filtered D. Make the hiss appear (noise 0.05, Kd 6, filter off) and the lurch (Ki 20, hold+release, clamp off) here first; then implement the cure in StudentController and show the same before/after. <a href="../digital-lab.html#pid">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="pid"></div>
+
+<h3>Self-check</h3>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="a"/><label>From a 20° tilt the final attitude is within 0.1° of level.</label></li>
+  <li><input type="checkbox" data-id="b"/><label>With <code>kd_att</code> set to zero, I saw it oscillate (proving D is the damping).</label></li>
+  <li><input type="checkbox" data-id="c"/><label>I can explain why we damp with <code>-omega</code> instead of differentiating the angle error.</label></li>
+  <li><input type="checkbox" data-id="d"/><label>I understand the quad still drifts in position — and why that needs next week's outer loop.</label></li>
+</ul>
+
+<!-- ============ 5. GO FURTHER ============ -->
+<h2>5 · Going further (optional)</h2>
+<ul>
+  <li><b>Damping sweep.</b> Re-run with \(K_d \in \{8, 16, 28, 50\}\). Plot settling time vs \(K_d\); find where overshoot disappears (\(\zeta\!\approx\!1\)).</li>
+  <li><b>Yaw step.</b> Change <code>yaw</code> in the reference to 30° and confirm the wrap term keeps the turn short.</li>
+  <li><b>Break it.</b> Set \(K_p=600\). What happens, and which actuator limit is it hitting? (Look at <code>log.f</code> — the per-motor thrusts saturating at <code>f_max</code>.)</li>
+</ul>
+
+<!-- ============ DELIVERABLE / SUBMIT ============ -->
+<h2>6 · Deliverable &amp; submission</h2>
+<table class="rubric">
+  <tr><th>Criterion</th><th>What we look for</th><th>Weight</th></tr>
+  <tr><td>Correct inner loop</td><td>PD law with wrapped yaw error; returns to level from a tilt</td><td>50%</td></tr>
+  <tr><td>Tuning &amp; result</td><td>Sensible gains (no sustained oscillation); the checkpoint plot</td><td>25%</td></tr>
+  <tr><td>Understanding</td><td>One short paragraph: why attitude is the inner loop &amp; what \(K_p,K_d\) do</td><td>25%</td></tr>
+</table>
+
+<div class="submit-box">
+  <h3>📤 Submit on the course platform</h3>
+  <p style="margin:0 0 10px;font-size:14px">⭐ <b>This submission is graded (5%).</b> Full requirements &amp; rubric: <a href="../assignments/lab2.html">Lab 2 assignment brief</a>.</p>
+  <div class="row">
+    <div>What</div><div><code>student.py</code> + <code>wk5_attitude.png</code> + a 3–5 line note (one PDF or zip)</div>
+    <div>Filename</div><div><code>MLTE03_Wk5_&lt;studentID&gt;.zip</code></div>
+    <div>Where</div><div>the <a href="https://course.ainrobotics.com/mlte03/">course platform</a> → <i>Week 5 Lab</i> upload box (log in at the Ken Sir course hub; every version you upload is kept)</div>
+    <div>Deadline</div><div><span class="tofill">date / time — TO FILL</span> (before Week 6)</div>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin:10px 0 0">Submissions go through the course platform (<a href="https://course.ainrobotics.com/mlte03/">course.ainrobotics.com/mlte03/</a>) — log in at the Ken Sir course hub; nothing is uploaded to this static site itself.</p>
+</div>
+
+<p style="margin:30px 0;color:var(--muted)">Next week → <a href="../index.html#weeks">Week 6: the outer position loop</a>. You keep editing the
+   <em>same</em> <code>StudentController</code> — by then it holds a setpoint, and by the final project it flies a mission.</p>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<!-- KaTeX auto-render for the inline math -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

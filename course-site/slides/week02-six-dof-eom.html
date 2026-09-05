@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 2 — Rigid-body 6-DOF EoM · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+
+<style>
+  .reveal .attitude-demo { font-size: 15px; margin: 6px 0; }
+  .reveal .attitude-demo canvas { height: 180px; }
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 2 · Rigid-body 6-DOF EoM<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1. TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Rigid-Body 6-DOF Equations of Motion</h1>
+    <p class="tp-sub">剛體六自由度運動方程</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 2 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. The session plan follows; keep this up while people settle.</aside>
+</section>
+
+<!-- 2. WHERE WE ARE -->
+<section>
+  <p class="eyebrow">Recap → today</p>
+  <h2>From frames to a flying model</h2>
+  <div class="cols">
+    <ul>
+      <li><b>Wk 1:</b> world vs body frame, the rotation matrix \(R\), Euler angles &amp; quaternions.</li>
+      <li><b>Today:</b> assemble the full nonlinear model \( \dot{\mathbf{x}}=f(\mathbf{x},\mathbf{u}) \).</li>
+      <li><b>Soon:</b> trim &amp; linearise it (Wk 3–4), then close loops around it (Wk 5+).</li>
+    </ul>
+    <div class="box">
+      <b>One model, all term:</b><br/>
+      this \(f(\mathbf{x},\mathbf{u})\) is what every controller you write will steer. Get it exactly right now.
+    </div>
+  </div>
+  <aside class="notes">Tie back to 01_open_loop.py — the model already tips over with a torque bias; that motivates control.</aside>
+</section>
+
+
+
+<!-- 2b. AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan</h2>
+<table class="agenda">
+<tr><th>Clock</th><th>Segment</th><th></th></tr>
+<tr><td class="t">00:00</td><td>Recap: frames &amp; rotations quiz redux</td><td>10&#8242;</td></tr>
+<tr><td class="t">00:10</td><td><b>Block A</b> — the 12-state vector · translational dynamics</td><td>40&#8242;</td></tr>
+<tr><td class="t">00:50</td><td>Concept check</td><td>10&#8242;</td></tr>
+<tr><td class="t">01:00</td><td><b>Block B</b> — rotational kinematics &amp; Euler&#39;s equation</td><td>30&#8242;</td></tr>
+<tr class="break"><td class="t">01:30</td><td>Break</td><td>10&#8242;</td></tr>
+<tr><td class="t">01:40</td><td>Lab briefing — re-derive <code>state_derivative</code></td><td>10&#8242;</td></tr>
+<tr class="lab"><td class="t">01:50</td><td><b>Lab session</b>: own the model (&lt; 1e-9 vs reference)</td><td>60&#8242;</td></tr>
+<tr><td class="t">02:50</td><td>Debrief + milestone board</td><td>10&#8242;</td></tr>
+</table>
+</section>
+
+<!-- 2c. WHY 12 -->
+<section>
+  <p class="eyebrow">Block A · the design decision behind the state</p>
+  <h2>Why exactly these 12 numbers?</h2>
+  <div class="cols">
+    <ul class="small">
+      <li><b>State = the minimal memory that makes the future computable.</b> Position without velocity cannot predict; attitude without rates cannot predict.</li>
+      <li>6 DOF × (configuration + rate) = 12. Second-order physics, first-order bookkeeping.</li>
+      <li>Everything later — \( (A,B) \), LQR's \(K\), the Kalman belief, the MPC prediction — is a function <i>of this vector</i>.</li>
+    </ul>
+    <div class="box small"><b>Wk-13 preview:</b> give a learning agent position without velocity and identical-looking states demand different actions — the Markov property dies. Today's argument, in probabilistic clothes.</div>
+  </div>
+</section><!-- SS 1 -->
+<section class="dense">
+  <p class="eyebrow">The idea behind the whole week</p>
+  <h2>State space: turning physics into \( \dot{\mathbf x} = f(\mathbf x, \mathbf u) \)</h2>
+  <div class="fig plain" data-diagram="statevector"><p class="cap">The 12 numbers, grouped by what they mean. Left half is where you are; right half is how you are pointing. The amber arc is the only coupling — and it runs one way.</p></div>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>A <b>state-space model</b> answers one question: given where I am now and what I do now, where am I an instant later?</li>
+    <li>Physics gives second-order laws (\( F = ma \)). Stacking position <i>and</i> velocity turns them into first-order — the form every controller, estimator and simulator wants.</li>
+    <li>\( \mathbf u = (T, \tau_x, \tau_y, \tau_z) \): four inputs against twelve states. <b>Underactuated</b>, and that word will shape every design decision from Week 5 on.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why first-order matters.</span>
+  RK4 integrates first-order systems. Linearisation produces \( (A,B) \) from first-order systems. Kalman filters propagate first-order systems. MPC discretises first-order systems. One normal form, five downstream tools — this is the highest-leverage bookkeeping in engineering.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Frame the week as 'build the f'. Everything after Wk 2 consumes this f — say which weeks consume it and how.</aside>
+</section>
+
+<!-- SS 2 -->
+<section>
+  <p class="eyebrow">Prerequisite, made explicit</p>
+  <h2>The cross product, and the hat operator</h2>
+  <div class="cols top">
+    <div>
+  <p>The cross product appears twice this week — in the transport theorem and in Euler's equation. Written as a matrix it becomes ordinary linear algebra:</p>
+  \[ \mathbf a \times \mathbf b = \widehat{\mathbf a}\,\mathbf b, \qquad \widehat{\mathbf a} = \begin{bmatrix} 0 & -a_3 & a_2 \\ a_3 & 0 & -a_1 \\ -a_2 & a_1 & 0 \end{bmatrix} \]
+  <ul class="small">
+    <li>\( \widehat{\mathbf a} \) is skew-symmetric: \( \widehat{\mathbf a}^\top = -\widehat{\mathbf a} \).</li>
+    <li>\( \mathbf a \times \mathbf a = \mathbf 0 \) — a vector never rotates about itself.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Check it once.</span>
+  \( \mathbf a = (0,0,1) \), \( \mathbf b = (1,0,0) \).<br/>\( \widehat{\mathbf a}\mathbf b = \begin{bmatrix} 0&-1&0\\ 1&0&0\\ 0&0&0\end{bmatrix}\begin{bmatrix}1\\0\\0\end{bmatrix} = \begin{bmatrix}0\\1\\0\end{bmatrix} \)<br/><br/>and indeed \( \mathbf e_3 \times \mathbf e_1 = \mathbf e_2 \). ✓<br/><br/>Spinning about z carries the x-axis towards y — which is exactly what a yawing quadrotor does to its own nose.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Ten minutes of prerequisite that makes both hard derivations this week readable. Do the numeric check on the board.</aside>
+</section>
+
+<!-- SS 3 -->
+<section>
+  <p class="eyebrow">Two roads to the same equations</p>
+  <h2>Newton–Euler vs Lagrange</h2>
+  <table class="data">
+    <tr><th></th><th>Newton–Euler (our road)</th><th>Lagrange</th></tr>
+    <tr><td>Starts from</td><td>forces and torques on a free body</td><td>kinetic minus potential energy</td></tr>
+    <tr><td>Bookkeeping</td><td>vectors, frames, cross products</td><td>generalised coordinates, partial derivatives</td></tr>
+    <tr><td>Gives you</td><td>every internal force explicitly</td><td>equations of motion, constraints eliminated</td></tr>
+    <tr><td>Best when</td><td>few bodies, forces are the point</td><td>many links, complicated constraints</td></tr>
+    <tr class="hl"><td>For a quadrotor</td><td><b>direct: thrust and drag ARE the inputs</b></td><td>elegant but hides the actuators</td></tr>
+  </table>
+  <p class="small">Both give an identical \( f(\mathbf x,\mathbf u) \). We take Newton–Euler because our control inputs <i>are</i> forces and torques — no translation layer between physics and actuator.</p>
+  <div class="env rmk"><span class="eh">When you will meet the other road.</span>
+  Robot manipulators (many joints, many constraints) are Lagrange territory; if you go on to arms or legged robots, expect the same physics arriving in different clothes.</div>
+
+  <aside class="notes">A one-slide orientation that prevents the 'my other course did it differently' confusion. No derivation needed.</aside>
+</section>
+
+<!-- 3. OBJECTIVES -->
+<section>
+  <p class="eyebrow">Learning objectives</p>
+  <h2>By the end of today you can…</h2>
+  <ul>
+    <li>Write the <b>Newton–Euler 6-DOF</b> model: translation in the <b>world</b> frame, rotation in the <b>body</b> frame.</li>
+    <li>Lay out the <b>12-state vector</b>: position(3), velocity(3), ZYX Euler(3), body rates(3).</li>
+    <li>Use the <b>Euler kinematics</b> \( \dot{\boldsymbol\eta} = W(\phi,\theta)\,\boldsymbol\omega \).</li>
+    <li>State the <b>Euler equation</b> \( \mathbf{I}\dot{\boldsymbol\omega} = \boldsymbol\tau - \boldsymbol\omega\times\mathbf{I}\boldsymbol\omega \).</li>
+    <li><span class="pill">Lab</span> Re-implement <code>state_derivative</code> and match the reference to \(<10^{-9}\).</li>
+  </ul>
+</section>
+
+<!-- 4. STATE VECTOR + CONVENTIONS -->
+<section>
+  <p class="eyebrow">The unknowns</p>
+  <h2>The 12-state vector</h2>
+  <div class="cols">
+    <div class="box">
+      \[ \mathbf{x}=\begin{bmatrix}\mathbf{p}\\ \mathbf{v}\\ \boldsymbol\eta\\ \boldsymbol\omega\end{bmatrix}
+         \;=\;\begin{bmatrix} x[0\!:\!3]\\ x[3\!:\!6]\\ x[6\!:\!9]\\ x[9\!:\!12]\end{bmatrix} \]
+      <ul class="muted" style="font-size:.85em;margin-top:.3em">
+        <li>\(\mathbf{p}\) — position (world) [m]</li>
+        <li>\(\mathbf{v}\) — velocity (world) [m/s]</li>
+        <li>\(\boldsymbol\eta=(\phi,\theta,\psi)\) — ZYX Euler [rad]</li>
+        <li>\(\boldsymbol\omega=(p,q,r)\) — body rates [rad/s]</li>
+      </ul>
+    </div>
+    <div class="box warn" style="font-size:.78em">
+      <b>Conventions (locked course-wide):</b>
+      <ul style="margin:.3em 0 0">
+        <li><b>z-up / ENU</b>: gravity \(-z\), thrust \(+\)body-\(z\).</li>
+        <li><b>ZYX intrinsic</b> Euler (yaw→pitch→roll).</li>
+        <li>\(R\): body→world, \(R^{-1}=R^{\top}\).</li>
+        <li>If you lift an equation from a <b>NED</b> source, flip the z-sign.</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">
+    State layout matches dynamics.py exactly — same slices the lab indexes. Stress the z-up choice:
+    Beard &amp; McLain is NED, so any equation pulled from there needs a sign flip. One convention course-wide.
+  </aside>
+</section>
+
+<!-- 4a. FORCES MENTAL PICTURE -->
+<section>
+  <p class="eyebrow">Mental picture first</p>
+  <h2>Two forces. That's the whole inventory.</h2>
+  <div class="fig plain" data-diagram="forces"><p class="cap">Gravity at the CoM (attitude-blind), total thrust along body-z (attitude-slaved), and thrust <i>differences</i> as torques.</p></div>
+  <p class="small muted" style="margin-top:.4em">Hold this picture while we derive: every term that appears on the next slides must point at something in this drawing — if it doesn't, we made an algebra mistake.</p>
+  <aside class="notes">Discipline to model: physics picture first, then symbols. Ask "where is drag?" — we neglect it at our speeds; it returns as a disturbance in Wk 9's wind runs.</aside>
+</section>
+
+<!-- 4b. DERIVE TRANSLATIONAL -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill cyan">interactive</span></p>
+  <h2>Newton, one honest step at a time</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>\( m\,\dot{\mathbf v} = \sum \mathbf F \)</span>
+      <span class="dwhy"><b>Newton, world frame.</b> Sum every real force on the airframe. There are only two.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>\( \sum \mathbf F = \mathbf F_g + \mathbf F_T \), with \( \mathbf F_g = -mg\,\mathbf e_3 \)</span>
+      <span class="dwhy"><b>Gravity is easy:</b> world-down, always, attitude-independent.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">3</span>\( \mathbf F_T^{body} = T\,\mathbf e_3 \)</span>
+      <span class="dwhy"><b>Thrust is easy too — in the wrong frame.</b> Rotors only push along body-z.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">4</span>\( \mathbf F_T^{world} = R(\boldsymbol\eta)\, T\mathbf e_3 \)</span>
+      <span class="dwhy"><b>The key move:</b> Wk-1's R carries it into the world. This one multiplication is where attitude steers position — the whole premise of Wk 6.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">5</span>\( \dot{\mathbf v} = -g\mathbf e_3 + \tfrac{1}{m} R\, T\mathbf e_3 \)</span>
+      <span class="dwhy"><b>Divide by m, done.</b> Three lines of NumPy in <code>dynamics.py</code> — and you just derived them.</span></div>
+  </div>
+  <div class="turn fragment" style="margin-top:.5em"><span class="tt">Your turn (90 s)</span> — set \( \phi=\theta=0 \) and write \( \dot{\mathbf v} \) by hand. Then tilt to \( \theta \): which world component appears first, and with what sign? Check against slide 4's small-angle result next week.</div>
+  <aside class="notes">Advance one fragment at a time; make them predict step 4 before revealing. The dwhy column is the narration — resist reading the math aloud without it.</aside>
+</section>
+
+<!-- 5. TRANSLATIONAL DYNAMICS -->
+<section>
+  <p class="eyebrow">Newton · world frame</p>
+  <h2>Translational dynamics</h2>
+  <p>Position just integrates velocity, \( \dot{\mathbf{p}}=\mathbf{v} \). Newton's law gives the acceleration:
+     gravity pulls down, thrust acts along <b>+body-\(z\)</b> and is rotated into the world by \(R\):</p>
+  \[ \dot{\mathbf{v}} \;=\; \begin{bmatrix}0\\0\\-g\end{bmatrix} \;+\; \frac{1}{m}\,R(\phi,\theta,\psi)\begin{bmatrix}0\\0\\T\end{bmatrix} \]
+  <div class="box" style="margin-top:.3em">
+    This is exactly <code>quadsim.dynamics</code>:
+    <br/><code>accel = np.array([0,0,-g]) + (R @ np.array([0,0,T])) / m</code>
+  </div>
+  <p class="muted" style="margin-top:.4em">At hover, level: \(R=I\) ⇒ \(\dot{\mathbf v}=(0,0,T/m-g)\), so \(T=mg\) cancels gravity.</p>
+
+  <aside class="notes">
+    Emphasise the only coupling into translation is through R(eta) — attitude steers position. That is
+    the underactuation we exploit in Week 5/6. Note z-up means the thrust term is +; a NED model would read -g flipped.
+  </aside>
+</section>
+
+<!-- FR 1 -->
+<section>
+  <p class="eyebrow">A question worth two minutes</p>
+  <h2>Is the ground an inertial frame?</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Newton's laws hold in an <b>inertial</b> (non-accelerating, non-rotating) frame. The Earth rotates once per day — so strictly, no.</li>
+    <li>Coriolis acceleration \( 2\boldsymbol\Omega_E \times \mathbf v \) with \( \Omega_E = 7.3\times10^{-5} \) rad/s. At \( v = 5 \) m/s: \( \approx 7\times10^{-4} \) m/s².</li>
+    <li>Compare to what our controller fights: gusts at \( \sim 1 \) m/s², thrust changes at \( \sim 5 \) m/s². Coriolis is <b>three orders of magnitude below the noise floor</b>.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">So the answer is: yes, for us.</span>
+  We call the room inertial and move on — but we do it <i>knowingly</i>, with a number. That habit is the difference between an approximation and a hope.<br/><br/><b>When it stops being true:</b> long-range aircraft (Coriolis biases the trajectory), inertial navigation over minutes (the error integrates twice), and anything orbital. If you go into INS work, this term comes back with interest.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Thirty seconds of rigour with a real number. Students who go on to navigation will meet this again; the rest learn the habit of pricing an assumption.</aside>
+</section>
+
+<!-- NL 1 -->
+<section>
+  <p class="eyebrow">Where the difficulty actually is</p>
+  <h2>Which terms are nonlinear — a catalogue</h2>
+  <table class="data">
+    <tr><th>Term</th><th>Nonlinear in</th><th>Severity near hover</th><th>Who has to care</th></tr>
+    <tr><td>\( R(\boldsymbol\eta)\,T\mathbf e_3 \)</td><td>products of \( \sin,\cos \) of angles <i>and</i> \( T \)</td><td>mild (1% at 15°)</td><td>everyone — this is the tilt map</td></tr>
+    <tr><td>\( \boldsymbol\omega \times \mathbf I \boldsymbol\omega \)</td><td>quadratic in \( \boldsymbol\omega \)</td><td>negligible (0.15%)</td><td>aerobatic flight, mission M2</td></tr>
+    <tr><td>\( W(\boldsymbol\eta) \)</td><td>\( \tan\theta \), \( 1/\cos\theta \)</td><td>mild, then catastrophic</td><td>anyone near 90° pitch</td></tr>
+    <tr><td>\( f_i = k_f\Omega_i^2 \)</td><td>quadratic in rotor speed</td><td>hidden — we command \( f \) directly</td><td>firmware, motor calibration</td></tr>
+    <tr class="hl"><td>actuator limits \( 0 \le f_i \le f_{max} \)</td><td>not smooth at all</td><td><b>whenever you saturate</b></td><td><b>everyone, Weeks 3 and 11</b></td></tr>
+  </table>
+  <p class="small">Note the last row. Saturation is not a mild nonlinearity you can Taylor-expand away — it is a <i>hard corner</i>. That is why clamping an LQR is unsatisfying and why MPC exists.</p>
+  <div class="env rmk"><span class="eh">The strategy of the whole course.</span>
+  Linearise the mild ones (Weeks 4–7), respect the hard one explicitly (Weeks 11–12), and learn the residue from data when modelling gives out (Weeks 13–14). Three responses to nonlinearity, in escalating order of cost.</div>
+
+  <aside class="notes">This table is the syllabus explained through one lens. Students see why the course is ordered the way it is.</aside>
+</section>
+
+<!-- EQ 1 -->
+<section class="dense">
+  <p class="eyebrow">Solving \( f(\mathbf x, \mathbf u) = \mathbf 0 \)</p>
+  <h2>Equilibrium: what 'hover' means algebraically</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>require \( \dot{\mathbf x} = \mathbf 0 \) for all twelve components</span>
+      <span class="dwhy"><b>Definition of equilibrium:</b> nothing changes. Twelve equations; we solve for the state and input that satisfy them.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>\( \dot{\mathbf p} = \mathbf v = \mathbf 0 \), \( \dot{\boldsymbol\eta} = W\boldsymbol\omega = \mathbf 0 \Rightarrow \boldsymbol\omega = \mathbf 0 \)</span>
+      <span class="dwhy"><b>Six equations spent immediately.</b> Not moving, not rotating. \( W \) is invertible near hover, so \( \boldsymbol\omega = 0 \) follows.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">3</span>\( \mathbf I \dot{\boldsymbol\omega} = \boldsymbol\tau - \boldsymbol\omega\times\mathbf I\boldsymbol\omega = \mathbf 0 \Rightarrow \boldsymbol\tau = \mathbf 0 \)</span>
+      <span class="dwhy"><b>Three more.</b> With \( \boldsymbol\omega = 0 \) the gyroscopic term vanishes, so equilibrium needs zero torque.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">4</span>\( -g\mathbf e_3 + \tfrac{1}{m}R\,T\mathbf e_3 = \mathbf 0 \)</span>
+      <span class="dwhy"><b>The last three.</b> Thrust must exactly cancel gravity — as a <i>vector</i>, which constrains direction as well as magnitude.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">5</span>\( \phi = \theta = 0 \), \( \psi \) free, \( T = mg = 6.38 \) N</span>
+      <span class="dwhy"><b>Solve.</b> Level attitude is forced (thrust must point up), yaw is free (a hovering quad may face anywhere), and thrust is pinned. <b>The trim point every later design linearises about.</b></span></div>
+  </div>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">A whole family, not a point.</span>
+  \( \psi \) free and \( (x,y,z) \) free means hover is a <b>4-parameter family</b> of equilibria, not one point. That is why position and yaw need <i>outer</i> loops to pick a member of the family, while attitude and altitude need <i>inner</i> loops to stay on it.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Per motor.</span>
+  \( T = mg = 0.65 \times 9.81 = 6.38 \) N over four motors \( \Rightarrow 1.59 \) N each, against \( f_{max} = 4 \) N. Thrust-to-weight ratio \( = 16/6.38 \approx 2.5 \) — the number that decides how aggressively you can ever fly.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The '4-parameter family' observation is the cleanest justification of the cascade that exists; it comes free from the equilibrium algebra.</aside>
+</section>
+
+<!-- TR 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Centre of mass — why gravity gets no vote on rotation</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">Definition.</span>
+  \( \mathbf r_{cm} = \frac{1}{m}\int \mathbf r \, dm \). Take moments about it and gravity contributes <b>zero</b> net torque, because \( \int (\mathbf r - \mathbf r_{cm}) \times \mathbf g \, dm = \mathbf 0 \).</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">And when it moves.</span>
+  Clip a 20 g payload 3 cm off-centre on a 420 g aircraft: the CoM shifts by \( 20 \times 3 / 440 \approx 0.14 \) cm, and the thrust line now sits 1.4 mm off the CoM. Torque \( = 4.1\,\text{N} \times 0.0014\,\text{m} \approx 0.006 \) N·m — small, <b>constant</b>, and exactly the kind of bias an integrator exists to erase (Week 5, fix #6).</div>
+    </div>
+  </div>
+  <p class="small">So: gravity acts at the CoM ⇒ no righting moment ⇒ <b>a quadrotor has no passive stability whatsoever</b>. The picture in Week 1 was not rhetorical.</p>
+  <div class="turn"><span class="tt">(2 min)</span> — Your team aircraft with the battery mounted 1 cm rearward: estimate the constant pitch torque. Is it inside your motors' trim authority? <span class="muted">(It will be — but knowing the number is why your aircraft trims cleanly instead of mysteriously.)</span></div>
+
+  <aside class="notes">Concrete, small numbers. This slide is the intellectual root of 'why does my quad drift in one direction' — the commonest hardware complaint.</aside>
+</section>
+
+<!-- TR 2 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Momentum, angular momentum, and what a torque changes</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Linear: \( \mathbf p = m\mathbf v \), and \( \dot{\mathbf p} = \sum \mathbf F \). Mass is a scalar — push and it goes that way.</li>
+    <li>Angular: \( \mathbf L = \mathbf I \boldsymbol\omega \), and \( \dot{\mathbf L} = \sum \boldsymbol\tau \). Inertia is a <b>tensor</b> — so \( \mathbf L \) need not point along \( \boldsymbol\omega \).</li>
+    <li>That single asymmetry is the entire reason rotational dynamics feels strange, and why the gyroscope in the next photo behaves as it does.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">See the asymmetry.</span>
+  With \( \mathbf I = \mathrm{diag}(2.3, 2.3, 4.0)\times10^{-3} \) and \( \boldsymbol\omega = (1,0,1) \) rad/s:<br/>\( \mathbf L = (2.3, 0, 4.0)\times10^{-3} \).<br/><br/>\( \boldsymbol\omega \) points 45° between x and z; \( \mathbf L \) points 60°. <b>They disagree</b> — and the disagreement is precisely what \( \boldsymbol\omega \times \mathbf I \boldsymbol\omega \) accounts for.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Give the numeric L vs ω angle; it turns an abstract statement into something students can verify in three lines of NumPy.</aside>
+</section>
+
+<!-- 6. ROTATIONAL KINEMATICS -->
+<section>
+  <p class="eyebrow">Kinematics</p>
+  <h2>Euler-angle kinematics: \( \dot{\boldsymbol\eta}=W\boldsymbol\omega \)</h2>
+  <p>Body rates \(\boldsymbol\omega=(p,q,r)\) are <b>not</b> the Euler-angle rates. The matrix \(W=\)<code>euler_rate_matrix</code> converts:</p>
+  \[ \begin{bmatrix}\dot\phi\\\dot\theta\\\dot\psi\end{bmatrix}
+     = \underbrace{\begin{bmatrix}
+        1 & \sin\phi\tan\theta & \cos\phi\tan\theta\\
+        0 & \cos\phi & -\sin\phi\\
+        0 & \sin\phi/\cos\theta & \cos\phi/\cos\theta
+     \end{bmatrix}}_{W(\phi,\theta)}
+     \begin{bmatrix}p\\q\\r\end{bmatrix} \]
+  <div class="cols" style="font-size:.8em;margin-top:.3em">
+    <div class="box">Near hover \(\phi,\theta\approx0\Rightarrow W\approx I\), so \( \dot{\boldsymbol\eta}\approx\boldsymbol\omega \).</div>
+    <div class="box warn"><b>Gimbal lock:</b> \(W\) blows up at \(\theta=\pm90°\) (the \(1/\cos\theta\)). The motivation for quaternions.</div>
+  </div>
+  <aside class="notes">
+    This W is verbatim euler_rate_matrix(phi,theta). Point out it only depends on phi,theta (not psi),
+    and the singularity at pitch ±90° — exactly the ZYX gimbal-lock the conventions sheet flags.
+  </aside>
+</section>
+
+<!-- W 1 -->
+<section>
+  <p class="eyebrow">The bridge, drawn</p>
+  <h2>Three different rate-like objects</h2>
+  <div class="fig plain" data-diagram="wmatrix"><p class="cap">Gyro rates, Euler rates, and angles are three distinct things. W is the map between the first two — and it is the one that can blow up.</p></div>
+  <div class="turn"><span class="tt">(90 s)</span> — Before the derivation: your quad is pitched 60° nose-up and yawing. Does the gyro's \( r \) reading equal \( \dot\psi \)? <span class="muted">(No — at 60° pitch the body's z-axis is 60° away from world-z, so a world-frame yaw shows up spread across q and r. This is exactly what W untangles.)</span></div>
+
+  <aside class="notes">Picture and prediction before algebra. The 60° example makes the need for W physical rather than notational.</aside>
+</section>
+
+<!-- WIDGET wmatrix -->
+<section>
+  <p class="eyebrow">Block B · interactive</p>
+  <h2>η̇ = W(η)·ω — the matrix, the rates, and 1/cosθ</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="wmatrix"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> Hold r = 1 rad/s. Before you move θ: at what pitch does ψ̇ reach 2 rad/s? Check, then push to 85° and say what has actually gone wrong — the aircraft, or the coordinates?</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#wmatrix">Digital Lab → wmatrix</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">The gain curve is the whole case for quaternions in one picture. Keep it short; Week 1's rot3d already showed the lock, this shows the rate blow-up.</aside>
+</section>
+
+<!-- W 2 -->
+<section class="dense">
+  <p class="eyebrow">Derivation · click to advance <span class="pill">interactive</span></p>
+  <h2>Building \( W(\boldsymbol\eta) \) from three partial turns</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>\( \boldsymbol\omega = \dot\phi\,\mathbf e_x'' + \dot\theta\,\mathbf e_y' + \dot\psi\,\mathbf e_z \)</span>
+      <span class="dwhy"><b>Each Euler rate spins about a different axis.</b> Roll about the twice-rotated x, pitch about the once-rotated y, yaw about the original z — that is what 'intrinsic' means, written as vectors.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>express all three in <b>body</b> coordinates</span>
+      <span class="dwhy">The gyro lives in the body frame, so every contribution must be resolved there. \( \mathbf e_x'' \) is already body-x; the other two need rotating back through \( R_x(\phi) \) and \( R_x(\phi)R_y(\theta) \).</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">3</span>\( \boldsymbol\omega = \begin{bmatrix} 1 & 0 & -s_\theta \\ 0 & c_\phi & c_\theta s_\phi \\ 0 & -s_\phi & c_\theta c_\phi \end{bmatrix} \begin{bmatrix} \dot\phi \\ \dot\theta \\ \dot\psi \end{bmatrix} \)</span>
+      <span class="dwhy"><b>Collect the columns.</b> Note this is the map in the <i>easy</i> direction: Euler rates → body rates. No divisions anywhere, so nothing can blow up here.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>invert it: \( \dot{\boldsymbol\eta} = W(\boldsymbol\eta)\,\boldsymbol\omega \)</span>
+      <span class="dwhy"><b>But we measure \( \boldsymbol\omega \) and want \( \dot{\boldsymbol\eta} \)</b>, so we need the inverse — and inverting introduces \( 1/\det \). The determinant is \( \cos\theta \).</span></div>
+    <div class="dstep fragment"><span><span class="dnum">5</span>\( W = \begin{bmatrix} 1 & s_\phi t_\theta & c_\phi t_\theta \\ 0 & c_\phi & -s_\phi \\ 0 & s_\phi/c_\theta & c_\phi/c_\theta \end{bmatrix} \)</span>
+      <span class="dwhy"><b>There is the singularity, and now you know its provenance:</b> not a physical failure, but a matrix inverse losing rank at \( \theta = \pm 90^\circ \). The aircraft is fine; the chart is not.</span></div>
+  </div>
+
+  <aside class="notes">This is the derivation students most often meet as a quoted result. Deriving it converts gimbal lock from folklore into a determinant.</aside>
+</section>
+
+<!-- W 3 -->
+<section>
+  <p class="eyebrow">Read the consequences</p>
+  <h2>What \( W \) costs you, in three regimes</h2>
+  <table class="data">
+    <tr><th>Regime</th><th>\( W \) behaves</th><th>Engineering consequence</th></tr>
+    <tr><td>Near hover, \( |\theta| &lt; 15^\circ \)</td><td>\( W \approx I \), error &lt; 4%</td><td>you may treat \( \dot{\boldsymbol\eta} \approx \boldsymbol\omega \) — most of our controllers do</td></tr>
+    <tr><td>Aggressive, \( |\theta| \sim 45^\circ \)</td><td>off-diagonal terms real</td><td>ignoring \( W \) mistunes the loop; racing controllers do not ignore it</td></tr>
+    <tr class="hl"><td>\( |\theta| \to 90^\circ \)</td><td>\( 1/\cos\theta \to \infty \)</td><td><b>Euler-based code produces garbage</b>; quaternion or matrix code is untroubled</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">The number.</span>
+  At \( \theta = 89^\circ \), \( 1/\cos\theta = 57 \). A benign gyro reading of \( q = 0.1 \) rad/s becomes a claimed \( \dot\psi \) of \( 5.7 \) rad/s — 327°/s of yaw rate that is not happening. Integrate that for one time step and the attitude estimate is destroyed.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">What real autopilots do.</span>
+  Store attitude as a quaternion or matrix (no singularity), integrate with \( \dot R = R\widehat{\boldsymbol\omega} \) from Week 1, and convert to Euler angles only for display and for gentle-flight control laws. quadsim uses Euler angles deliberately — they are transparent for teaching, and we stay inside the safe regime all term.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Q4 of last week's take-home set is exactly the 89° computation — collect answers here.</aside>
+</section>
+
+<!-- 6c. GYRO MENTAL PICTURE -->
+<section class="dense">
+  <p class="eyebrow">Mental picture first</p>
+  <h2>Why rotation refuses to be intuitive</h2>
+  <div class="cols">
+    <figure class="photo"><img src="../assets/img/gyroscope.gif" alt=""/><figcaption>A spinning gyroscope precessing under gravity: push it one way, it moves another. Angular momentum, not mass, decides the response. <span class="cr">Wikimedia Commons, public domain.</span></figcaption></figure>
+    <ul class="small">
+      <li>Linear motion: push → accelerate along the push. Rotation: torque → the spin <i>axis itself</i> migrates. The culprit is the \( \boldsymbol\omega \times \mathbf I \boldsymbol\omega \) term you are about to meet.</li>
+      <li>A quad near hover spins <i>slowly</i> (small \( \boldsymbol\omega \)), so this drama is muted — that smallness is a design gift Wk 5 will exploit.</li>
+      <li>But in aggressive flight (racing, flips) the term wakes up — and fixed-gain controllers tuned at hover start missing. File that for Week 11's requirements-review example, M2.</li>
+    </ul>
+  </div>
+  <aside class="notes">Let the gif run while talking. The point isn't precession mechanics — it's respect: rotational dynamics has a term with no translational analogue, and our later "drop it near hover" must be a *measured* decision (the worked example two slides on).</aside>
+</section>
+
+<!-- 7. ROTATIONAL DYNAMICS -->
+<section>
+  <p class="eyebrow">Euler · body frame</p>
+  <h2>Rotational dynamics (Euler's equation)</h2>
+  <p>Angular momentum in the <b>body</b> frame. With diagonal inertia \(\mathbf{I}\) and body torque \(\boldsymbol\tau\):</p>
+  \[ \mathbf{I}\,\dot{\boldsymbol\omega} \;=\; \boldsymbol\tau \;-\; \boldsymbol\omega\times(\mathbf{I}\boldsymbol\omega)
+     \qquad\Longrightarrow\qquad
+     \dot{\boldsymbol\omega} = \mathbf{I}^{-1}\!\big(\boldsymbol\tau - \boldsymbol\omega\times\mathbf{I}\boldsymbol\omega\big) \]
+  <div class="box" style="margin-top:.3em">
+    Verbatim from <code>quadsim.dynamics</code>:
+    <br/><code>omega_dot = I_inv @ (tau - np.cross(omega, I @ omega))</code>
+  </div>
+  <p class="muted" style="margin-top:.4em">The \(\boldsymbol\omega\times\mathbf{I}\boldsymbol\omega\) term is the <b>gyroscopic / Coriolis</b> coupling — small near hover, but it's real and the lab will catch you if you drop it.</p>
+  <aside class="notes">
+    Body-frame because then I is constant (diagonal). The cross-product term is what students most often
+    forget — and it's exactly what pushes their error above 1e-9 in the lab. Tie forward to Week 5 where
+    we *cancel* this term to design the attitude PD law.
+  </aside>
+</section>
+
+<!-- WIDGET eulereq -->
+<section>
+  <p class="eyebrow">Block B · interactive</p>
+  <h2>Euler's equation, live — ω × Iω with no torque at all</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="eulereq"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> Set I₁ = I₂ and spin about y: which components change over 6 s? Then make I₁ ≠ I₂ — write down which axis you expect to go unstable before you drag.</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#eulereq">Digital Lab → eulereq</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">Symmetric case first (quad near hover: nothing happens — the design gift). Then the intermediate-axis instability. Two minutes.</aside>
+</section>
+
+
+
+<!-- 7a. INERTIA FORMAL -->
+<section>
+  <p class="eyebrow">The object in the middle</p>
+  <h2>The inertia tensor — and how your team will measure one</h2>
+  <div class="env defn"><span class="eh">Definition.</span>
+  \( \mathbf I = \int_{\text{body}} \big( \lVert \mathbf r \rVert^2 I_{3} - \mathbf r \mathbf r^\top \big)\, dm \) — the rotational analogue of mass: how hard each axis is to spin. Symmetric ⇒ diagonalisable; in <b>principal axes</b> it is \( \mathrm{diag}(I_{xx}, I_{yy}, I_{zz}) \). A symmetric X-quad's principal axes ≈ its body axes, which is why quadsim carries just three numbers: \( (2.3,\ 2.3,\ 4.0)\times 10^{-3}\ \mathrm{kg\,m^2} \).</div>
+  <div class="cols top" style="margin-top:.4em">
+    <div class="env exm"><span class="eh">Worked example <em>(bifilar pendulum — the team measurement)</em>.</span>
+    Hang the aircraft from two parallel strings (length \(L\), separation \(2d\)), twist a few degrees, time the oscillation \(T_{osc}\):
+    \[ I_{zz} = \frac{m g d^2\, T_{osc}^2}{4\pi^2 L} \]
+    With \( m=0.42 \) kg, \( d=0.10 \) m, \( L=0.60 \) m and a measured \( T_{osc}=1.42 \) s: \( I_{zz} \approx \frac{0.42\cdot 9.81\cdot 0.01\cdot 2.02}{4\pi^2\cdot 0.60} \approx 3.5\times10^{-3}\,\mathrm{kg\,m^2} \). Ten minutes with string and a stopwatch — Role 1's Wk-5 milestone.</div>
+    <div class="env exm"><span class="eh">Worked example <em>(may we drop the gyroscopic term?)</em>.</span>
+    Hover disturbance: \( \lVert\boldsymbol\omega\rVert = 0.5 \) rad/s ⇒ \( \lVert \boldsymbol\omega\times \mathbf I\boldsymbol\omega \rVert \lesssim I\,\omega^2 \approx 2.3\times10^{-3}\cdot 0.25 \approx 6\times10^{-4} \) N·m.
+    Available roll torque (Wk 3): \( \sim 0.4 \) N·m — the term is <b>0.15%</b> of authority. At a flip's \( \omega=8 \) rad/s it is ~37% and can no longer be ignored. <i>"Negligible" is a number, not a mood.</i></div>
+  </div>
+  <aside class="notes">Both examples reappear: bifilar in the team milestone; the percentage argument is the licence for Wk-5's control law dropping the term. Quote "negligible is a number" — it's the course's rigor motto.</aside>
+</section>
+
+<!-- 7b. QUIZ -->
+<section>
+  <p class="eyebrow">Concept check · 00:50</p>
+  <h2>Predict before you compute</h2>
+  <div class="quiz">
+    <div class="q">Q1 — In \( \mathbf{I}\dot{\boldsymbol\omega} = \boldsymbol\tau - \boldsymbol\omega\times \mathbf{I}\boldsymbol\omega \), set \( \boldsymbol\tau = 0 \) with \( \boldsymbol\omega \ne 0 \). Does the quad keep spinning at constant \( \boldsymbol\omega \)?</div>
+    <p class="fragment"><span class="ok">Only about a principal axis.</span> <span class="why">The gyroscopic term \( \boldsymbol\omega\times \mathbf{I}\boldsymbol\omega \) vanishes only when \( \boldsymbol\omega \) aligns with a principal axis — otherwise the spin axis itself wanders (the tennis-racket theorem lives in this term). Near hover it&#39;s small, which is why Wk 5&#39;s controller gets away with ignoring it.</span></p>
+    <div class="q fragment">Q2 — Why does gravity appear in the translational equation but never in the rotational one?</div>
+    <p class="fragment"><span class="ok">Gravity acts at the centre of mass</span> <span class="why">— zero moment arm about it, zero torque. The moment a payload shifts the CG off-centre, that stops being true: a constant disturbance torque appears, and your Wk-5 integrator (or trim) must eat it. Real aircraft, real effect — file it for the flight demo.</span></p>
+  </div>
+</section><!-- TT 1 -->
+<section>
+  <p class="eyebrow">The mechanism behind the term</p>
+  <h2>Transport theorem, drawn</h2>
+  <div class="fig plain" data-diagram="transport"><p class="cap">A vector that is constant in the rotating body still changes in the world — by exactly ω × L. That is the fee for using the frame where I is constant.</p></div>
+  <p class="small muted">Every rotating-frame equation you will meet — Coriolis in meteorology, centrifugal terms in robotics, the gyroscopic term here — is this one identity in different costumes.</p>
+
+  <aside class="notes">Draw the connection to Coriolis explicitly; students who have seen it in fluids or dynamics get a free anchor.</aside>
+</section>
+
+<!-- IN 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Where the numbers in \( \mathbf I \) come from</h2>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Point-mass estimate (do this on paper).</span>
+  Model the quad as four motors of mass \( m_r \) at radius \( l \) on the arms, plus a central body. For the X-frame, each motor sits at \( (\pm l/\sqrt2, \pm l/\sqrt 2) \):  \[ I_{xx} \approx 4 m_r (l/\sqrt2)^2 = 2 m_r l^2, \qquad I_{zz} \approx 4 m_r l^2 \]
+With \( m_r = 0.02 \) kg and \( l = 0.17 \) m: \( I_{xx} \approx 1.2\times10^{-3} \), \( I_{zz} \approx 2.3\times10^{-3} \) kg·m². Same order as quadsim's values — the rest is the frame and battery.</div>
+    </div>
+    <div>
+  <ul class="small">
+    <li><b>Always \( I_{zz} \approx 2 I_{xx} \)</b> for a planar X-frame: yaw inertia is roughly double roll/pitch, because every mass is at full radius from the z-axis but only \( 1/\sqrt2 \) from the x-axis.</li>
+    <li>Combined with yaw's tiny torque authority (Week 3), this is the double reason <b>yaw is always the slowest axis on a quadrotor</b>.</li>
+    <li>Parallel-axis theorem \( I = I_{cm} + m d^2 \) is how you add a payload's contribution — and why a payload far from centre hurts agility quadratically.</li>
+  </ul>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — Your aircraft, battery moved 4 cm outboard: by how much does \( I_{zz} \) rise? <span class="muted">(\( \Delta I = m_{bat} d^2 \); with 60 g that is \( 0.06 \times 0.0016 \approx 10^{-4} \) — about 4%. Small, but it is why competition builds obsess over mass centralisation.)</span></div>
+
+  <aside class="notes">The Izz ≈ 2 Ixx rule and the mass-centralisation point are both memorable and true; they connect theory to what students see in FPV builds online.</aside>
+</section>
+
+<!-- 7c. DERIVE EULER EQ -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill">interactive</span></p>
+  <h2>Where \( \boldsymbol\omega\times \mathbf I \boldsymbol\omega \) actually comes from</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>\( \dfrac{d\mathbf L}{dt}\Big|_{\text{world}} = \boldsymbol\tau \)</span>
+      <span class="dwhy"><b>Newton for rotation:</b> torque changes angular momentum — but the law holds in the <i>inertial</i> frame.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>\( \mathbf L = \mathbf I\,\boldsymbol\omega \), with \( \mathbf I \) constant <b>only in the body frame</b></span>
+      <span class="dwhy"><b>The dilemma:</b> the law lives in the world frame, the constant inertia lives in the body frame. We must bridge them.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">3</span>\( \dfrac{d\mathbf L}{dt}\Big|_{\text{world}} = \dfrac{d\mathbf L}{dt}\Big|_{\text{body}} + \boldsymbol\omega \times \mathbf L \)</span>
+      <span class="dwhy"><b>The transport theorem</b> — differentiating in a rotating frame costs one cross-product. This single identity is the whole trick; it will reappear in every rotating-frame problem you ever meet.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>\( \mathbf I\,\dot{\boldsymbol\omega} + \boldsymbol\omega\times \mathbf I \boldsymbol\omega = \boldsymbol\tau \)</span>
+      <span class="dwhy"><b>Substitute and rearrange — Euler's equation.</b> The gyroscopic term is not exotic physics; it is the bookkeeping fee for working where \( \mathbf I \) is constant.</span></div>
+  </div>
+  <aside class="notes">This 4-step derive kills the "magic term" feeling. Euler published it in 1765 — same Euler as the angles, same Euler as the integrator. One person, three appearances in one course.</aside>
+</section>
+
+<!-- 8. THE WHOLE MODEL -->
+<section>
+  <p class="eyebrow">Putting it together</p>
+  <h2>The full \( \dot{\mathbf{x}}=f(\mathbf{x},\mathbf{u}) \)</h2>
+  <pre style="font-size:.52em;background:#0e1a26;color:#e6edf3;border-radius:12px;padding:18px;line-height:1.55">
+   x[0:3]   p   ──►  dx[0:3]  = v                                  (world)
+   x[3:6]   v   ──►  dx[3:6]  = [0,0,-g] + R·[0,0,T]/m             (world, Newton)
+   x[6:9]   η   ──►  dx[6:9]  = W(φ,θ)·ω                           (Euler kinematics)
+   x[9:12]  ω   ──►  dx[9:12] = I⁻¹(τ - ω×Iω)                      (body, Euler eqn)
+                                       ▲
+            u = [T, τx, τy, τz]  ──────┘  (thrust + 3 body torques)
+  </pre>
+  <p class="muted" style="font-size:.8em">Four blocks, twelve numbers in, twelve out. Translation lives in the world frame; rotation in the body frame. That split is the whole trick.</p>
+  <aside class="notes">
+    This ASCII block mirrors dx[...] in state_derivative line-for-line. Have the room map each row to the
+    slice it writes. This is the picture they reconstruct from memory in the lab.
+  </aside>
+</section>
+
+<!-- 8b. EOM MAP FIG -->
+<section>
+  <p class="eyebrow">The model · drawn</p>
+  <h2>\( \dot{\mathbf x} = f(\mathbf x, \mathbf u) \) as plumbing</h2>
+
+  <div class="fig" data-diagram="eommap"><p class="cap">Two Newton–Euler halves; the violet arrow — attitude rotating thrust — is the only road from the rotational half to the translational one.</p></div>
+  <aside class="notes">Trace one signal: a roll torque → ω → φ via W(η) → R tilts → x-acceleration. Underactuation, visible.</aside>
+</section>
+
+<!-- 9. WORKED EXAMPLE -->
+<section>
+  <p class="eyebrow">Worked example · tie to the simulator</p>
+  <h2>Sanity-check at hover</h2>
+  <p>Take a level quad at rest with exactly hover thrust: \(\boldsymbol\eta=0,\ \boldsymbol\omega=0,\ \mathbf{v}=0,\ T=mg,\ \boldsymbol\tau=0\).</p>
+  <pre><code class="language-python" data-trim>import numpy as np
+from quadsim import QuadParams
+from quadsim.dynamics import state_derivative, hover_state
+
+p  = QuadParams()
+x  = hover_state(position=(0, 0, 1.0))     # level, at rest
+u  = np.array([p.weight, 0.0, 0.0, 0.0])   # T = m*g, zero torque
+dx = state_derivative(x, u, p)
+print(dx)        # -> all ~0 : a true equilibrium (hover trim)</code></pre>
+  <p class="muted" style="font-size:.8em">Every component of \(\dot{\mathbf{x}}\) is ~0 — hover is a fixed point of \(f\). Add a torque bias (\( \tau_x=0.001 \)) and \(\dot\omega\neq0\): it starts to tip — that's why we need control (Wk 5).</p>
+  <aside class="notes">
+    Run this live if you can. Then flip to 01_open_loop.py to show the same model diverging under a torque
+    bias. The point: the model is right and neutral; instability comes from the open loop, not a modelling error.
+  </aside>
+</section>
+
+<!-- WIDGET deriv12 -->
+<section class="dense">
+  <p class="eyebrow">Block B · interactive</p>
+  <h2>The 12-state derivative, term by term — and 20 ms by hand</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="deriv12"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> With T = mg and level: how many of the twelve derivatives are non-zero? Now θ = 10°: name the two that wake up and their signs, <i>then</i> press step ten times.</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#deriv12">Digital Lab → deriv12</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">This is Lab 1's forward-Euler loop, one button press at a time. Let them see z fall when θ ≠ 0 with T unchanged — the cosθ loss they will meet again in Week 6.</aside>
+</section>
+
+<!-- ASM 1 -->
+<section class="dense">
+  <p class="eyebrow">Putting it together</p>
+  <h2>The twelve equations, in the order the code writes them</h2>
+  <pre><code class="language-python">def state_derivative(x, u):
+    p, v      = x[0:3],  x[3:6]      # world position, world velocity
+    eta, om   = x[6:9],  x[9:12]     # ZYX Euler angles, body rates
+    T, tau    = u[0],    u[1:4]      # thrust magnitude, body torques
+
+    R  = rotation_matrix(*eta)                       # Wk 1
+    a  = np.array([0,0,-g]) + (R @ np.array([0,0,T])) / m     # eq. 1-3
+    ed = euler_rate_matrix(*eta[:2]) @ om            # eq. 7-9  (W matrix)
+    od = I_inv @ (tau - np.cross(om, I @ om))        # eq.10-12 (Euler)
+
+    return np.concatenate([v, a, ed, od])            # eq. 4-6 are just v</code></pre>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Lines map one-to-one onto the four blocks of the state vector. <b>If you cannot point at the line that produces \( \dot z \), you do not yet own the model.</b></li>
+    <li>Note what is <i>absent</i>: no aerodynamic drag, no motor lag, no ground effect. Each is a deliberate omission with a known cost.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Deliberate omissions, priced.</span>
+  <b>Drag</b> \( \sim 0.1 \) N at 5 m/s — matters for fast flight, negligible at hover. <b>Motor lag</b> 40 ms — matters for tuning (Wk 5), not for the physics. <b>Ground effect</b> — matters below ~0.3 m, which is exactly where your demo hovers, so we <i>name</i> it and fly higher.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Insist they can point to each equation's line. The omissions list pre-answers 'why doesn't my sim match the aircraft' in Wk 10.</aside>
+</section>
+
+<!-- ASM 2 -->
+<section>
+  <p class="eyebrow">How do you know a model is right?</p>
+  <h2>Four tests, in increasing strength</h2>
+  <ol class="small">
+    <li><b>Dimensions.</b> Every term in every row must carry the same units. Free, catches a third of errors.</li>
+    <li><b>Equilibrium.</b> At hover trim (\( \boldsymbol\eta = 0 \), \( \boldsymbol\omega = 0 \), \( T = mg \)) every derivative must be exactly zero. One assert.</li>
+    <li><b>Symmetry.</b> Roll right by \( +\phi \) and left by \( -\phi \): accelerations must mirror. Catches sign errors that equilibrium misses.</li>
+    <li><b>Conservation.</b> With zero torque and zero thrust, kinetic energy must be constant to integrator accuracy — a strong test of the gyroscopic term.</li>
+  </ol>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Test 2, concretely.</span>
+  <code>x0 = zeros(12); u0 = [m*g, 0,0,0]</code><br/><code>assert max(abs(state_derivative(x0,u0))) &lt; 1e-12</code><br/><br/>If this fails, no amount of controller tuning later will save you — you are stabilising the wrong aircraft.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Test 4, concretely.</span>
+  Free rotation, \( \boldsymbol\omega_0 = (2,1,0.5) \), \( \boldsymbol\tau = 0 \). Integrate 10 s; \( \tfrac12 \boldsymbol\omega^\top \mathbf I \boldsymbol\omega \) should drift by \( &lt; 10^{-8} \) with RK4 at 5 ms. Drop the \( \boldsymbol\omega\times\mathbf I\boldsymbol\omega \) term and watch energy walk away — the test that proves the term is real.</div>
+    </div>
+  </div>
+
+  <aside class="notes">These four tests are the graded lab's rubric in disguise. Test 4 is the elegant one — it makes the gyroscopic term audible.</aside>
+</section>
+
+<!-- ASM 3 -->
+<section>
+  <p class="eyebrow">Worked example · by hand</p>
+  <h2>Predict the aircraft's first 20 milliseconds</h2>
+  <p>State: level hover at 2 m. At \( t=0 \) the controller commands \( \tau_x = +0.02 \) N·m and holds \( T = mg \). What happens?</p>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>\( \dot p = I_{xx}^{-1}\tau_x = 0.02/2.3\times10^{-3} = 8.7 \) rad/s² (gyroscopic term ≈ 0 since \( \boldsymbol\omega = 0 \)).</li>
+    <li>After 20 ms: \( p \approx 0.174 \) rad/s, \( \phi \approx \tfrac12 (8.7)(0.02)^2 = 0.0017 \) rad \( = 0.1^\circ \).</li>
+    <li>Lateral acceleration \( \ddot y \approx -g\phi = -0.017 \) m/s² — essentially nothing yet.</li>
+    <li>Altitude: \( \cos\phi \approx 1 \), so no measurable sink.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Read the answer.</span>
+  <b>Rotation responds instantly; translation lags badly.</b> After 20 ms the aircraft has rotated a tenth of a degree and moved essentially zero.<br/><br/>Run the same numbers for 200 ms: \( \phi = 10^\circ \), \( \ddot y = -1.7 \) m/s². <b>An order of magnitude in time for two orders in effect</b> — the timescale separation of Week 6, visible in the raw model before any controller exists.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — Repeat for \( \tau_z = 0.02 \) N·m (yaw). Why is the angular acceleration smaller? <span class="muted">(\( I_{zz} \) is 1.7× larger ⇒ 5.0 rad/s². Combined with yaw's weak torque authority, yaw is doubly slow.)</span></div>
+
+  <aside class="notes">This hand-calculation IS the justification for the cascade architecture, derived four weeks early from the bare model. Land that point.</aside>
+</section>
+
+<!-- WEX 1 -->
+<section>
+  <p class="eyebrow">Worked example · numbers on \( W \)</p>
+  <h2>Same gyro reading, two attitudes</h2>
+  <p>Gyro reads \( \boldsymbol\omega = (0,\, 0,\, 0.5) \) rad/s — pure body-z rotation. What are the Euler rates?</p>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Case A — level (\( \phi=\theta=0 \)).</span>
+  \( W = I \), so \( \dot{\boldsymbol\eta} = (0,0,0.5) \).<br/><br/>Yawing at 0.5 rad/s, nothing else. Intuition confirmed.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Case B — pitched 60° (\( \theta = 60^\circ \)).</span>
+  Row 1: \( \dot\phi = c_\phi t_\theta \, r = 1 \times 1.73 \times 0.5 = 0.87 \) rad/s<br/>Row 3: \( \dot\psi = (c_\phi/c_\theta) r = 0.5/0.5 = 1.0 \) rad/s<br/><br/><b>The same physical rotation now reads as roll <i>and</i> yaw, both larger than the gyro's number.</b></div>
+    </div>
+  </div>
+  <p class="small">Nothing about the aircraft's motion changed between the two cases — only the coordinate chart used to describe it. Body rates are the physical truth; Euler rates are a description that distorts as you leave hover.</p>
+  <div class="turn"><span class="tt">(2 min)</span> — Where does the extra 'rotation' come from in Case B — is the aircraft really rolling? <span class="muted">(It is really rotating about body-z. Expressed in the Euler chart, that motion has components along both the roll and yaw <i>chart axes</i> because those axes are no longer orthogonal to each other in space. The chart distorts; the aircraft does not.)</span></div>
+
+  <aside class="notes">This is the single clearest demonstration of why W exists. The 'chart distorts, aircraft does not' phrasing is the takeaway sentence.</aside>
+</section>
+
+<!-- EXT 1 -->
+<section>
+  <p class="eyebrow">What we deliberately left out</p>
+  <h2>The model's edges, priced and named</h2>
+  <table class="data">
+    <tr><th>Neglected effect</th><th>Physical magnitude</th><th>When it bites</th><th>Course response</th></tr>
+    <tr><td>Aerodynamic drag \( \sim \tfrac12 \rho C_d A v^2 \)</td><td>~0.1 N at 5 m/s (≈1.5% of thrust)</td><td>fast flight, wind</td><td>modelled as a disturbance, Wk 9</td></tr>
+    <tr><td>Rotor gyroscopic effect</td><td>\( \sim 10^{-4} \) N·m</td><td>fast attitude changes</td><td>ignored; below torque resolution</td></tr>
+    <tr><td>Blade flapping / advance ratio</td><td>changes \( k_f \) by ~5% at speed</td><td>forward flight</td><td>named, then absorbed by feedback</td></tr>
+    <tr class="hl"><td>Ground effect</td><td>+5–15% thrust below ~1 rotor Ø</td><td>landing, low hover</td><td><b>fly demos above 0.8 m</b></td></tr>
+    <tr class="hl"><td>Motor lag \( \tau_m \approx 40 \) ms</td><td>phase loss at the crossover</td><td>tuning aggressive gains</td><td>why hardware gains &lt; sim gains, Wk 5</td></tr>
+    <tr><td>Battery sag</td><td>thrust falls ~10% over a flight</td><td>long hovers</td><td>the integrator's daily job</td></tr>
+  </table>
+  <p class="small">A model is defined as much by what it omits as by what it contains. <b>Every row above is a real effect you will observe in Week 10</b> — and being able to name the mechanism is what separates a gap analysis from a shrug.</p>
+
+  <aside class="notes">This table is the pre-written vocabulary for the Wk-10 sim-vs-real analysis. Tell them to photograph it.</aside>
+</section>
+
+<!-- UN 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Units, magnitudes, and the sanity table</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Quantity</th><th>Symbol</th><th>Our value</th><th>Feel for it</th></tr>
+    <tr><td>mass</td><td>\( m \)</td><td>0.65 kg</td><td>a large mango</td></tr>
+    <tr><td>arm</td><td>\( l \)</td><td>0.17 m</td><td>a hand span</td></tr>
+    <tr><td>inertia (roll)</td><td>\( I_{xx} \)</td><td>2.3×10⁻³ kg·m²</td><td>tiny — it spins easily</td></tr>
+    <tr><td>hover thrust</td><td>\( mg \)</td><td>6.38 N</td><td>650 g on a scale</td></tr>
+    <tr><td>max thrust</td><td>\( 4f_{max} \)</td><td>16 N</td><td>T/W ≈ 2.5</td></tr>
+    <tr><td>roll authority</td><td>\( \tau_{x,max} \)</td><td>≈0.8 N·m</td><td>≈350 rad/s² — vicious</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why keep a table like this.</span>
+  Every number you compute this term should be checked against a magnitude you can feel. A controller that asks for 50 N of thrust or 200 rad/s² of yaw is not aggressive — it is <b>wrong</b>, and the fastest way to notice is to know what 'normal' looks like.<br/><br/>\( 350 \) rad/s² is \( 20{,}000 \) °/s²: from level to 30° in about 40 ms. That is the authority your Week-5 controller is handed, and why it can be tuned to be fast.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Ask the room to guess each value before revealing. Physical intuition for magnitudes is what makes debugging fast.</aside>
+</section>
+
+<!-- CQ 2 -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Three questions before the lab</h2>
+  <div class="quiz">
+    <div class="q">Q1 — You double every motor thrust simultaneously. Which of the twelve derivatives change?</div>
+    <p class="fragment"><span class="ok">Only \( \dot{\mathbf v} \) — and only its magnitude along body-z.</span> <span class="why">Equal thrusts produce zero torque (the mixer rows for \( \tau \) sum to zero), so rotation is untouched. This is exactly the decoupling that makes altitude a separate loop in Week 6.</span></p>
+    <div class="q fragment">Q2 — At \( \boldsymbol\omega = (0,0,5) \) rad/s (fast yaw), is \( \boldsymbol\omega \times \mathbf I\boldsymbol\omega \) zero or not?</div>
+    <p class="fragment"><span class="ok">Zero.</span> <span class="why">\( \mathbf I\boldsymbol\omega = (0,0,0.02) \) is parallel to \( \boldsymbol\omega \), and \( \mathbf a \times \mathbf a = \mathbf 0 \). Rotation about a <i>principal axis</i> is gyroscopically quiet — the term only wakes up on combined rotations.</span></p>
+    <div class="q fragment">Q3 — Your <code>state_derivative</code> passes the hover-equilibrium test but fails the mirror-symmetry test. Where would you look first?</div>
+    <p class="fragment"><span class="ok">A sign, almost certainly in \( W \) or in the \( R \) construction.</span> <span class="why">Equilibrium tests only the zero point, where signs vanish. Symmetry probes the neighbourhood — which is why the four-test ladder is ordered the way it is.</span></p>
+  </div>
+
+  <aside class="notes">Q2 is the subtle one and is a favourite exam question; make them justify with the parallel-vectors argument, not by computing.</aside>
+</section>
+
+<!-- TH 2 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Show \( \widehat{\mathbf a}^\top = -\widehat{\mathbf a} \) and use it to prove \( \mathbf a^\top(\mathbf a \times \mathbf b) = 0 \). What does that identity say physically about gyroscopic torque and rotational energy?</li>
+    <li>Derive the hover trim for an aircraft whose CoM is offset by \( d \) from the geometric centre. Show the trim now requires a non-zero \( \boldsymbol\tau \), and compute it for \( d = 5 \) mm.</li>
+    <li>Compute \( I_{xx} \) and \( I_{zz} \) for the four-point-mass model, then add a 60 g battery as a point mass at the centre. Which inertia changes, and why not the other?</li>
+    <li>At \( \phi = 30^\circ \), \( \theta = 45^\circ \), a gyro reads \( (0.2, 0.1, 0.3) \) rad/s. Compute \( \dot{\boldsymbol\eta} \). Which Euler rate is most amplified, and can you say why from the matrix structure?</li>
+    <li>Write the energy check of Test 4 as five lines of NumPy. Run it with and without the gyroscopic term and report the drift in each case.</li>
+    <li>The model neglects drag. Estimate the steady-state error in horizontal velocity this causes for a controller that assumes zero drag while flying at 4 m/s, given \( C_dA \approx 0.01 \) m².</li>
+  </ol>
+  <div class="box warn">Question 5 is the one to do first — it is a direct dry-run of the graded verification in today's lab, and the result is genuinely satisfying to watch.</div>
+
+  <aside class="notes">Q1's physical reading (gyroscopic torque does no work) is a lovely result worth a minute next week.</aside>
+</section>
+
+<!-- ARC 2 -->
+<section class="dense">
+  <p class="eyebrow">Where this model goes</p>
+  <h2>Every later week is a customer of today's \( f \)</h2>
+  <div class="fig plain" data-diagram="coursearc"><p class="cap">Weeks 4–14 all consume the function you write today. There is no later point at which the model gets replaced — only linearised, estimated, constrained, or learned around.</p></div>
+  <table class="data">
+    <tr><th>Week</th><th>What it does to \( f \)</th></tr>
+    <tr><td>4</td><td>linearises it about hover ⇒ \( (A,B) \)</td></tr>
+    <tr><td>5–6</td><td>wraps feedback around it ⇒ the cascade</td></tr>
+    <tr><td>7</td><td>optimises against it ⇒ LQR</td></tr>
+    <tr><td>8</td><td>estimates its state from noisy sensors ⇒ the filter</td></tr>
+    <tr><td>9</td><td>drives it along a reference ⇒ trajectories</td></tr>
+    <tr><td>10</td><td>meets a plant that is <i>not</i> this model ⇒ the reality gap</td></tr>
+    <tr><td>11–14</td><td>certifies it, then predicts with it under constraints ⇒ MPC</td></tr>
+  </table>
+
+  <aside class="notes">Close the lecture by making the investment visible: today's ninety minutes are the foundation of thirteen more weeks.</aside>
+</section>
+
+<!-- 10. THE LAB -->
+<section class="divider">
+  <p class="eyebrow">Second half · hands-on</p>
+  <h2>Now you build it</h2>
+  <hr class="drule"/>
+  <ul>
+    <li>Open the <b>Week 2 lab sheet</b> → re-implement <code>state_derivative(x, u)</code> from scratch.</li>
+    <li>Code the four blocks: \( \dot{\mathbf p},\ \dot{\mathbf v},\ \dot{\boldsymbol\eta}=W\boldsymbol\omega,\ \dot{\boldsymbol\omega}=I^{-1}(\tau-\omega\times I\omega) \).</li>
+    <li>Verify against <code>quadsim.dynamics.state_derivative</code> on random states.</li>
+    <li><b>Checkpoint:</b> max error \(<10^{-9}\). graded graded.</li>
+  </ul>
+  <p style="margin-top:1em"><a class="btn" href="../labs/week02-six-dof-eom.html">Open the Week 2 lab sheet →</a></p>
+</section>
+
+
+
+<!-- 10b. BREAK -->
+<section class="divider">
+  <h2><span class="tchip">01:30</span> Break — 10 minutes</h2>
+  <hr class="drule"/>
+  <p>After: you re-derive the model the whole course stands on — and prove yours matches to 1e-9.</p>
+</section>
+
+<!-- 10c. LAB SESSION -->
+<section>
+  <div class="labwrap">
+    <p class="eyebrow" style="color:#1ec8c8">Lab session · 01:50 &rarr; 02:50</p>
+    <h3>Build order &amp; checkpoints</h3>
+    <p class="cp"><b>02:05</b> — skeleton <code>state_derivative(x, u)</code> returns the right shape; hover input &rArr; all-zero derivative</p>
+    <p class="cp"><b>02:20</b> — translational block matches the reference on random states</p>
+    <p class="cp"><b>02:35</b> — rotational block matches; full model max error &lt; 1e-9 &starf;</p>
+    <p class="cp"><b>02:50</b> — one deliberate sign error introduced &rarr; which term catches it? (write it down — this is Wk-9&#39;s polarity drill in embryo)</p>
+    <p style="margin-top:.8em"><a class="btn" href="../labs/week02-six-dof-eom.html">Open the Week 2 lab sheet &rarr;</a></p>
+  </div>
+  <aside class="notes">The deliberate-bug step is the important one: students learn what each term *does* by watching what breaks. Fast teams: add the gyroscopic term&#39;s magnitude printout at aggressive omega — see it dwarfed near hover.</aside>
+</section>
+
+<!-- 10d. MILESTONE -->
+<section>
+  <p class="eyebrow">Team project · Wk 2 of 10</p>
+  <h2>Milestone board</h2>
+  <div class="miles">
+    <div class="m due"><b>Everyone</b>roles confirmed on the course sheet — locked from today; team id (T1–T7) chosen once</div>
+    <div class="m"><b>1 · Modeling</b>this week&#39;s 6-DOF derivation checked against <code>quadsim.dynamics</code> to 1e-9 — keep the notes</div>
+    <div class="m"><b>2 · Inner loop</b>the 12-state layout memorised cold; which four states the attitude loop will see</div>
+    <div class="m"><b>4 · Estimation</b>state vector memorised cold — you will estimate all 12 of these</div>
+    <div class="m"><b>5 · Integration</b>team repo has CI running the quadsim smoke tests on every push</div>
+  </div>
+  <p class="muted" style="margin-top:.6em">Wk 3: the mixer, and the instructor&#39;s F570 on the desk for the parts tour. Bring the team roster.</p>
+</section><!-- 10e. MISCONCEPTIONS -->
+<section>
+  <p class="eyebrow">Before you leave</p>
+  <h2>The traps, named</h2>
+  <table class="data">
+    <tr><th>The trap</th><th>The truth</th></tr>
+    <tr><td>"\( \boldsymbol\omega \) is just \( \dot{\boldsymbol\eta} \) in different notation."</td><td>They differ by \( W(\boldsymbol\eta) \); equal only at hover. Estimators and controllers that conflate them work on the bench and fail in motion.</td></tr>
+    <tr><td>"Gravity produces a torque that rights the quad."</td><td>Gravity acts at the CoM: zero moment arm, zero torque, zero self-righting. (Shift the CoM with a payload and a <i>constant disturbance torque</i> appears instead.)</td></tr>
+    <tr><td>"The \( \boldsymbol\omega\times\mathbf I\boldsymbol\omega \) term is negligible, full stop."</td><td>It is 0.15% of authority at hover and ~40% in a flip. Negligibility is <i>conditional</i> — state the condition.</td></tr>
+    <tr><td>"12 states is a modelling choice among many."</td><td>It is the <i>minimal</i> Markov state for rigid-body flight. Fewer breaks prediction; more adds nothing for control.</td></tr>
+  </table>
+  <aside class="notes">Rows 1 and 3 are the two most common written-exam errors in comparable courses; say so.</aside>
+</section>
+
+<!-- 11. SUMMARY -->
+<section>
+  <p class="eyebrow">Wrap-up</p>
+  <h2>What to remember</h2>
+  <ul>
+    <li>The model is <b>Newton–Euler 6-DOF</b>: translation in the <b>world</b> frame, rotation in the <b>body</b> frame.</li>
+    <li>State \( \mathbf{x}=[\mathbf{p},\mathbf{v},\boldsymbol\eta,\boldsymbol\omega] \); input \( \mathbf{u}=[T,\tau_x,\tau_y,\tau_z] \).</li>
+    <li>Key lines: \( \dot{\mathbf v}=[0,0,-g]+R[0,0,T]/m \), \( \dot{\boldsymbol\eta}=W\boldsymbol\omega \), \( \mathbf I\dot{\boldsymbol\omega}=\boldsymbol\tau-\boldsymbol\omega\times\mathbf I\boldsymbol\omega \).</li>
+    <li><b>Next week:</b> trim &amp; <span class="accent">linearise</span> this \(f\) into \((A,B)\) — and find its unstable poles.</li>
+  </ul>
+  <p class="muted" style="margin-top:1em">Reading: MIT 16.485 (VNAV) Lecture 6 · Bresciani (Lund) MSc thesis. Deliverable &amp; deadline on the lab sheet.</p>
+  <aside class="notes">Preview Wk3/4: linearise f about hover trim, get (A,B), see the open-loop instability that Week 5's controller fixes.</aside>
+</section>
+
+</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+<script>Reveal.on("ready", () => { window.MLTEDiagrams && MLTEDiagrams.init(); window.MLTEWidgets && MLTEWidgets.init(); });
+Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());</script>
+</body>
+</html>

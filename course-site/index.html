@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MLTE03 · Flight Dynamics & Intelligent Control</title>
+<meta name="description" content="Course home for MLTE03 — Flight Dynamics and Intelligent Control Technologies, MUST. Slides, labs, and the quadsim simulator." />
+<link rel="stylesheet" href="assets/css/site.css?v=5" />
+</head>
+<body>
+
+<!-- ===================== STICKY NAV ===================== -->
+<nav class="topnav" id="topnav">
+  <div class="wrap">
+    <span class="brand">MLTE03 · Flight Dynamics &amp; Intelligent Control</span>
+    <a class="nav-link" href="#weeks">Weeks</a>
+    <a class="nav-link" href="digital-lab.html">Digital Lab</a>
+    <a class="nav-link" href="https://course.ainrobotics.com/mlte03/">Platform</a>
+    <a class="nav-link" href="#assign">Assignments</a>
+    <a class="nav-link" href="#simulator">Simulator</a>
+    <a class="nav-link" href="#submit">Submit</a>
+    <a class="nav-link" href="#refs">References</a>
+  </div>
+</nav>
+
+<!-- ===================== HERO ===================== -->
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-inner">
+      <div class="hero-text">
+        <p class="eyebrow">MUST · Master · 2026 Fall · 3 credits / 45h</p>
+        <h1>Flight Dynamics &amp; Intelligent Control Technologies</h1>
+        <p class="zh">飛行動力學與智能控制技術 · MLTE03</p>
+        <p class="lead">A hands-on, model-based course built around <b>one platform — the quadrotor</b>.
+          Derive the 6-DOF model, make it fly with classical and optimal control, estimate its state,
+          then push it further with model-predictive control — and learn to <b>certify</b> it against a
+          written specification, the way real flight software is accepted. All in a transparent Python
+          simulator you write your controller into, week after week.</p>
+        <div class="badge-row">
+          <span class="badge"><b>15</b> weeks</span>
+          <span class="badge"><b>25</b> interactive widgets</span>
+          <span class="badge">6 labs + case study + <b>final project</b></span>
+          <span class="badge">Python · <b>quadsim</b></span>
+        </div>
+        <div class="badge-row">
+          <a class="btn" href="#weeks">Browse the weeks ↓</a>
+          <a class="btn secondary" href="#simulator">Get the simulator</a>
+          <a class="btn secondary" href="#submit">How to submit</a>
+          <a class="btn secondary" href="digital-lab.html">Open the Digital Lab</a>
+        </div>
+      </div>
+
+      <!-- Quadrotor SVG watermark -->
+      <svg class="hero-quad" viewBox="0 0 260 260" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- arms -->
+        <line x1="130" y1="130" x2="50"  y2="50"  stroke="white" stroke-width="5" stroke-linecap="round"/>
+        <line x1="130" y1="130" x2="210" y2="50"  stroke="white" stroke-width="5" stroke-linecap="round"/>
+        <line x1="130" y1="130" x2="50"  y2="210" stroke="white" stroke-width="5" stroke-linecap="round"/>
+        <line x1="130" y1="130" x2="210" y2="210" stroke="white" stroke-width="5" stroke-linecap="round"/>
+        <!-- motor hubs -->
+        <circle cx="50"  cy="50"  r="22" stroke="white" stroke-width="3" fill="none"/>
+        <circle cx="210" cy="50"  r="22" stroke="white" stroke-width="3" fill="none"/>
+        <circle cx="50"  cy="210" r="22" stroke="white" stroke-width="3" fill="none"/>
+        <circle cx="210" cy="210" r="22" stroke="white" stroke-width="3" fill="none"/>
+        <!-- propeller blades (pairs) -->
+        <ellipse cx="50"  cy="50"  rx="18" ry="6" fill="white" opacity=".7" transform="rotate(-30 50 50)"/>
+        <ellipse cx="50"  cy="50"  rx="18" ry="6" fill="white" opacity=".7" transform="rotate(60 50 50)"/>
+        <ellipse cx="210" cy="50"  rx="18" ry="6" fill="white" opacity=".7" transform="rotate(30 210 50)"/>
+        <ellipse cx="210" cy="50"  rx="18" ry="6" fill="white" opacity=".7" transform="rotate(120 210 50)"/>
+        <ellipse cx="50"  cy="210" rx="18" ry="6" fill="white" opacity=".7" transform="rotate(30 50 210)"/>
+        <ellipse cx="50"  cy="210" rx="18" ry="6" fill="white" opacity=".7" transform="rotate(120 50 210)"/>
+        <ellipse cx="210" cy="210" rx="18" ry="6" fill="white" opacity=".7" transform="rotate(-30 210 210)"/>
+        <ellipse cx="210" cy="210" rx="18" ry="6" fill="white" opacity=".7" transform="rotate(60 210 210)"/>
+        <!-- body -->
+        <rect x="112" y="112" width="36" height="36" rx="8" fill="white" opacity=".9"/>
+        <circle cx="130" cy="130" r="8" fill="none" stroke="#0b1f33" stroke-width="2.5" opacity=".5"/>
+      </svg>
+    </div>
+  </div>
+</header>
+
+<!-- ===================== WEEK GRID ===================== -->
+<main>
+<section class="section" id="weeks">
+  <div class="wrap">
+    <p class="eyebrow">Course plan</p>
+    <h2>15 weeks — slides &amp; labs</h2>
+    <p class="section-sub">
+      Each teaching week is <b>half lecture, half lab</b>. Open the deck to learn the method,
+      then the lab sheet to build it in <code>quadsim</code>. Links light up as each week is released.</p>
+
+    <div id="grid">
+      <!-- Module sections generated from WEEKS array below -->
+    </div>
+  </div>
+</section>
+
+<!-- ===================== DIGITAL LAB ===================== -->
+<section class="section" id="digital-lab">
+  <div class="wrap">
+    <p class="eyebrow">The Digital Lab · 數字教學實驗室</p>
+    <h2>Every concept, visualised — and yours to try</h2>
+    <p class="section-sub">
+      Twenty-five small interactive instruments, one per idea the course is built on: rotations, the mixer,
+      PID with all seven engineering fixes, the Kalman gain, latency, LQR's Riccati recursion, MPC's horizon,
+      soft constraints, seed spread, and the reality-gap explorer that pairs with the Week-10 workshop.
+      They run in the browser with nothing to install; each card ends with the <code>quadsim</code> command
+      that turns the same idea into a flight. The lectures use them live; the lab sheets embed them;
+      this page keeps them all in one place for the evening after.</p>
+    <div class="badge-row">
+      <a class="btn" href="digital-lab.html">Open the Digital Lab →</a>
+      <a class="btn secondary" href="digital-lab.html#dyn">Flight dynamics</a>
+      <a class="btn secondary" href="digital-lab.html#ctl">Control &amp; PID</a>
+      <a class="btn secondary" href="digital-lab.html#est">Estimation</a>
+      <a class="btn secondary" href="digital-lab.html#traj">Trajectory &amp; MPC</a>
+      <a class="btn secondary" href="digital-lab.html#ver">Verification &amp; the gap</a>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SIMULATOR ===================== -->
+<section class="section" id="simulator">
+  <div class="wrap">
+    <p class="eyebrow">The software</p>
+    <h2>quadsim — the course simulator</h2>
+    <div class="panel-grid">
+      <div class="panel">
+        <h3>What it is</h3>
+        <p>A <b>fully readable</b>, pure-NumPy 12-state nonlinear quadrotor model with an RK4
+          integrator and a closed-loop runner. No black boxes — you can re-derive every line by hand.
+          You extend <b>one</b> <code>StudentController</code> class all term; by the final project it flies a full mission.</p>
+        <p style="margin-bottom:0">
+          <a class="btn ghost" href="../simulator/README.md">Simulator README</a>
+          <a class="btn ghost" href="#assign" style="margin-left:8px">Assignments &amp; rubrics</a>
+        </p>
+      </div>
+      <div class="panel accent">
+        <h3>60-second start</h3>
+        <div class="code"><pre><span class="cm"># from the simulator/ directory</span>
+python -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -r requirements.txt
+export PYTHONPATH=.
+python examples/02_hover_pid.py            <span class="cm"># reference autopilot</span>
+python examples/02_hover_pid.py --controller student   <span class="cm"># your turn</span>
+python -m pytest -q                        <span class="cm"># smoke tests</span></pre></div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:0">One hard dependency (<code>numpy</code>). Runs on any laptop in seconds — no GPU, no MATLAB.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SUBMIT ===================== -->
+<section class="section" id="assign">
+  <div class="wrap">
+    <p class="eyebrow">Graded work</p>
+    <h2>Assignments</h2>
+    <p class="section-sub">Every graded item has a full brief with its assessment rubric. Weekly lab sheets teach the <i>how</i>; these pages define the <i>what and how it's graded</i>.</p>
+    <div class="panel-grid">
+      <div class="panel">
+        <h3>Six lab reports — 30%</h3>
+        <p>Individual. One per graded week (Weeks 4–9), 5% each, due at the start of the next class.</p>
+        <p>
+          <a class="btn ghost" href="assignments/lab1.html">Lab 1 · Linearization (Wk 4)</a>
+          <a class="btn ghost" href="assignments/lab2.html">Lab 2 · Attitude (Wk 5)</a>
+          <a class="btn ghost" href="assignments/lab3.html">Lab 3 · Position (Wk 6)</a>
+          <a class="btn ghost" href="assignments/lab4.html">Lab 4 · LQR (Wk 7)</a>
+          <a class="btn ghost" href="assignments/lab5.html">Lab 5 · Estimation (Wk 8)</a>
+          <a class="btn ghost" href="assignments/lab6.html">Lab 6 · Trajectory (Wk 9)</a>
+        </p>
+      </div>
+      <div class="panel">
+        <h3>Team case study — 20%</h3>
+        <p>Teams of 5. Integrate the six labs into one autopilot, fly a full mission from estimated state, diagnose the limitation. Presented in Week 10.</p>
+        <p><a class="btn ghost" href="assignments/team-case-study.html">Case-study brief &amp; rubric</a></p>
+      </div>
+      <div class="panel">
+        <h3>Final project — 40%</h3>
+        <p><b>Individual.</b> One mission — the <b>payload drop</b> — but <b>your own quadcopter</b>, derived from your student ID, so no two controllers are interchangeable. Certify your Week-9 autopilot, watch it fail one requirement, upgrade it with MPC, certify again — proposal Week 11, individual viva Week 15.</p>
+        <p><a class="btn ghost" href="assignments/final-project.html">Final-project brief &amp; rubric</a>
+           <a class="btn ghost" href="assignments/viva-week15.html">Week 15 viva brief</a></p>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--muted)">Remaining 10% = class participation (attendance + in-class discussion), assessed weekly.</p>
+  </div>
+</section>
+
+<section class="section" id="submit">
+  <div class="wrap">
+    <p class="eyebrow">Assessment &amp; submission</p>
+    <h2>How to hand in your work</h2>
+    <div class="panel-grid">
+      <div class="panel">
+        <h3>Submit on the course platform</h3>
+        <p>The six lab reports, the team case study, and the final project (code + report) are handed in on the
+          course's own <b>platform</b> at <code>course.ainrobotics.com/mlte03/</code>: log in at the <b>Ken Sir course
+          hub</b>, join this course once (course key or student ID), then upload the zip / PDF
+          the lab sheet names. Every version you upload is kept; the latest is marked. The same page shows your marks,
+          feedback, quiz scores, attendance and lab self-check progress. This site stays the materials hub.</p>
+        <p>
+          <a class="btn" id="lms-btn" href="https://course.ainrobotics.com/mlte03/">Open the course platform (hand-in &amp; progress)</a>
+          
+        </p>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:0">Each lab sheet repeats the exact filename,
+          format, and deadline for that week's deliverable.</p>
+      </div>
+      <div class="panel">
+        <h3>Grade breakdown</h3>
+        <table class="rubric">
+          <tr><th>Component</th><th>Weight</th></tr>
+          <tr><td>Attendance &amp; participation</td><td>10%</td></tr>
+          <tr><td>6 lab reports (Wks 4–9)</td><td>30%</td></tr>
+          <tr><td>Team case study (Wk 10)</td><td>20%</td></tr>
+          <tr><td>Final project — code, report, presentation &amp; demo</td><td>40%</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== REFERENCES ===================== -->
+<section class="section" id="refs">
+  <div class="wrap">
+    <p class="eyebrow">Textbook &amp; references</p>
+    <h2>Reading</h2>
+    <p class="section-sub" style="margin-bottom:20px">No single required textbook; materials are provided in class. Primary references:</p>
+    <ul class="reflist">
+      <li><b>Introduction to Multicopter Design and Control</b> — Quan Quan, Springer 2017. <i>(quadrotor modeling &amp; control — primary)</i></li>
+      <li><b>Small Unmanned Aircraft: Theory and Practice</b> — Beard &amp; McLain, Princeton 2012. <i>(frames, 6-DOF EOM, estimation)</i></li>
+      <li><b>Aircraft Control and Simulation</b>, 3rd ed. — Stevens, Lewis &amp; Johnson, Wiley 2015.</li>
+      <li><b>Model Predictive Control</b>, 2nd ed. — Rawlings, Mayne &amp; Diehl, 2017. <i>(MPC weeks)</i></li>
+      <li><b>Developing Safety-Critical Software: DO-178C Compliance</b> — Leanna Rierson, CRC Press 2013. <i>(certification weeks)</i></li>
+    </ul>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <b style="color:#cfe0ee">MLTE03 — Flight Dynamics &amp; Intelligent Control Technologies</b> · Macau University of Science and Technology<br/>
+    Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>
+    © 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.
+  </div>
+</footer>
+
+<script>
+/* Single source of truth for the week grid. Set `slides`/`lab` to a URL to make
+   the chip live; leave null for a "coming soon" placeholder. */
+const WEEKS = [
+  { n:1,  title:"Course intro & UAS overview; frames & rotations",                    hrs:3, slides:"slides/week01-intro-frames-rotations.html",    lab:"labs/week01-intro-frames-rotations.html" },
+  { n:2,  title:"Rigid-body 6-DOF equations of motion",                               hrs:3, slides:"slides/week02-six-dof-eom.html",                lab:"labs/week02-six-dof-eom.html" },
+  { n:3,  title:"Quadrotor modeling: thrust/torque, mixing, full nonlinear model",    hrs:3, slides:"slides/week03-quadrotor-modeling.html",          lab:"labs/week03-quadrotor-modeling.html" },
+  { n:4,  title:"Linearization, trim, hover equilibrium; sim setup",                  hrs:3, slides:"slides/week04-linearization-trim-hover.html",   lab:"labs/week04-linearization-trim-hover.html" },
+  { n:5,  title:"Attitude control: PID & cascade inner/outer loops",                  hrs:3, slides:"slides/week05-attitude-control.html",            lab:"labs/week05-attitude-control.html" },
+  { n:6,  title:"Position & altitude control: full cascade autopilot",                hrs:3, slides:"slides/week06-position-altitude-control.html",   lab:"labs/week06-position-altitude-control.html" },
+  { n:7,  title:"Optimal control: LQR for hover & attitude",                          hrs:3, slides:"slides/week07-lqr-optimal-control.html",         lab:"labs/week07-lqr-optimal-control.html" },
+  { n:8,  title:"State estimation & sensor fusion: complementary filter & EKF",       hrs:3, slides:"slides/week08-state-estimation-fusion.html",     lab:"labs/week08-state-estimation-fusion.html" },
+  { n:9,  title:"Trajectory tracking &amp; guidance; team dry-run",                   hrs:3, slides:"slides/week09-trajectory-tracking.html",         lab:"labs/week09-trajectory-tracking.html" },
+  { n:10, title:"Reality-gap workshop (team case study) &amp; final-project kickoff",      hrs:3, slides:"slides/week10-consolidation-kickoff.html",       lab:"labs/week10-consolidation-kickoff.html" },
+  { n:11, title:"Controller verification & certification",                            hrs:3, slides:"slides/week11-certification.html",              lab:"labs/week11-certification.html",        tag:"ai" },
+  { n:12, title:"Model Predictive Control — formulation to implementation",           hrs:3, slides:"slides/week12-mpc.html",                        lab:"labs/week12-mpc.html",                  tag:"ai" },
+  { n:13, title:"Building the evidence — ablation, activation, protocol",             hrs:3, slides:"slides/week13-evidence.html",                   lab:"labs/week13-evidence.html",             tag:"ai" },
+  { n:14, title:"Final-project clinic — supervised build & certification dry run",    hrs:3, slides:"slides/week14-clinic.html",                     lab:"labs/week14-clinic.html",               tag:"ai" },
+  { n:15, title:"Final Project — Individual Viva",                                    hrs:3, slides:null, lab:"assignments/viva-week15.html",                                                            tag:"exam" },
+];
+
+/* Module groupings — each defines a named section of the schedule */
+const MODULES = [
+  { label: "Modeling",                      weeks: [1, 2, 3] },
+  { label: "Classical Control",             weeks: [4, 5, 6] },
+  { label: "Optimal Control & Estimation",  weeks: [7, 8, 9] },
+  { label: "Reality gap",                   weeks: [10] },
+  { label: "Intelligent Control",           weeks: [11, 12, 13, 14] },
+  { label: "Final",                         weeks: [15] },
+];
+const weekMap = Object.fromEntries(WEEKS.map(w => [w.n, w]));
+
+const container = document.getElementById("grid");
+for (const mod of MODULES) {
+  /* Module header */
+  const hdr = document.createElement("div");
+  hdr.className = "module-header";
+  hdr.innerHTML = `<span class="module-name">${mod.label}</span>`;
+  container.appendChild(hdr);
+
+  /* Card row for this module */
+  const row = document.createElement("div");
+  row.className = "week-grid";
+  for (const n of mod.weeks) {
+    const w = weekMap[n];
+    const card = document.createElement("div");
+    card.className = "week" + (w.tag ? " tag-" + w.tag : "");
+
+    const tagPill = w.tag === "ai"
+      ? `<span class="wk-tag-pill">AI</span>`
+      : w.tag === "exam"
+      ? `<span class="wk-tag-pill">Exam</span>`
+      : "";
+
+    const slidesChip = w.slides
+      ? `<a class="chip" href="${w.slides}">▶ Slides</a>`
+      : `<span class="chip disabled">Slides</span>`;
+    const labChip = w.lab
+      ? `<a class="chip" href="${w.lab}">${w.tag === "exam" ? "🎓 Viva brief" : "🧪 Lab sheet"}</a>`
+      : (w.tag === "exam" ? "" : `<span class="chip disabled">Lab sheet</span>`);
+    const pdfChip = w.slides
+      ? `<a class="chip" href="pdf/MLTE03_Week${String(w.n).padStart(2,"0")}_slides.pdf">⤓ PDF</a>`
+      : "";
+
+    const metaLabel = w.tag === "exam" ? "Assessment"
+                    : w.tag === "ai"   ? "Intelligent control"
+                    : "Lecture / Lab";
+
+    card.innerHTML =
+      `<div class="week-header">
+         <span class="wk-no">WEEK ${String(w.n).padStart(2,"0")}</span>
+         ${tagPill}
+       </div>
+       <div class="wk-title">${w.title}</div>
+       <div class="wk-meta">${w.hrs} h · ${metaLabel}</div>
+       <div class="wk-links">${slidesChip}${labChip}${pdfChip}</div>`;
+    row.appendChild(card);
+  }
+  container.appendChild(row);
+}
+
+/* Sticky nav — show after hero scrolls out of view */
+const hero = document.querySelector(".hero");
+const nav  = document.getElementById("topnav");
+const obs  = new IntersectionObserver(([e]) => {
+  nav.classList.toggle("visible", !e.isIntersecting);
+}, { threshold: 0 });
+obs.observe(hero);
+</script>
+<script src="assets/js/schedule.js?v=1"></script>
+<script>
+  // Fill the platform button from schedule.js (the single source of truth).
+  (function () {
+    const cfg = window.MLTE03_SCHEDULE;
+    if (cfg && cfg.lmsUrl) {
+      const btn = document.getElementById("lms-btn");
+      const badge = document.getElementById("lms-tofill");
+      if (btn) btn.href = cfg.lmsUrl;
+      if (badge) badge.remove();
+    }
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 6 Lab — Position &amp; Altitude Control · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css?v=5" />
+<!-- KaTeX for the bit of math in the recap -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+</head>
+<body data-lab="week06-position-altitude-control">
+
+<div class="lab-progress"><i></i></div>
+
+<!-- ============ HEADER ============ -->
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Week 6 · Lab (second half of session)</div>
+    <h1>Position &amp; Altitude Control — the outer loop</h1>
+    <div class="sub">Wrap an outer loop around your Week-5 attitude loop, and the quad finally <b>holds a point</b>.</div>
+    <div class="meta">
+      <span>⏱ <b>~75 min</b></span>
+      <span>🧩 Edit <b>quadsim/controllers/student.py</b></span>
+      <span>📦 Deliverable: <b>student.py + a plot</b></span>
+      <span>⭐ <b>Graded checkpoint</b></span>
+    </div>
+    <p style="margin-top:14px"><a class="btn ghost" href="../slides/week06-position-altitude-control.html">← Back to the Week 6 slides</a>
+       <a class="btn ghost" href="../index.html">Course home</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Goal</span>
+  Last week your controller returned the quad to <b>level</b> but it still drifted in position. Today you add the
+  <b>outer position/altitude loop</b> on top of that inner loop. By the end it <b>holds a hover setpoint</b> and then
+  <b>tracks a step</b> — with a final position error <b>under 0.1 m</b>, matching the reference <code>CascadePID</code> autopilot.
+</div>
+
+<!-- ============ 1. RECAP ============ -->
+<h2>1 · The 5-minute recap</h2>
+<p>A quadrotor is <b>underactuated</b>: you can't push sideways, you <b>tilt then thrust</b>. Last week's <b>inner loop</b>
+   drove attitude \( \boldsymbol\eta=(\phi,\theta,\psi) \) to a setpoint — but we set \( \phi_d=\theta_d=0 \) by hand, so the
+   quad only ever hovered in place and drifted. The <b>outer loop</b> now <em>computes</em> that setpoint from position error.</p>
+
+<p>Treat the centre of mass as a point you steer with acceleration. A PD on world-frame position (feed-forward + integral on z)
+   gives the <b>desired acceleration</b>:</p>
+<p style="text-align:center">
+  \[ \mathbf{a}_{des} = \mathbf{a}_{ff} + K_p^{pos}\,\mathbf{e}_{pos} + K_d^{pos}\,\mathbf{e}_{vel}, \qquad
+     \mathbf{e}_{pos}=\mathbf{p}_{ref}-\mathbf{p},\;\; \mathbf{e}_{vel}=\mathbf{v}_{ref}-\mathbf{v} \]
+</p>
+<p>The world is <b>z-up / ENU</b> (gravity \(-z\), thrust \(+\)body-\(z\)), so the vertical channel sets a
+   <b>gravity-compensated thrust</b>, and the horizontal channels set the <b>desired tilt</b> (rotated by yaw, clipped):</p>
+<p style="text-align:center">
+  \[ T = m\,(g + a_{des,z}), \qquad
+     \phi_{des} = \tfrac{1}{g}\big(a_x\sin\psi - a_y\cos\psi\big), \qquad
+     \theta_{des} = \tfrac{1}{g}\big(a_x\cos\psi + a_y\sin\psi\big) \]
+</p>
+
+<div class="callout warn">
+  <span class="ttl">Two sign traps</span>
+  Our world is <b>z-up (ENU)</b>, so \( T=m(g+a_{des,z}) \) — not the NED form from Beard &amp; McLain (z-down), where the sign flips.
+  And the vehicle is <b>X-frame</b>, not plus-frame: the simulator's mixer handles that for you, so never paste a plus-frame mixer.
+</div>
+
+<!-- ============ 2. SETUP ============ -->
+<h2>2 · Setup (2 min)</h2>
+<p>From the <code>simulator/</code> directory, in your virtual environment:</p>
+<div class="code"><pre><span class="cm"># one-time</span>
+python -m venv .venv &amp;&amp; source .venv/bin/activate   <span class="cm"># Windows: .venv\Scripts\activate</span>
+pip install -r requirements.txt
+<span class="cm"># every session — so `import quadsim` works</span>
+export PYTHONPATH=.                                <span class="cm"># Windows: set PYTHONPATH=.</span></pre></div>
+<p>You keep editing the <b>same</b> <code>quadsim/controllers/student.py</code> from Week 5. Your inner attitude loop should
+   already be there — today we add the outer loop <em>above</em> it and feed it the computed \( \phi_{des},\theta_{des},T \).</p>
+
+<!-- ============ 3. THE TASK ============ -->
+<h2>3 · Build the outer loop</h2>
+<p>Each step adds a few lines to <code>StudentController.control(self, t, x, ref)</code> (and a couple to
+   <code>__init__</code>/<code>reset</code>). Recall the state layout: <code>x[0:3]</code> position, <code>x[3:6]</code> velocity,
+   <code>x[6:9]</code> Euler \((\phi,\theta,\psi)\), <code>x[9:12]</code> body rates \((p,q,r)\).</p>
+
+<details class="step" open>
+  <summary><span class="num">1</span> Add outer-loop gains &amp; an integrator <span class="tag">edit __init__ / reset</span></summary>
+  <div class="step-body">
+    <p>Next to your Week-5 attitude gains, add position gains, an altitude integral gain, and a tilt limit. The integral
+       state is reset between runs:</p>
+    <div class="code"><pre><span class="cm"># in __init__ (Week 6)</span>
+self.kp_pos  = np.array([6.0, 6.0, 12.0])
+self.kd_pos  = np.array([4.0, 4.0,  8.0])
+self.ki_z    = 2.0
+self.max_tilt = np.deg2rad(30.0)        <span class="cm"># safety clamp on commanded tilt</span>
+
+<span class="cm"># in reset()</span>
+self._iz = 0.0
+self._t_prev = None</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">2</span> Read the references and split the state <span class="tag">edit control()</span></summary>
+  <div class="step-body">
+    <p>Pull position &amp; velocity from the state, and the setpoints from <code>ref</code> (with safe defaults). Compute the
+       timestep <code>dt</code> for the integrator:</p>
+    <div class="code"><pre>pos, vel   = x[0:3], x[3:6]
+euler, omega = x[6:9], x[9:12]
+
+pos_ref = np.asarray(ref.get(<span class="st">"pos"</span>, [0.0, 0.0, 0.0]), float)
+yaw_ref = float(ref.get(<span class="st">"yaw"</span>, 0.0))
+vel_ref = np.asarray(ref.get(<span class="st">"vel"</span>, [0.0, 0.0, 0.0]), float)
+acc_ref = np.asarray(ref.get(<span class="st">"acc"</span>, [0.0, 0.0, 0.0]), float)
+
+dt = 0.0 if self._t_prev is None else t - self._t_prev
+self._t_prev = t</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">3</span> Position error → desired acceleration <span class="tag">the outer PD</span></summary>
+  <div class="step-body">
+    <p>Feed-forward + PD on position, plus a clamped integral on the <b>altitude</b> channel only (it trims steady bias so
+       the quad holds height exactly):</p>
+    <div class="code"><pre>e_pos = pos_ref - pos
+e_vel = vel_ref - vel
+self._iz = np.clip(self._iz + e_pos[2]*dt, -2.0, 2.0)
+a_des = acc_ref + self.kp_pos*e_pos + self.kd_pos*e_vel
+a_des[2] += self.ki_z * self._iz</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">4</span> Vertical channel → gravity-compensated thrust <span class="tag">z-up!</span></summary>
+  <div class="step-body">
+    <p>In z-up coordinates the thrust must cancel gravity <em>and</em> add the vertical demand. Floor it so the quad never
+       commands (near-)zero thrust and free-falls:</p>
+    <div class="code"><pre>T = self.p.mass * (self.p.g + a_des[2])   <span class="cm"># gravity comp: a_des[2]=0 -> T = m*g</span>
+T = max(T, 0.1 * self.p.weight)</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">5</span> Horizontal channel → desired roll/pitch <span class="tag">small-angle + yaw</span></summary>
+  <div class="step-body">
+    <p>The small-angle map turns horizontal acceleration into tilt, rotated by the commanded yaw, then clipped to the tilt
+       limit. The result is the <b>setpoint for your Week-5 inner loop</b>:</p>
+    <div class="code"><pre>ax, ay = a_des[0], a_des[1]
+phi_des   = (1.0/self.p.g) * (ax*np.sin(yaw_ref) - ay*np.cos(yaw_ref))
+theta_des = (1.0/self.p.g) * (ax*np.cos(yaw_ref) + ay*np.sin(yaw_ref))
+phi_des   = np.clip(phi_des,   -self.max_tilt, self.max_tilt)
+theta_des = np.clip(theta_des, -self.max_tilt, self.max_tilt)
+att_des = np.array([phi_des, theta_des, yaw_ref])</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">6</span> Feed the inner loop &amp; return the wrench <span class="tag">reuse Week 5</span></summary>
+  <div class="step-body">
+    <p>Your Week-5 inner loop is unchanged — but its setpoint is now the <em>computed</em> <code>att_des</code> instead of
+       hard-coded level. Wrap the yaw error, run the attitude PD, return \( [T,\tau_x,\tau_y,\tau_z] \):</p>
+    <div class="code"><pre>e_att = att_des - euler
+e_att[2] = (e_att[2] + np.pi) % (2*np.pi) - np.pi       <span class="cm"># wrap yaw error</span>
+tau = self.p.inertia * (self.kp_att*e_att + self.kd_att*(-omega))
+return np.array([T, tau[0], tau[1], tau[2]])</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">✓</span> Stuck? Reveal the full Week-6 <code>control()</code></summary>
+  <div class="step-body">
+    <div class="callout warn"><span class="ttl">Try first</span> You learn the cascade by writing it. Peek only after a genuine attempt.</div>
+    <div class="code"><pre>def control(self, t, x, ref):
+    p = self.p
+    pos, vel   = x[0:3], x[3:6]
+    euler, omega = x[6:9], x[9:12]
+
+    pos_ref = np.asarray(ref.get(<span class="st">"pos"</span>, [0.0, 0.0, 0.0]), float)
+    yaw_ref = float(ref.get(<span class="st">"yaw"</span>, 0.0))
+    vel_ref = np.asarray(ref.get(<span class="st">"vel"</span>, [0.0, 0.0, 0.0]), float)
+    acc_ref = np.asarray(ref.get(<span class="st">"acc"</span>, [0.0, 0.0, 0.0]), float)
+
+    dt = 0.0 if self._t_prev is None else t - self._t_prev
+    self._t_prev = t
+
+    <span class="cm"># --- OUTER loop: position error -> desired acceleration ---</span>
+    e_pos = pos_ref - pos
+    e_vel = vel_ref - vel
+    self._iz = np.clip(self._iz + e_pos[2]*dt, -2.0, 2.0)
+    a_des = acc_ref + self.kp_pos*e_pos + self.kd_pos*e_vel
+    a_des[2] += self.ki_z * self._iz
+
+    T = p.mass * (p.g + a_des[2])           <span class="cm"># gravity-compensated thrust</span>
+    T = max(T, 0.1 * p.weight)
+
+    ax, ay = a_des[0], a_des[1]             <span class="cm"># horizontal accel -> tilt, rotated by yaw</span>
+    phi_des   = (1.0/p.g) * (ax*np.sin(yaw_ref) - ay*np.cos(yaw_ref))
+    theta_des = (1.0/p.g) * (ax*np.cos(yaw_ref) + ay*np.sin(yaw_ref))
+    phi_des   = np.clip(phi_des,   -self.max_tilt, self.max_tilt)
+    theta_des = np.clip(theta_des, -self.max_tilt, self.max_tilt)
+    att_des = np.array([phi_des, theta_des, yaw_ref])
+
+    <span class="cm"># --- INNER loop (Week 5): attitude PD -> body torques ---</span>
+    e_att = att_des - euler
+    e_att[2] = (e_att[2] + np.pi) % (2*np.pi) - np.pi
+    tau = p.inertia * (self.kp_att*e_att + self.kd_att*(-omega))
+
+    return np.array([T, tau[0], tau[1], tau[2]])</pre></div>
+  </div>
+</details>
+
+<!-- ============ 4. RUN & VERIFY ============ -->
+<h2>4 · Run &amp; verify</h2>
+<p>The shared example holds a hover then commands a <b>step</b> to <code>[1, 1, 1.5]</code> — the exact checkpoint for this lab.
+   Run <b>your</b> controller, then the reference, and compare:</p>
+<div class="code"><pre>export PYTHONPATH=.
+python examples/02_hover_pid.py --controller student     <span class="cm"># your cascade</span>
+python examples/02_hover_pid.py                           <span class="cm"># reference CascadePID baseline</span></pre></div>
+
+<p>Each run prints the position RMSE and the final position. For a side-by-side plot of your run, add <code>--plot</code>
+   (it saves <code>hover_student.png</code>):</p>
+<div class="code"><pre>python examples/02_hover_pid.py --controller student --plot</pre></div>
+
+<div class="callout goal">
+  <span class="ttl">Expected — your graded checkpoint ⭐</span>
+  <ul style="margin:6px 0 0">
+    <li>Your controller <b>holds the hover</b>, then climbs/translates to <code>[1, 1, 1.5]</code> and settles there.</li>
+    <li><b>Final position error &lt; 0.1 m</b> vs the target — on par with the reference <code>CascadePID</code> (no steady offset, thanks to the altitude integral).</li>
+    <li>The saved <code>hover_student.png</code> shows x, y, z converging smoothly with no sustained oscillation and no overshoot past the tilt limit.</li>
+  </ul>
+</div>
+
+<h2 class="dl-h">Try it live — the Digital Lab</h2>
+<p class="muted" style="margin:-4px 0 10px">The same physics as the lab, with sliders. Predict, then check; the full catalogue is in the <a href="../digital-lab.html">Digital Lab</a>.</p>
+<div class="callout"><span class="ttl">cascade</span>Lab 3's outer loop. Raise outer Kp until the tilt saturates and the position overshoots — the timescale-separation limit you will hit in the step test. <a href="../digital-lab.html#cascade">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="cascade"></div>
+<div class="callout"><span class="ttl">altitude</span>Your step test assumes the mass is exactly 0.65 kg. Set +10 % here and watch what your integrator clamp does to the hover height; Week 10 will do this to you without telling you the number. <a href="../digital-lab.html#altitude">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="altitude"></div>
+
+<h3>Self-check</h3>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="a"/><label>The final position is within 0.1 m of <code>[1, 1, 1.5]</code>, matching the <code>CascadePID</code> baseline.</label></li>
+  <li><input type="checkbox" data-id="b"/><label>With the altitude integral <code>ki_z</code> set to zero, I saw a small steady height offset — proving why I needs it.</label></li>
+  <li><input type="checkbox" data-id="c"/><label>I can explain why thrust is \( T=m(g+a_{des,z}) \) and how the z-up convention sets that sign.</label></li>
+  <li><input type="checkbox" data-id="d"/><label>I understand that \( \phi_{des},\theta_{des} \) computed here are exactly the setpoint my Week-5 inner loop already tracks.</label></li>
+</ul>
+
+<!-- ============ 5. GO FURTHER ============ -->
+<h2>5 · Going further (optional)</h2>
+<ul>
+  <li><b>Tilt-limit probe.</b> Command a far setpoint (e.g. <code>[5, 0, 1.5]</code>). Watch \( \phi_{des},\theta_{des} \) hit the 30° clip and the climb slow — that's the saturation keeping the small-angle map valid.</li>
+  <li><b>Integral off.</b> Set <code>ki_z = 0</code> and confirm a small steady altitude error appears; restore it and watch the offset vanish.</li>
+  <li><b>Gain sweep.</b> Halve and double <code>kp_pos</code>; plot settling time vs gain and find where overshoot creeps in (the outer loop must stay slower than the inner one).</li>
+</ul>
+
+<!-- ============ DELIVERABLE / SUBMIT ============ -->
+<h2>6 · Deliverable &amp; submission</h2>
+<table class="rubric">
+  <tr><th>Criterion</th><th>What we look for</th><th>Weight</th></tr>
+  <tr><td>Correct outer loop</td><td>Position PD → \( \mathbf{a}_{des} \); gravity-comp thrust; small-angle tilt map with yaw rotation &amp; clip</td><td>50%</td></tr>
+  <tr><td>Result &amp; tuning</td><td>Holds hover then step with final error &lt; 0.1 m; the checkpoint plot, no sustained oscillation</td><td>25%</td></tr>
+  <tr><td>Understanding</td><td>One short paragraph: why \( T=m(g+a_{des,z}) \) and how horizontal accel maps to desired tilt</td><td>25%</td></tr>
+</table>
+
+<div class="submit-box">
+  <h3>📤 Submit on the course platform</h3>
+  <p style="margin:0 0 10px;font-size:14px">⭐ <b>This submission is graded (5%).</b> Full requirements &amp; rubric: <a href="../assignments/lab3.html">Lab 3 assignment brief</a>.</p>
+  <div class="row">
+    <div>What</div><div><code>student.py</code> + <code>hover_student.png</code> + a 3–5 line note (one PDF or zip)</div>
+    <div>Filename</div><div><code>MLTE03_Wk6_&lt;studentID&gt;.zip</code></div>
+    <div>Where</div><div>the <a href="https://course.ainrobotics.com/mlte03/">course platform</a> → <i>Week 6 Lab</i> upload box (log in at the Ken Sir course hub; every version you upload is kept)</div>
+    <div>Deadline</div><div><span class="tofill">date / time — TO FILL</span> (before Week 7)</div>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin:10px 0 0">Submissions go through the course platform (<a href="https://course.ainrobotics.com/mlte03/">course.ainrobotics.com/mlte03/</a>) — log in at the Ken Sir course hub; nothing is uploaded to this static site itself.</p>
+</div>
+
+<p style="margin:18px 0 4px;color:var(--muted)">References: Quan Quan RFly multicopter decks ·
+   <a href="https://rfly.buaa.edu.cn/course.html">rfly.buaa.edu.cn/course.html</a> ·
+   PX4 controller diagrams (production cascade autopilot) ·
+   <a href="https://docs.px4.io/main/en/flight_stack/controller_diagrams">docs.px4.io/…/controller_diagrams</a>.</p>
+
+<p style="margin:18px 0 30px;color:var(--muted)">Next week → <a href="../index.html#weeks">Week 7</a>. You keep editing the
+   <em>same</em> <code>StudentController</code> — it now flies a setpoint; soon it tracks a trajectory, and the
+   intelligent-control labs improve on this exact baseline.</p>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<!-- KaTeX auto-render for the inline math -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

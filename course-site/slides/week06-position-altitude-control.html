@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 6 — Position &amp; Altitude Control · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 6 · Position &amp; Altitude<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1 TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Position &amp; Altitude Control</h1>
+    <p class="tp-sub">位置與高度控制</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 6 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. The session plan follows; keep this up while people settle.</aside>
+</section>
+
+<!-- 2 AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan</h2>
+  <table class="agenda">
+    <tr><th>Clock</th><th>Segment</th><th></th></tr>
+    <tr><td class="t">00:00</td><td>Recap: the inner loop flies — what's still missing</td><td>10′</td></tr>
+    <tr><td class="t">00:10</td><td><b>Block A</b> — tilt-to-translate: from desired acceleration to attitude</td><td>40′</td></tr>
+    <tr><td class="t">00:50</td><td>Concept check + interactive cascade tuning</td><td>10′</td></tr>
+    <tr><td class="t">01:00</td><td><b>Block B</b> — altitude, integral action &amp; the real-world layer</td><td>30′</td></tr>
+    <tr class="break"><td class="t">01:30</td><td>Break</td><td>10′</td></tr>
+    <tr><td class="t">01:40</td><td>Lab briefing — Lab 3 (graded graded)</td><td>10′</td></tr>
+    <tr class="lab"><td class="t">01:50</td><td><b>Lab session</b>: build the outer loop, fly to a setpoint</td><td>60′</td></tr>
+    <tr><td class="t">02:50</td><td>Debrief + team-project milestone check</td><td>10′</td></tr>
+  </table>
+</section>
+
+<!-- 3 RECAP -->
+<section>
+  <p class="eyebrow">Recap → today</p>
+  <h2>The inner loop holds attitude. So what?</h2>
+  <div class="cols">
+    <ul>
+      <li>Wk 5: \( \boldsymbol\tau = \mathbf{I}\,(K_p^{\text{att}}\mathbf{e}_\eta - K_d^{\text{att}}\boldsymbol\omega) \) — a tilted quad returns to level.</li>
+      <li>But level ≠ parked: it still <b>drifts</b> — nothing measures or corrects position.</li>
+      <li>And nothing holds height — thrust is whatever we hard-coded.</li>
+      <li><b>Today:</b> wrap an <span class="accent">outer loop</span> around the inner one: position error → desired tilt + thrust.</li>
+    </ul>
+    <div class="box warn"><b>Question to hold for 40 minutes:</b><br/>
+    A quad cannot accelerate sideways — its only force is thrust along its body z-axis.
+    So how can it possibly <i>move</i> sideways?</div>
+  </div>
+  <aside class="notes">Run examples/02_hover_pid.py with only the inner loop: level but drifting away — 30 s of video or live demo sells the whole lecture.</aside>
+</section>
+
+<!-- 4 OBJECTIVES -->
+<section>
+  <p class="eyebrow">Learning objectives</p>
+  <h2>By the end of today you can…</h2>
+  <ul>
+    <li>Derive the <b>tilt-to-translate</b> mapping: desired acceleration → desired roll/pitch + thrust.</li>
+    <li>Explain why the cascade needs <b>timescale separation</b>, and quantify the rule of thumb.</li>
+    <li>Design the <b>altitude loop</b> with integral action — and clamp its integrator.</li>
+    <li>Use <b>tilt and thrust limits</b> as an explicit safety envelope.</li>
+    <li><span class="pill">Lab 3 graded</span> Fly the full cascade in <code>quadsim</code>: step to a 3-D setpoint, error &lt; 0.1 m.</li>
+  </ul>
+</section>
+
+<!-- UA 6 -->
+<section>
+  <p class="eyebrow">First principles</p>
+  <h2>Underactuation, stated precisely</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">Definition.</span>
+  A system is <b>underactuated</b> when it has fewer independent control inputs than configuration degrees of freedom. Quadrotor: 4 inputs, 6 DOF. You cannot command an arbitrary force and an arbitrary torque simultaneously.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What that forbids.</span>
+  There is no input that produces sideways force at constant attitude. To go right you <i>must</i> first roll right — and rolling right is itself a dynamic process taking ~0.1 s.<br/><br/><b>Position control is therefore never direct.</b> It is always a request routed through attitude, which is why the architecture is a cascade rather than a preference.</div>
+    </div>
+  </div>
+  <ul class="small">
+    <li>Contrast: a fully-actuated hexrotor with tilted arms <i>can</i> translate at fixed attitude — 6 inputs, 6 DOF — and needs no cascade at all.</li>
+    <li>Contrast: a car is underactuated too (it cannot move sideways), which is why parallel parking is a manoeuvre rather than a translation.</li>
+  </ul>
+
+  <aside class="notes">The car-parking analogy lands instantly and is exactly right. It also explains why non-holonomic planning exists.</aside>
+</section>
+
+<!-- OUT 6 -->
+<section>
+  <p class="eyebrow">Term by term</p>
+  <h2>The outer loop's three jobs, separated</h2>
+  <table class="data">
+    <tr><th>Job</th><th>Computes</th><th>Feeds</th><th>Bandwidth</th></tr>
+    <tr><td><b>Horizontal</b></td><td>\( a_x, a_y \) from position error</td><td>tilt map → \( \phi_d, \theta_d \)</td><td>1–2 Hz</td></tr>
+    <tr><td><b>Vertical</b></td><td>\( a_z \) from altitude error</td><td>\( T = m(g + a_z)/(\cos\phi\cos\theta) \)</td><td>2–4 Hz</td></tr>
+    <tr><td><b>Heading</b></td><td>\( \psi_d \) from the mission</td><td>inner loop directly</td><td>0.5–1 Hz</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>The three are <b>independent</b> near hover — a consequence of Week 4's block decomposition, not an assumption.</li>
+    <li>Vertical can run faster than horizontal because it does not route through attitude: thrust acts on altitude <i>immediately</i>.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The \( 1/(\cos\phi\cos\theta) \) term.</span>
+  Tilt steals vertical thrust (Week 1's 13%-at-30° result). Dividing by \( \cos\phi\cos\theta \) restores it — a one-line feed-forward that removes the altitude dip during aggressive manoeuvres.<br/><br/>Omit it and your quad sags every time it accelerates. Every autopilot includes it; now you know why.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The cos-compensation term is a concrete, memorable piece of real autopilot code derived from Wk-1 geometry.</aside>
+</section>
+
+<!-- VEL 6 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Velocity control: the loop hiding between position and attitude</h2>
+  <div class="cols top">
+    <div>
+  <p>Most autopilots do not go straight from position to acceleration. They insert a velocity loop:</p>
+  \[ \mathbf p_d \;\xrightarrow{K_p^{pos}}\; \mathbf v_d \;\xrightarrow{PID}\; \mathbf a_{des} \;\xrightarrow{\text{tilt map}}\; \boldsymbol\eta_d \]
+  <ul class="small">
+    <li><b>Why:</b> velocity is where the limits live. Clamping \( \mathbf v_d \) gives a clean, interpretable speed limit — far easier to reason about than clamping an acceleration.</li>
+    <li>It also gives the pilot a natural manual mode: sticks command velocity, which is what 'position hold with stick input' means on a commercial drone.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The three-limit stack you will configure.</span>
+  \( v_{max} \) (speed), \( a_{max} \) (aggressiveness, via tilt), \( \eta_{max} \) (attitude, the hard safety cap). Each is a clamp at a different level, and together they define the aircraft's <i>personality</i>.<br/><br/>For the Week-10 demonstration: \( v_{max} = 1 \) m/s, \( \eta_{max} = 12^\circ \). Deliberately gentle, deliberately survivable.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The velocity loop is what students meet in real firmware; showing it now prevents confusion in Wk 9.</aside>
+</section>
+
+<!-- WEX 6 -->
+<section>
+  <p class="eyebrow">Worked example · by hand</p>
+  <h2>Design the outer loop from the inner loop</h2>
+  <p>Given the inner loop from Week 5 (\( \omega_i = 13.4 \) rad/s), design a position loop and predict the step response.</p>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Separation \( k = 6 \) ⇒ \( \omega_o = 13.4/6 = 2.2 \) rad/s.</li>
+    <li>Choose \( \zeta = 0.8 \) (a little overshoot is acceptable outdoors; none indoors).</li>
+    <li>\( K_p^{pos} = \omega_o^2 = 4.9 \), \( K_d^{pos} = 2\zeta\omega_o = 3.5 \).</li>
+    <li>Step of 2 m ⇒ initial \( a_x = K_p(2) = 9.8 \) m/s² ⇒ \( \theta_d = \arctan(9.8/9.81) = 45^\circ \) — <b>way past the clamp</b>.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">So the clamp does the work.</span>
+  With \( \eta_{max} = 12^\circ \), the first phase of the move is <b>acceleration-limited</b>, not gain-limited: the aircraft leans to 12°, accelerates at 2.1 m/s², and only when the error shrinks below \( 2.1/4.9 = 0.43 \) m does the linear design take over.<br/><br/><b>Large moves are slew-limited; small moves are PD-shaped.</b> That two-regime behaviour is normal, intended, and visible in every real flight log.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(3 min)</span> — How long does the 2 m step take? <span class="muted">(Accelerate at 2.1 m/s² to \( v_{max} = 1 \) m/s in 0.48 s over 0.24 m; cruise 1.5 m in 1.5 s; decelerate symmetrically ⇒ ≈2.5 s total. You have just hand-computed a trajectory — which is exactly what Week 9 automates.)</span></div>
+
+  <aside class="notes">This example unifies gains, clamps and trajectory planning in one calculation, and previews Wk 9 naturally.</aside>
+</section>
+
+<!-- MP 6 -->
+<section class="dense">
+  <p class="eyebrow">Mental picture first</p>
+  <h2>Why you cannot simply 'push' a quadrotor sideways</h2>
+  <div class="cols top">
+    <div>
+  <div class="fig plain" data-diagram="tilt"><p class="cap">Level: thrust fights only gravity. Tilted: the same thrust splits into a vertical share that still holds you up and a horizontal share that accelerates you.</p></div>
+    </div>
+    <div>
+  <ul class="small">
+    <li>Try to command a sideways force directly and there is no actuator that produces one. The rotors only ever push along body-\( z \).</li>
+    <li>So every horizontal motion is a <b>two-stage process</b>: rotate first (fast, ~0.1 s), then let the rotated thrust act (slower).</li>
+    <li>That enforced sequencing is why the outer loop must be slower than the inner one — the delay is physical, not a tuning artefact.</li>
+  </ul>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(90 s)</span> — At \( 12^\circ \) tilt, what fraction of thrust goes sideways, and what fraction of lift is lost? <span class="muted">(\( \sin 12^\circ = 21\% \) sideways; \( 1-\cos 12^\circ = 2.2\% \) lift lost. Cheap in lift, useful in acceleration — which is why gentle tilts are such a good operating point.)</span></div>
+
+  <aside class="notes">Picture and number before the algebra. The 21%/2.2% asymmetry explains why small tilts are so efficient.</aside>
+</section>
+
+<!-- ASM 6 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>What the outer loop is allowed to assume</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Assumption 1:</b> the inner loop reaches \( \boldsymbol\eta_d \) 'instantly'. True to within \( \omega_o/\omega_i \approx 17\% \) at our separation.</li>
+    <li><b>Assumption 2:</b> thrust is delivered as commanded. True unless the mixer clamps.</li>
+    <li><b>Assumption 3:</b> the state estimate is accurate and fresh. True in <code>quadsim</code>; an open question until Week 8.</li>
+    <li><b>Assumption 4:</b> small angles, so \( \ddot x \approx g\theta \). True inside the tilt clamp.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why listing assumptions is the work.</span>
+  Each one is a <i>failure mode with a name</i>. When the aircraft misbehaves, you do not guess — you ask which of the four broke.<br/><br/>Wobble at the outer loop's frequency? Assumption 1. Glitches during aggressive moves? Assumption 2. A slow orbit? Assumption 3 (Week 8's lesson, in advance). Odd behaviour only at large tilt? Assumption 4.<br/><br/><b>A controller is a set of assumptions with gains attached.</b></div>
+    </div>
+  </div>
+
+  <aside class="notes">This slide is the debugging framework for the whole second half of the course. Say the closing sentence twice.</aside>
+</section>
+
+<!-- 5 THRUST VECTOR -->
+<section>
+  <p class="eyebrow">Block A · 00:10</p>
+  <h2>The only force you have: \( T \) along body \(z\)</h2>
+  <p>Newton in the world frame (Wk 2), thrust rotated by attitude:</p>
+  \[ m\ddot{\mathbf{p}} \;=\; R(\boldsymbol\eta)\begin{bmatrix}0\\0\\T\end{bmatrix} - \begin{bmatrix}0\\0\\mg\end{bmatrix} \]
+  <div class="cols">
+    <ul>
+      <li>Level: thrust is vertical — no horizontal force at all.</li>
+      <li>Pitch nose-down by \( \theta \): a component \( T\sin\theta \) points forward.</li>
+      <li><b>Attitude is the steering wheel for position.</b></li>
+    </ul>
+    <div class="box">Expanding \(R\) for small angles (and yaw \( \psi=0 \)):
+    \[ \ddot x \approx g\,\theta, \qquad \ddot y \approx -g\,\phi, \qquad \ddot z \approx \tfrac{T}{m}-g \]
+    Each desired acceleration picks an attitude. That inversion <i>is</i> the outer loop.</div>
+  </div>
+  <aside class="notes">Do the R e3 expansion on the board once — students should see where g·theta comes from, incl. the minus sign on phi (right-hand rule about x).</aside>
+</section>
+
+<!-- 5b. TILT FIG + DERIVE -->
+<section>
+  <p class="eyebrow">The mechanism · drawn</p>
+  <h2>Tilt to translate, in one picture</h2>
+
+  <div class="fig plain" data-diagram="tilt"><p class="cap">Level: thrust only fights gravity. Tilted by θ: the vertical share still holds the aircraft up while T·sinθ ≈ mg·θ accelerates it sideways.</p></div>
+</section>
+
+<!-- 5c. DERIVE TILT MAP -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill cyan">interactive</span></p>
+  <h2>Inverting the picture: acceleration → attitude</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>\( m\ddot{\mathbf p} = R\,T\mathbf e_3 - mg\mathbf e_3 \)</span>
+      <span class="dwhy"><b>Week 2's result</b>, unchanged. We now read it backwards: given a wanted p̈, what R and T?</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>\( R\,\mathbf e_3 \approx \begin{bmatrix} \theta\cos\psi + \phi\sin\psi \\ \theta\sin\psi - \phi\cos\psi \\ 1 \end{bmatrix} \) (small φ, θ)</span>
+      <span class="dwhy"><b>Linearize the direction of thrust.</b> First-order in the tilt angles; yaw ψ stays exact — it just rotates which way "forward" is.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">3</span>\( \ddot x \approx g(\theta\cos\psi + \phi\sin\psi), \quad \ddot y \approx g(\theta\sin\psi - \phi\cos\psi) \)</span>
+      <span class="dwhy"><b>Substitute, use T≈mg.</b> Two equations, two unknowns (φ, θ) — and they're linear.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">4</span>\( \theta_d = \tfrac{1}{g}(a_x\cos\psi + a_y\sin\psi), \;\; \phi_d = \tfrac{1}{g}(a_x\sin\psi - a_y\cos\psi) \)</span>
+      <span class="dwhy"><b>Solve — that's the outer loop's whole "tilt map".</b> Clamp it, and the tilt limit becomes a horizontal-acceleration budget: a_max = g·tan(η_max).</span></div>
+    <div class="dstep fragment"><span><span class="dnum">5</span>\( T = m(g + a_z) \)</span>
+      <span class="dwhy"><b>Vertical closes separately</b> — with the mg feed-forward that fix #6 warned you never to make the integrator find.</span></div>
+  </div>
+  <div class="turn fragment" style="margin-top:.4em"><span class="tt">Your turn (2 min)</span> — with ψ = 90°, a request of a_x = 2 m/s² needs which attitude? Work it, then sanity-check the sign with your hands (nose is +x, ψ rotates it to +y…).</div>
+  <aside class="notes">Step 4's a_max = g·tanη is the number safety officers quote at the demo. Make them memorize the 12° → ~2 m/s² pairing.</aside>
+</section>
+
+<!-- 6 OUTER LAW -->
+<section>
+  <p class="eyebrow">Block A</p>
+  <h2>The outer loop, written down</h2>
+  <p>PD on position gives a <b>desired acceleration</b>, then invert the small-angle map:</p>
+  \[ \mathbf{a}_{\text{des}} = K_p^{\text{pos}}(\mathbf{p}_d-\mathbf{p}) + K_d^{\text{pos}}(\dot{\mathbf{p}}_d-\dot{\mathbf{p}}) \]
+  \[ \theta_d = \frac{1}{g}\big(a_x \cos\psi + a_y \sin\psi\big), \qquad
+     \phi_d = \frac{1}{g}\big(a_x \sin\psi - a_y \cos\psi\big), \qquad
+     T = m\,(g + a_z) \]
+  <div class="cols">
+    <div class="box"><b>Read it as a sentence:</b> "to go that way, lean that way; to climb, push harder than gravity."
+    The yaw terms just rotate the request into the body's heading.</div>
+    <div class="box warn"><b>Clamp before you send:</b>
+    \( |\phi_d|,|\theta_d| \le \eta_{\max} \) and \( 0 &lt; T \le T_{\max} \).
+    The tilt limit bounds horizontal acceleration — it is a <i>safety knob</i>, not a nuisance.</div>
+  </div>
+  <aside class="notes">Note T = m(g + az): the m·g term is the hover feed-forward — the "output bias" from the seven fixes. Without it the integrator must find gravity by trial and error.</aside>
+</section>
+
+<!-- 7 TIMESCALE -->
+<section>
+  <p class="eyebrow">Block A</p>
+  <h2>Why the cascade works: timescale separation</h2>
+
+  <div class="fig plain" data-diagram="timescale"><p class="cap">The bandwidth ladder. Each ×5–10 gap is an assumption the design leans on.</p></div>
+  <ul>
+    <li>The outer loop <b>assumes attitude tracking is instantaneous</b>. That is only true if the inner loop is ~5–10× faster.</li>
+    <li>Inner \( \omega_n=\sqrt{K_p^{\text{att}}}\approx 13\,\text{rad/s} \) → outer should stay below ~2 rad/s ⇒ \( K_p^{\text{pos}} \lesssim 4 \).</li>
+    <li>Break the separation and the loops fight — an oscillation <b>no gain can fix</b>, because the <i>architecture</i> is wrong.</li>
+  </ul>
+  <aside class="notes">This is the single most common student failure in Lab 3: cranking outer Kp to 20 "to make it faster". The widget on the next-but-one slide lets them feel the boundary.</aside>
+</section>
+
+<!-- 7b. CASCADE FORMAL -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>When is "the inner loop is instant" a theorem?</h2>
+  <div class="env defn"><span class="eh">Claim <em>(two-timescale separation, engineering form)</em>.</span>
+  If the inner loop tracks \( \boldsymbol\eta_d \) with bandwidth \( \omega_i \) and the outer loop is designed for bandwidth \( \omega_o \le \omega_i / k \), then the cascade behaves like the outer loop acting on a <i>perfect</i> attitude actuator, up to errors of order \( (\omega_o/\omega_i) \). Singular-perturbation theory makes this precise; practice settles for \( k \approx 5\text{–}10 \).</div>
+  <div class="cols top" style="margin-top:.4em">
+    <div class="env exm"><span class="eh">Worked example <em>(our numbers)</em>.</span>
+    Inner \( \omega_i = 13.4 \) rad/s. With \( k=6 \): \( \omega_o \le 2.2 \) rad/s ⇒ outer \( K_p^{pos} = \omega_o^2 \le 4.9 \), \( K_d^{pos} = 2\zeta\omega_o \approx 3.1 \) (\( \zeta = 0.7 \)). The widget's "merge point" you found near \( K_p \approx 8 \) is this inequality failing — you measured a theorem.</div>
+    <div class="env exm"><span class="eh">Worked example <em>(the safety budget, end to end)</em>.</span>
+    Tilt limit \( \eta_{max}=12^\circ \) ⇒ \( a_{max} = g\tan 12^\circ = 2.1 \) m/s². Across a 4 m arena, peak speed \( v = \sqrt{a\,d} \approx 2.9 \) m/s and full-stop distance \( v^2/2a \approx 2 \) m. <b>One clamp constant fixes acceleration, top speed, and braking distance</b> — that is why the demo config caps tilt, not speed.</div>
+  </div>
+  <aside class="notes">"You measured a theorem" is the sentence to land — the widget experience becomes legitimate theory. The braking-distance number recurs verbatim in the Wk-10 safety briefing.</aside>
+</section>
+
+<!-- 8 QUIZ A -->
+<section>
+  <p class="eyebrow">Concept check · 00:50</p>
+  <h2>Predict before you compute</h2>
+  <div class="quiz">
+    <div class="q">Q1 — The quad hovers with a payload clipped under it (heavier than modeled). With a pure PD outer loop and \(T=m(g+a_z)\) using the <i>modeled</i> \(m\), what happens?</div>
+    <div class="opt">A. It hovers at the setpoint anyway</div>
+    <div class="opt">B. It settles <i>below</i> the setpoint with a steady error</div>
+    <div class="opt">C. It oscillates about the setpoint</div>
+    <p class="fragment"><span class="ok">B.</span> <span class="why">PD needs a nonzero error to generate the extra thrust — a textbook steady-state error. The cure is integral action (next block) or better feed-forward (measure the mass).</span></p>
+    <div class="q fragment">Q2 — Why does the tilt map divide by \(g\), not by \(T/m\)?</div>
+    <p class="fragment"><span class="ok">Small-angle + near-hover assumption</span> <span class="why">— at hover \(T/m \approx g\). Far from hover the exact inversion uses \(T\); quadsim's reference controller does the small-angle version, and you should know what it silently assumes.</span></p>
+  </div>
+  <aside class="notes">Run Q1 as think-pair-share: 60 s alone, 60 s with neighbour, then vote by hand. Both questions come back on the midterm review in Wk 9.</aside>
+</section>
+
+<!-- 9 WIDGET -->
+<section>
+  <p class="eyebrow">Interactive · drag the sliders</p>
+  <h2>Tune the outer loop, live</h2>
+  <div class="widget" data-widget="cascade" style="max-width:780px;margin:0 auto"></div>
+  <p class="muted" style="font-size:.55em">Find: (1) the outer Kp where the timescales merge; (2) what an 8° tilt limit does to a 2 m step.</p>
+  <aside class="notes">Predictions first, then slide. Push Kp to 10 → the violet actual-tilt trace stops following its own grey command: that IS the separation failing. Then tilt limit 8°: slew-limited, slow, safe — exactly the flight-demo configuration.</aside>
+</section>
+
+<!-- 10 BLOCK B: ALTITUDE -->
+<section>
+  <p class="eyebrow">Block B · 01:00</p>
+  <h2>Altitude: the channel that needs an integrator</h2>
+  <div class="cols">
+    <ul>
+      <li>Vertical: \( m\ddot z = T\cos\phi\cos\theta - mg \) — near hover, \( \ddot z \approx T/m - g \).</li>
+      <li>PD + hover feed-forward flies… until the battery sags, the payload changes, or props wear.</li>
+      <li>Any constant mismatch ⇒ constant height error. <b>The integrator's one honest job: kill it.</b></li>
+    </ul>
+    <div class="box">\[ T = m\big(g + K_p e_z + K_d \dot e_z + K_i {\textstyle\int} e_z\,dt\big) \]
+    with the integral <b>clamped</b> (fix #1) and frozen while on the ground — or takeoff winds it up before you lift.</div>
+  </div>
+  <aside class="notes">Ask: why not put I on roll/pitch attitude too? (Answer: near-zero steady moment at hover; drift is handled by the position loop above it. On real airframes a small attitude-I trims CG offset — connect to F570 trim.)</aside>
+</section>
+
+<!-- 11 WINDUP ON THROTTLE -->
+<section>
+  <p class="eyebrow">Block B</p>
+  <h2>Windup, in the one place it will bite you</h2>
+  <div class="cols">
+    <div>
+      <p><b>Scenario:</b> you command takeoff to 10 m. For the first seconds the error is huge; the integral charges; thrust saturates at \(T_{\max}\).</p>
+      <ul>
+        <li>Arriving at 10 m, the integral is still full → sails through, <b>overshoots meters</b>.</li>
+        <li>Then the mirror image on the way back down.</li>
+      </ul>
+    </div>
+    <div class="box warn"><b>The three-line cure</b> (from the seven fixes):
+      <ul style="margin-left:1em">
+        <li>clamp \( \int e_z \) to \( \pm E_{\max} \)</li>
+        <li>freeze it while \(|e_z|\) is large (integral separation)</li>
+        <li>freeze it while the output is saturated (conditional integration)</li>
+      </ul>
+    All three are one <code>if</code> each in <code>student.py</code> — and in the C firmware.</div>
+  </div>
+  <aside class="notes">JiangXie slides 24–27 animate exactly this on a bench motor. On the aircraft, throttle windup is the classic "porpoising takeoff" — the Wk-9 troubleshooting table maps the symptom back here.</aside>
+</section>
+
+<!-- WIDGET altitude -->
+<section class="dense">
+  <p class="eyebrow">Block B · interactive</p>
+  <h2>An unknown mass, an integrator, and a clamp</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="altitude"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> Mass error +10 %, Ki 2, clamp 0.5: does it reach 1.5 m? Compute the integrator value needed (Δm·g / (m·Ki)) before you look. Then raise the clamp — and then Ki — and name the trade.</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#altitude">Digital Lab → altitude</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">This is Week 10's take-off sag, five weeks early, with the number attached. Fix 6 (feed-forward) is the second button.</aside>
+</section>
+
+<!-- ALT 6 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Altitude is not just another axis</h2>
+  <table class="data">
+    <tr><th></th><th>Horizontal (x, y)</th><th>Vertical (z)</th></tr>
+    <tr><td>Route to the actuator</td><td>through attitude — 2 extra integrations</td><td><b>direct</b>: thrust acts immediately</td></tr>
+    <tr class="hl"><td>Steady-state bias</td><td>≈ none at hover</td><td><b>gravity — always,永遠</b></td></tr>
+    <tr class="hl"><td>Needs integral action?</td><td>rarely</td><td><b>essentially always</b></td></tr>
+    <tr><td>Achievable bandwidth</td><td>1–2 Hz (limited by the cascade)</td><td>2–4 Hz (limited only by thrust lag)</td></tr>
+    <tr><td>Failure mode</td><td>drift, orbiting</td><td>porpoising, sag on manoeuvres</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">The asymmetry, in one number.</span>
+  To hold position, the required steady tilt is 0°. To hold altitude, the required steady thrust is 6.38 N — <b>40% of everything the aircraft has</b>.<br/><br/>A controller that must discover that 6.38 N by integrating error will sag first and recover second. Feed it forward (fix 6) and the integrator is left with the small residue it is good at: battery sag, payload error, air density.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why this shapes the lab.</span>
+  Your altitude channel is the one place in the whole course where you will genuinely need all three PID terms <i>plus</i> feed-forward <i>plus</i> anti-windup. It is the richest single loop you build — which is why Lab 3 grades it specifically.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Making altitude's specialness explicit prevents students from treating all three axes identically, the commonest Lab-3 design error.</aside>
+</section>
+
+<!-- DER 6 -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill">interactive</span></p>
+  <h2>The altitude law, built term by term</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>\( m\ddot z = T\cos\phi\cos\theta - mg \)</span>
+      <span class="dwhy"><b>Exact vertical dynamics</b> from Week 2 — note the tilt factor, which is the term most treatments quietly drop.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">2</span>solve for the thrust that would produce a wanted \( \ddot z = a_z \): \( T = \dfrac{m(g + a_z)}{\cos\phi\cos\theta} \)</span>
+      <span class="dwhy"><b>Inversion, not approximation.</b> The \( mg \) is feed-forward (fix 6); the denominator is the tilt compensation that stops the aircraft sagging when it leans.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">3</span>choose \( a_z = K_p e_z + K_d \dot e_z + K_i \!\int\! e_z\,dt \)</span>
+      <span class="dwhy"><b>Now, and only now, a PID.</b> Everything the model knows has already been supplied; feedback handles what it does not know.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>clamp the integral; freeze it while disarmed or saturated</span>
+      <span class="dwhy"><b>Fixes 1 and 2.</b> Without this, a take-off command charges the integral on the ground and the aircraft leaps. This is the single most common first-flight incident.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">5</span>finally clamp \( T \in [T_{min}, 4f_{max}] \) and report saturation upward</span>
+      <span class="dwhy"><b>Physics has the last word</b> — and the controller must be told, so its integrator can stop. The loop is now honest about its own limits.</span></div>
+  </div>
+  <p class="small muted">Five steps, and four of them are engineering rather than mathematics. That ratio is typical, and it is why the seven fixes are not an appendix to the subject.</p>
+
+  <aside class="notes">Step 2's inversion structure (feed-forward + compensation, then feedback) is the template for every well-built loop.</aside>
+</section>
+
+<!-- YAW 6 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Yaw: low authority, high consequence</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Yaw does not move the aircraft — but it rotates the <b>frame in which the outer loop thinks</b>. Get \( \psi \) wrong and 'forward' points somewhere else.</li>
+    <li>Authority is \( c/l \approx 1/10 \) of roll (Week 3), and \( I_{zz} \approx 1.7 I_{xx} \) (Week 2). <b>Roughly 17× slower</b> than roll, from two independent causes.</li>
+    <li>So: gentle gains, generous tolerance, and never demand fast heading changes during a position manoeuvre.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The wrap bug, precisely.</span>
+  \( \psi = 179^\circ \), command \( -179^\circ \). Naive: \( e = -358^\circ \) ⇒ a full-authority pirouette the long way round.<br/>Wrapped: \( e = +2^\circ \) ⇒ a nudge.<br/><br/><code>e = atan2(sin(r-y), cos(r-y))</code> — one line, and it must appear in every angular error you ever compute, including the attitude loop's.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — Your outer loop computes \( a_x = 2 \) m/s² in the <i>world</i> frame while the aircraft faces \( \psi = 90^\circ \). Which body-axis tilt does that require? <span class="muted">(Roll, not pitch: the tilt map's \( \psi \) terms rotate the request into the body frame. Skip that rotation and your quad flies at right angles to the command — a spectacular and instructive bug.)</span></div>
+
+  <aside class="notes">The right-angle failure mode is memorable and is exactly what happens when students drop the psi terms from the tilt map.</aside>
+</section>
+
+<!-- FRAME 6 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Reference frames for the outer loop: world, body, or something else?</h2>
+  <table class="data">
+    <tr><th>Frame</th><th>Command means</th><th>Used by</th><th>Watch out for</th></tr>
+    <tr class="hl"><td><b>World / ENU</b></td><td>'go to that corner of the room'</td><td>autonomous missions, our labs</td><td>needs a heading estimate to execute</td></tr>
+    <tr><td><b>Body</b></td><td>'go forward, relative to the nose'</td><td>manual FPV flying</td><td>'forward' changes as you yaw</td></tr>
+    <tr><td><b>Heading-locked</b> (world position, fixed \( \psi \))</td><td>'translate, keep facing north'</td><td>inspection, cinematography</td><td>the usual choice for stable video</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">Our convention.</span>
+  Position commands in the <b>world</b> frame; the tilt map rotates them into body tilt using the current \( \psi \). That is why the \( \cos\psi, \sin\psi \) terms exist in the map you derived — they are the frame conversion, hiding in plain sight.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">A real design question.</span>
+  For the Week-10 box mission, would you command in world or body frame? <b>World</b> — because the box is taped to the floor, not to the aircraft. Choosing the frame that matches the <i>task</i>, not the vehicle, is most of what mission design is.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Frame choice is a real design decision students will face in the demo; making it explicit avoids a whole class of confusion.</aside>
+</section>
+
+<!-- 12 YAW -->
+<section>
+  <p class="eyebrow">Block B</p>
+  <h2>Yaw rides along — but wrap the error</h2>
+  <div class="cols">
+    <ul>
+      <li>Yaw does not move the quad — it points the nose (camera, sensor, "forward").</li>
+      <li>Simple PD on \( \psi \) via \( \tau_z \); low authority (yaw torque comes from prop drag, \(c=0.016\) m — tiny).</li>
+      <li><b>Bug that gets everyone:</b> at \( \psi=179^\circ \), a command of \( -179^\circ \) is 2° away — naive subtraction says 358°.</li>
+    </ul>
+    <div class="box"><code>e_psi = wrap_to_pi(psi_d - psi)</code><br/><br/>
+    Forget it in the lab: the quad pirouettes once, dramatically, and every velocity in the outer loop's yaw rotation is wrong while it does.</div>
+  </div>
+</section>
+
+<!-- 13 HW BRIDGE -->
+<section>
+  <p class="eyebrow">Reality check</p>
+  <h2>The same outer loop on a plant you were not told about</h2>
+  <table class="data">
+    <tr><th>the nominal model gives you</th><th>a real aircraft — and the Week-10 team plant — make you earn</th></tr>
+    <tr><td>true position from the state vector</td><td>position from an <b>estimator</b> fed by sensors — Wk 8's whole topic; on the team plant the GPS fixes are also <i>late</i></td></tr>
+    <tr><td>\(T = m(g+a_z)\), mass known exactly</td><td><b>mass you were not told</b> — the z-integrator (fix #6's cousin) carries the difference, and its clamp decides how long the sag lasts</td></tr>
+    <tr><td>tilt limit = a config number</td><td>tilt limit = your <b>crash-energy budget</b>: 25° in the nominal model, 10–12° on a real airframe</td></tr>
+    <tr class="hl"><td>outer loop at 200 Hz free of charge</td><td>real position arrives at 5–50 Hz — the outer loop runs at the <i>sensor's</i> rate, and the cascade's timescale argument is what saves you</td></tr>
+  </table>
+  <p class="muted">The <code>altitude</code> widget in the Digital Lab lets you set the mass error and watch the integrator do exactly this — before Week 10 does it to you without telling you the number.</p>
+  <aside class="notes">Point at the F570: its position hold uses exactly this cascade with flow (ep 11) or lidar (ep 12) feeding the outer loop. Same block diagram, different arrows into it.</aside>
+</section>
+
+<!-- 14 QUIZ B -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>One more, for the road</h2>
+  <div class="quiz">
+    <div class="q">Your Lab-3 quad reaches the setpoint but arrives leaning and slides past it, recovers, slides back — a slow S-shaped wobble at ~0.5 Hz. Inner loop traces look perfect. Most likely cause?</div>
+    <div class="opt">A. Integral windup on altitude</div>
+    <div class="opt">B. Outer-loop gains too hot — timescale separation eroding</div>
+    <div class="opt">C. Yaw error not wrapped</div>
+    <div class="opt">D. Mixer saturation</div>
+    <p class="fragment"><span class="ok">B.</span> <span class="why">0.5 Hz is the outer loop's own frequency; a clean inner loop plus slow position oscillation = the outer loop chasing itself. First move: halve \(K_p^{\text{pos}}\), re-run, compare overshoot. (A shows up as height porpoising, C as a pirouette, D as coupled attitude glitches during aggressive moves.)</span></p>
+  </div>
+</section>
+
+<!-- 15 BREAK -->
+<section class="divider">
+  <h2><span class="tchip">01:30</span> Break — 10 minutes</h2>
+  <hr class="drule"/>
+  <p>When we return: Lab 3. Have <code>quadsim</code> open and Wk-5's controller passing its test.</p>
+</section>
+
+<!-- CODE 6 -->
+<section class="dense">
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Code walkthrough: the full cascade in thirty lines</h2>
+  <pre><code class="language-python">def control(self, t, x, ref):
+    # ---------- OUTER: position -> desired acceleration ----------
+    e_p   = ref.pos - x.pos
+    v_d   = np.clip(self.kp_pos * e_p, -self.v_max, self.v_max)   # velocity limit
+    a_des = self.kp_vel*(v_d - x.vel) + ref.acc                    # + feedforward (Wk 9)
+
+    # ---------- ALTITUDE: its own PID + gravity feedforward -------
+    e_z    = ref.pos[2] - x.pos[2]
+    self.iz = clamp_if_not_saturated(self.iz + e_z*self.dt, self.iz_max)
+    a_z    = self.kp_z*e_z + self.kd_z*(0 - x.vel[2]) + self.ki_z*self.iz
+    T      = self.m*(self.g + a_z) / max(0.5, cos(x.phi)*cos(x.theta))
+
+    # ---------- TILT MAP: acceleration -> attitude setpoint -------
+    c, s   = cos(x.psi), sin(x.psi)
+    th_d   =  (a_des[0]*c + a_des[1]*s) / self.g
+    ph_d   =  (a_des[0]*s - a_des[1]*c) / self.g
+    th_d, ph_d = clamp(th_d, self.tilt_max), clamp(ph_d, self.tilt_max)
+
+    # ---------- INNER: your Week-5 attitude loop, unchanged -------
+    tau = self.attitude.step([ph_d, th_d, ref.yaw], x.euler, x.omega)
+    return np.array([T, *tau])</code></pre>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Four blocks, in the order the signal flows.</b> If you can name what each block would do wrong when broken, you can debug this loop.</li>
+    <li>Note <code>max(0.5, ...)</code> in the thrust divide — a guard against the compensation exploding past 60° tilt. Small, defensive, necessary.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The line to notice.</span>
+  <code>self.attitude.step(...)</code> — Week 5's controller is called <i>unchanged</i>. That is what a cascade buys: the inner loop never learns that an outer loop exists.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Walk block by block, asking 'what breaks if this line is wrong?'. The unchanged inner loop is the architectural payoff.</aside>
+</section>
+
+<!-- ORDER 6 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Tuning order: why outside-in never works</h2>
+  <ol class="small">
+    <li><b>Inner loop first, alone.</b> Freeze the outer loop's output at zero tilt. Tune \( K_p^{att}, K_d^{att} \) against step disturbances until \( \zeta \approx 1 \).</li>
+    <li><b>Altitude second, still alone.</b> Hold position off; tune \( K_p^z, K_d^z \), then add \( K_i^z \) last and smallest.</li>
+    <li><b>Outer position third</b>, starting at a quarter of the separation-rule value and rising until the first sign of interaction.</li>
+    <li><b>Yaw last</b>, gently — it disturbs nothing else and is disturbed by everything.</li>
+  </ol>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">Why the order is forced.</span>
+  Each loop's plant <i>includes</i> the loops inside it. Tune the outer loop against an untuned inner loop and you are fitting gains to a plant that will not exist tomorrow — every inner change invalidates the outer tuning.<br/><br/>Inside-out is not a preference; it is the only order in which each measurement means something.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The same order on a real aircraft.</span>
+  A flight-test programme enforces it physically: polarity → tethered attitude → altitude hold → free hover with position. <b>The gates are the tuning order, made into a safety procedure</b> — and the reason the instructor's demonstration in Week 5 stayed on the stand.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Revealing that the safety gates and the tuning order are the same sequence is satisfying and makes both feel less arbitrary.</aside>
+</section>
+
+<!-- FAIL 6 -->
+<section>
+  <p class="eyebrow">Common failure gallery</p>
+  <h2>Five outer-loop pathologies and their signatures</h2>
+  <table class="data">
+    <tr><th>Symptom</th><th>Trace signature</th><th>Cause</th><th>Fix</th></tr>
+    <tr class="hl"><td>Slow S-shaped wobble ~0.5 Hz</td><td>clean attitude, oscillating position</td><td>outer gains too hot</td><td>halve \( K_p^{pos} \)</td></tr>
+    <tr><td>Porpoising climb</td><td>altitude overshoots then undershoots</td><td>integral windup on take-off</td><td>clamp + ground-freeze</td></tr>
+    <tr><td>Sags during fast moves</td><td>altitude dips as tilt peaks</td><td>no \( 1/\cos\phi\cos\theta \) compensation</td><td>add the tilt term</td></tr>
+    <tr><td>Flies at right angles to command</td><td>position error grows perpendicular</td><td>\( \psi \) terms missing from tilt map</td><td>rotate the request by yaw</td></tr>
+    <tr><td>Dramatic single pirouette</td><td>yaw error jumps by ~360°</td><td>unwrapped yaw error</td><td><code>atan2(sin,cos)</code></td></tr>
+  </table>
+  <p class="small">Every row is diagnosable from the log <b>without re-flying</b> — provided you logged commanded versus delivered, and each loop's internals separately. That is Week 4's logging lecture cashing in.</p>
+
+  <aside class="notes">This table is the lab's debugging companion; tell them to keep it open while working.</aside>
+</section>
+
+<!-- TH 6 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Derive the tilt map <i>without</i> the small-angle assumption, i.e. solve \( R\mathbf e_3 = \mathbf a_{des}/\lVert\cdot\rVert \) exactly for \( \phi_d, \theta_d \). At what tilt does it differ from the linear map by 5%?</li>
+    <li>For \( \omega_i = 13.4 \) rad/s, compute the outer gains for separation factors \( k = 3, 6, 10 \). Simulate all three on a 2 m step and rank them on overshoot and settling time.</li>
+    <li>Show that a PD position loop leaves a steady-state error under constant wind, and compute it for a 1 m/s² disturbance with \( K_p^{pos} = 4.9 \).</li>
+    <li>Add the \( 1/(\cos\phi\cos\theta) \) compensation and quantify the altitude dip it removes during a 25° manoeuvre.</li>
+    <li>Implement conditional integration on the altitude channel and demonstrate the take-off difference with two overlaid plots.</li>
+    <li>A hexacopter is fully actuated in translation. Sketch how the outer loop would change, and state one thing that becomes easier and one that becomes harder.</li>
+  </ol>
+  <div class="box warn">Question 3's answer is why Week 9's feedforward and Week 11's constrained optimisation both exist — do it before next week.</div>
+
+  <aside class="notes">Q1 gives strong students something genuinely challenging; Q6 rewards conceptual thinking over computation.</aside>
+</section>
+
+<!-- MAP 6 -->
+<section class="dense">
+  <p class="eyebrow">Concept map</p>
+  <h2>Week 6, in one page</h2>
+  <div class="fig plain" data-diagram="cascade"><p class="cap">Both loops now exist. The violet one came from Week 5; the teal one is today. Weeks 7–12 replace boxes inside this picture without changing the wiring.</p></div>
+  <table class="data">
+    <tr><th>Concept</th><th>One-line statement</th><th>Where it returns</th></tr>
+    <tr><td>underactuation</td><td>4 inputs, 6 DOF ⇒ translate by tilting</td><td>the reason for the cascade, forever</td></tr>
+    <tr><td>tilt map</td><td>\( \theta_d \approx a_x/g \), rotated by \( \psi \)</td><td>Wk 9 feedforward, Wk 11 MPC output</td></tr>
+    <tr class="hl"><td>timescale separation</td><td>outer \( \le \) inner \( /5 \)</td><td>Wk 8 sensor rates, Wk 12 MPC scheduling</td></tr>
+    <tr><td>thrust feed-forward \( mg \)</td><td>never make I discover gravity</td><td>every altitude loop ever built</td></tr>
+    <tr><td>tilt clamp</td><td>one number sets \( a_{max}, v_{max} \), braking distance</td><td>Wk 9 feasibility, Wk 10 safety</td></tr>
+    <tr><td>wrap the angle</td><td>one line, one pirouette saved</td><td>every angular error</td></tr>
+  </table>
+
+  <aside class="notes">Sixty seconds. Emphasise that the wiring diagram is now final for the rest of the course.</aside>
+</section>
+
+<!-- AHEAD 6 -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: stop guessing gains</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>You now have a flying autopilot — and roughly eight hand-tuned numbers whose only justification is that they work.</li>
+    <li>Week 7 replaces the guessing with a <b>cost function</b>: state what you care about, and the mathematics returns the gains.</li>
+    <li>It also delivers the first genuine <i>guarantee</i> of the course — and reveals the blind spot that Weeks 11–12 exist to fix.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Bring to Week 7:</b> Lab 3 passing (step lands within 0.1 m), plus your \( (A,B) \) from Week 4 — LQR consumes it directly.<br/><br/><b>Team:</b> the outer loop merged into the one <code>student.py</code>; a 2 m step flown from a clean clone by someone other than its author.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Point out that today's step-response trace is the first data point of the Wk-10 gap analysis — the nominal column starts here; teams should treat it as a deliverable, not a formality.</aside>
+</section>
+
+<!-- CQ 6 -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Two questions before the lab</h2>
+  <div class="quiz">
+    <div class="q">Q1 — You double \( K_p^{pos} \) and the aircraft becomes <i>less</i> accurate at holding position. Explain.</div>
+    <p class="fragment"><span class="ok">The outer loop is now fast enough to excite the inner one.</span> <span class="why">Timescale separation has eroded; the two loops fight, producing an oscillation whose amplitude is worse than the drift you were trying to remove. More gain is not more control — it is a different architecture, badly.</span></p>
+    <div class="q fragment">Q2 — Your quad holds altitude perfectly in still air but sinks 20 cm every time it accelerates horizontally. One missing line. Which?</div>
+    <p class="fragment"><span class="ok">The \( 1/(\cos\phi\cos\theta) \) thrust compensation.</span> <span class="why">Tilting spends lift on horizontal acceleration; without compensation the altitude loop only notices <i>after</i> the aircraft has already dropped, and then chases. Feed-forward what geometry already tells you.</span></p>
+  </div>
+
+  <aside class="notes">Both are real Lab-3 outcomes; Q2's fix is one line and a satisfying before/after plot.</aside>
+</section>
+
+<!-- DIST 6 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>The disturbance the outer loop actually fights</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Disturbance</th><th>Enters as</th><th>Size (our aircraft)</th><th>Rejected by</th></tr>
+    <tr><td>wind / draught</td><td>force</td><td>0.05–0.3 N ⇒ 0.1–0.5 m/s²</td><td>position I, or feedforward</td></tr>
+    <tr><td>CoM offset</td><td>constant torque</td><td>0.006 N·m ⇒ 0.84° tilt</td><td>attitude trim or position I</td></tr>
+    <tr><td>battery sag</td><td>thrust loss</td><td>−10% over a flight</td><td>altitude I</td></tr>
+    <tr><td>ground effect</td><td>thrust gain</td><td>+5–15% below 0.3 m</td><td>altitude loop, if fast enough</td></tr>
+    <tr class="hl"><td>payload change</td><td>mass step</td><td>+15% instantly</td><td><b>nothing classical — this is mission M3</b></td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The pattern worth seeing.</span>
+  Constant disturbances are integral action's business. <b>Step</b> disturbances (a payload release) are nobody's business in classical control — the integrator eventually catches up, but 'eventually' is metres of altitude on a small aircraft.<br/><br/>That gap is why adaptive control exists, and why mission M3 in the final project is genuinely hard rather than merely fiddly.</div>
+    </div>
+  </div>
+  <p class="small">Cataloguing disturbances by <i>how they enter</i> — force, torque, parameter change — tells you immediately which loop must handle them and whether it can.</p>
+
+  <aside class="notes">This catalogue makes the final-project mission menu feel principled rather than arbitrary.</aside>
+</section>
+
+<!-- FF 6 -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>Feedforward, previewed: the outer loop's next upgrade</h2>
+  <div class="cols top">
+    <div>
+  <p>Today's outer loop is purely reactive: it acts only after a position error exists. For a <i>moving</i> target that guarantees a lag.</p>
+  \[ \mathbf a_{des} = \underbrace{\ddot{\mathbf p}_r}_{\text{feedforward (Wk 9)}} + \underbrace{K_p(\mathbf p_r - \mathbf p) + K_d(\dot{\mathbf p}_r - \dot{\mathbf p})}_{\text{today's feedback}} \]
+  <ul class="small">
+    <li>The reference's own acceleration is <i>known</i> — so hand it to the controller instead of making feedback rediscover it.</li>
+    <li>Today \( \ddot{\mathbf p}_r = 0 \) because our references are constants. Week 9 makes them move.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The size of the effect.</span>
+  Tracking a circle of radius 1.2 m at 0.8 rad/s needs \( a = 0.77 \) m/s² of centripetal acceleration. Feedback alone must generate that from error: \( e = a/K_p = 0.77/4.9 = 0.16 \) m of <b>permanent</b> lag.<br/><br/>With feedforward, that error goes to essentially zero. <b>Sixteen centimetres, bought by one term you already know how to compute.</b></div>
+    </div>
+  </div>
+
+  <aside class="notes">Previewing feedforward here, with a number, makes Wk 9 feel like a promised payoff rather than new material.</aside>
+</section>
+
+<!-- LAND 6 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Landing and take-off: the two manoeuvres that break controllers</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Take-off.</b> On the ground, position error is large and thrust is below hover — the integrator charges while nothing moves. Cure: freeze I until thrust exceeds ~80% of hover, then release.</li>
+    <li><b>Ground effect.</b> Below ~0.3 m the aircraft gains 5–15% thrust unexpectedly. A well-tuned altitude loop handles it; a slow one balloons.</li>
+    <li><b>Touchdown.</b> Once a leg touches, the model is wrong — the aircraft is no longer a free body. Cure: detect landing (low thrust + low descent rate + stable altitude) and <b>disarm</b>, rather than letting the loop fight the floor.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why landing detection matters.</span>
+  Without it, the altitude loop sees 'still above target' after touchdown, keeps commanding thrust, and the aircraft tips over on its legs — the classic 'landed then flipped' incident.<br/><br/>Every real autopilot has a landing detector, and it is nearly always three conditions AND-ed together with a hold-time. Simple, and it prevents a whole category of embarrassment.</div>
+    </div>
+  </div>
+  <p class="small muted">Your Week-10 L4 task requires automatic take-off <i>and</i> landing. These three paragraphs are most of the work.</p>
+
+  <aside class="notes">Directly actionable for the demo; landing detection is the piece teams most often forget.</aside>
+</section>
+
+<!-- TH 6 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Derive the exact tilt map by solving \( R\mathbf e_3 \parallel \mathbf a_{des} + g\mathbf e_3 \) for \( \phi_d, \theta_d \). At what tilt does it differ from the small-angle map by 5%?</li>
+    <li>For \( \omega_i = 13.4 \) rad/s, compute outer gains for \( k = 3, 6, 10 \). Simulate a 2 m step for each and rank on overshoot and settle time.</li>
+    <li>Show a PD position loop leaves a steady error under constant wind, and compute it for a 1 m/s² disturbance with \( K_p = 4.9 \).</li>
+    <li>Add the \( 1/(\cos\phi\cos\theta) \) compensation; quantify the altitude dip it removes during a 25° manoeuvre.</li>
+    <li>Implement conditional integration on altitude and demonstrate the take-off difference with two overlaid plots.</li>
+    <li>A fully-actuated hexacopter can translate without tilting. Sketch how the outer loop changes; name one thing that gets easier and one that gets harder.</li>
+  </ol>
+  <div class="box warn">Question 3's answer is why Week 9's feedforward and Week 11's constrained optimisation both exist. Do it before next week.</div>
+
+  <aside class="notes">Q1 stretches strong students; Q6 rewards conceptual thinking.</aside>
+</section>
+
+<!-- WILD 6 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Position hold in the wild: what 'GPS hold' really does</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>A commercial drone's 'position hold' is exactly today's cascade, with GPS+baro+IMU fusion feeding it (Week 8) and a velocity loop in the middle.</li>
+    <li>The pilot's sticks do not command angles — they command <b>velocity setpoints</b>, which the outer loop tracks. Release the sticks and the setpoint is zero: the aircraft brakes and holds.</li>
+    <li>Indoors, GPS is replaced by optical flow — the same loop, a different sensor, an order of magnitude less accuracy.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why your aircraft is harder than a DJI.</span>
+  A Mavic holds position to ~10 cm outdoors with GPS+RTK and a downward camera array. Your aircraft holds ~30 cm indoors with a single flow sensor.<br/><br/><b>The controller is not the difference — the sensing is.</b> That is worth remembering when comparing your Week-10 demonstration with a consumer product: you are running the same architecture on a tenth of the information.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Manages expectations honestly and reinforces that Wk 8 (sensing) is where the real difficulty lives.</aside>
+</section>
+
+<!-- TREE 6 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>One loop, four failure modes — a diagnostic decision tree</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Does attitude track its setpoint cleanly?</b> No ⇒ the problem is inner-loop; go back to Week 5. Yes ⇒ continue.</li>
+    <li><b>Is the position error oscillating at ~0.5 Hz?</b> Yes ⇒ outer gains too hot (timescale separation).</li>
+    <li><b>Is altitude coupled to horizontal manoeuvres?</b> Yes ⇒ missing tilt compensation.</li>
+    <li><b>Does it drift steadily in one direction?</b> Yes ⇒ bias: CoM offset, trim, or wind. Add clamped I.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why a decision tree, not a checklist.</span>
+  Because the first question <b>partitions the problem</b>. Most wasted debugging time is spent tuning an outer loop whose inner loop was never right — and the tree makes that impossible to skip.<br/><br/>Adopt this habit generally: before tuning any loop, verify that everything inside it already works. It is the same principle as the hardware gates.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Explicitly connecting the debugging tree to the hardware gate sequence reinforces both.</aside>
+</section>
+
+<!-- F570 6a -->
+<section class="dense">
+  <p class="eyebrow">The instructor's aircraft</p>
+  <h2>Feed-forward, taken seriously: the F570's base throttle</h2>
+  <div class="cols top">
+    <div>
+  <pre><code class="language-cpp">// weight (grams) -> throttle, PID firmware
+static uint16_t weight_to_throttle(float weight, float height)
+{
+    weight = weight + height * 14.0f;      // (!) tether cable: 14 g per metre
+    return 156 + 6.8f*weight
+               - 0.0232f*weight*weight
+               + 0.0000512f*weight*weight*weight;
+}</code></pre>
+  <ul class="small">
+    <li>A cubic fit of the inverse thrust curve — the <b>exact</b> \( mg \) feed-forward this lecture argued for, but calibrated rather than assumed.</li>
+    <li><b>And look at line 3.</b> The tethered aircraft drags its own power cable; every metre of altitude adds 14 g of hanging cable to be lifted.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why that line is the best teaching example in the whole manual.</span>
+  The mass being lifted is a <b>function of the state</b> — it grows with height. A pure feedback loop would discover this as a persistent altitude error and fight it with the integrator, forever.<br/><br/>Instead the vendor <i>modelled</i> it: one term, \( 14h \), and the disturbance vanishes before the controller ever sees it.<br/><br/><b>Feed-forward what you know; feed back what you don't.</b> Fix 6, in a shipping product, doing real work.</div>
+    </div>
+  </div>
+
+  <aside class="notes">This is the single most instructive line in the vendor's code. Make sure everyone sees that the cable weight is state-dependent and therefore perfect feed-forward material.</aside>
+</section>
+
+<!-- F570 6b -->
+<section>
+  <p class="eyebrow">The aircraft in this room</p>
+  <h2>Two instruments, two jobs: the tethered F570 and your team plant</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th></th><th>Tethered F570 (instructor's demonstrator)</th><th>Team plant (simulation, Week 10)</th></tr>
+    <tr class="hl"><td>Endurance</td><td><b>~1.75 hours</b></td><td>unlimited</td></tr>
+    <tr><td>Repeatability</td><td>a cable that adds 14 g per metre, and a room</td><td>bit-for-bit, seed by seed</td></tr>
+    <tr class="hl"><td>Working volume</td><td>~2 m radius</td><td>the whole mission</td></tr>
+    <tr><td>Physics you did not model</td><td>all of it, sizes unknown to everyone</td><td>five effects, sizes hidden from <i>you</i></td></tr>
+    <tr><td>Best used for</td><td>seeing a real loop misbehave, live</td><td>diagnosing <i>which</i> effect did it, from data</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Two instruments, two jobs.</span>
+  The tethered machine is a <b>demonstration bench</b>: it shows you, once, that the effects are real and what they look like.<br/><br/>The team plant is a <b>diagnostic bench</b>: it lets you run the same flight a hundred times, switch one effect at a time, and read the mechanism from the data.<br/><br/>Using each for what it is good at — rather than wishing either were the other — is a genuine engineering judgement, and it is why the course uses both.</div>
+    </div>
+  </div>
+  <p class="small muted">It also means the demonstrator can show a long tuning session that no free-flying aircraft could survive — office hours, on request.</p>
+
+  <aside class="notes">Explains the two-aircraft strategy explicitly so students understand why the demo machine cannot fly their mission.</aside>
+</section>
+
+<!-- 16 LAB BRIEFING -->
+<section>
+  <p class="eyebrow">Lab briefing · 01:40</p>
+  <h2>Lab 3 graded — close the outer loop</h2>
+  <div class="cols top">
+    <ol class="small">
+      <li>In <code>StudentController</code>: position PD → \( \mathbf{a}_{\text{des}} \) → tilt map → \( \phi_d,\theta_d, T\) (clamped).</li>
+      <li>Altitude channel: add the integrator <b>with its clamp</b>.</li>
+      <li>Wrap yaw error. Feed \( \phi_d,\theta_d \) to your Wk-5 inner loop.</li>
+      <li>Hover at \([0,0,2]\), then step to \([2,1,3]\).</li>
+    </ol>
+    <div class="box"><b>Pass graded:</b> final error &lt; 0.1 m vs the <code>CascadePID</code> reference, no visible oscillation.<br/><br/>
+    <b>Predict first, run second</b> — write down expected overshoot before each gain change; the lab sheet has a table for exactly this.</div>
+  </div>
+  <p class="muted">Common traps, in order: outer gains too hot → wobble · integrator unclamped → porpoising takeoff · yaw unwrapped → pirouette · tilt limit forgotten → simulator saturates the mixer for you and the axes couple.</p>
+</section>
+
+<!-- 17 LAB SESSION -->
+<section>
+  <div class="labwrap">
+    <p class="eyebrow" style="color:#1ec8c8">Lab session · 01:50 → 02:50</p>
+    <h3>Build order &amp; checkpoints</h3>
+    <p class="cp"><b>02:05</b> — altitude-only hover holds 2 m (I clamped, no porpoise)</p>
+    <p class="cp"><b>02:20</b> — full cascade: step to \([2,1,3]\) lands within 0.1 m</p>
+    <p class="cp"><b>02:35</b> — stress it: halve the tilt limit, double the step — still clean?</p>
+    <p class="cp"><b>02:50</b> — screenshot + gains table into the lab report template</p>
+    <p style="margin-top:.8em"><a class="btn" href="../labs/week06-position-altitude-control.html">Open the Week 6 lab sheet →</a></p>
+    <span class="assess" style="background:#2a4463;border-color:#3d5a7d;color:#f5d28a">Assessed: Lab Report 3 — 5% of the course grade. Marked on: step lands &lt;0.1 m · integrator clamped with evidence · your prediction table filled *before* each run.</span>
+  </div>
+  <aside class="notes">Circulate with two questions: "what did you predict before that run?" and "which loop is oscillating — how do you know?" Teams that finish early: wind disturbance via sensors config, or start Gate-2 paperwork.</aside>
+</section>
+
+<!-- 18 MILESTONE -->
+<section>
+  <p class="eyebrow">Team project · Wk 6 of 10</p>
+  <h2>Milestone check — every role has a deliverable</h2>
+  <div class="miles">
+    <div class="m"><b>1 · Modeling</b>the tilt-to-translate inversion derived and checked against <code>CascadePID</code> lines 66–68</div>
+    <div class="m due"><b>2 · Inner loop</b>Lab 2 passing → <b>this week: Lab 3</b> — the 2 m step lands within 0.1 m, from a clean clone, run by a teammate</div>
+    <div class="m"><b>3 · Outer loop</b>Today&#39;s Lab-3 cascade is <i>your</i> reference design; the <code>altitude</code> widget run at +10 % mass, integrator on and off</div>
+    <div class="m"><b>4 · Estimation</b>the outer-loop rate argument written down: what happens when position arrives at 5 Hz (Wk 8 preview)</div>
+    <div class="m"><b>5 · Integration</b>one <code>student.py</code>, inner + outer, on <code>main</code>; CI green</div>
+  </div>
+  <p class="muted" style="margin-top:.6em">Stuck on the cascade? Bring the repo to office hours <b>this week</b> — Lab 3 is the controller the whole second half builds on.</p>
+</section>
+
+<!-- MISCONCEPTIONS -->
+<section>
+  <p class="eyebrow">Before you leave</p>
+  <h2>The traps, named</h2>
+  <table class="data">
+    <tr><th>The trap</th><th>The truth</th></tr>
+    <tr><td>"Make the position loop faster — raise its gains."</td><td>The outer loop's speed is <b>rented from the inner loop's</b>. Past \( \omega_i/5 \) you are not tuning any more, you are dismantling the architecture.</td></tr>
+    <tr><td>"The integrator fixed my hover height, so more I is better."</td><td>I exists to erase <i>constant</i> bias. Every extra unit of \(K_i\) adds phase lag and windup risk; the clamp and ground-freeze are not optional garnish.</td></tr>
+    <tr><td>"Feed-forward \( T = mg \) is redundant — I will find it."</td><td>It will — slowly, on every arming, and violently after saturation. Feed-forward what you <i>know</i>; feed back what you <i>don't</i>. (Fix #6.)</td></tr>
+    <tr><td>"Yaw error of 358° — the quad must spin the long way."</td><td>Wrap to \( (-\pi,\pi] \). One line; forgetting it costs one dramatic pirouette per cohort, every year.</td></tr>
+  </table>
+  <aside class="notes">Row 1's phrasing ("rented") tends to stick; reuse it during lab debugging.</aside>
+</section>
+
+<!-- 19 SUMMARY -->
+<section>
+  <p class="eyebrow">Wrap-up</p>
+  <h2>What to remember</h2>
+  <ul>
+    <li><b>Tilt to translate:</b> \( \theta_d \approx a_x/g \), \( \phi_d \approx -a_y/g \), \( T=m(g+a_z) \) — attitude is position's actuator.</li>
+    <li>The cascade lives on <b>timescale separation</b> (~5–10×). Break it and no gain helps.</li>
+    <li>Integral action belongs on <b>altitude</b>, clamped, frozen on the ground.</li>
+    <li>Tilt/thrust limits are the <b>safety envelope</b> — they will be mandatory numbers in your flight-demo config.</li>
+    <li><b>Next week:</b> stop hand-tuning six gains — one cost function, LQR, done.</li>
+  </ul>
+  <p class="muted" style="margin-top:1em">Reading: Quan Quan Ch. 10 · Beard &amp; McLain Ch. 6 (successive loop closure) · lab report due before Wk 7.</p>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+  Reveal.on("ready", () => { window.MLTEWidgets && MLTEWidgets.init(); window.MLTEDiagrams && MLTEDiagrams.init(); });
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

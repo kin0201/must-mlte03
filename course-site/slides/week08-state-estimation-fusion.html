@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 8 — State Estimation &amp; Sensor Fusion · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 8 · Estimation<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1 TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>State Estimation &amp; Sensor Fusion</h1>
+    <p class="tp-sub">狀態估計與感測器融合</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 8 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. The session plan follows; keep this up while people settle.</aside>
+</section>
+
+<!-- 2 AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan</h2>
+  <table class="agenda">
+    <tr><th>Clock</th><th>Segment</th><th></th></tr>
+    <tr><td class="t">00:00</td><td>The lie we've been living: <code>x = truth</code></td><td>10′</td></tr>
+    <tr><td class="t">00:10</td><td><b>Block A</b> — real sensors &amp; the complementary filter</td><td>40′</td></tr>
+    <tr><td class="t">00:50</td><td>Concept check + fusion widgets</td><td>10′</td></tr>
+    <tr><td class="t">01:00</td><td><b>Block B</b> — the Kalman filter, honestly</td><td>30′</td></tr>
+    <tr class="break"><td class="t">01:30</td><td>Break</td><td>10′</td></tr>
+    <tr><td class="t">01:40</td><td>Lab briefing — Lab 5 (graded graded)</td><td>10′</td></tr>
+    <tr class="lab"><td class="t">01:50</td><td><b>Lab session</b>: fly closed-loop on your own estimate</td><td>60′</td></tr>
+    <tr><td class="t">02:50</td><td>Debrief + milestone check</td><td>10′</td></tr>
+  </table>
+</section>
+
+<!-- 3 OBJECTIVES -->
+<section>
+  <p class="eyebrow">Learning objectives</p>
+  <h2>By the end of today you can…</h2>
+  <ul>
+    <li>Characterize the real sensor suite — <b>what each sensor is good at, bad at, and how it fails</b>.</li>
+    <li>Explain why integrating a gyro drifts, and why an accelerometer can't be trusted alone.</li>
+    <li>Build a <b>complementary filter</b> and choose its crossover.</li>
+    <li>Write the <b>Kalman predict/update</b> equations and read the gain as a trust ratio.</li>
+    <li><span class="pill">Lab 5 graded</span> Close the loop on your own estimate in <code>quadsim</code> — and stay airborne.</li>
+  </ul>
+</section>
+
+<!-- 4 SENSOR SUITE -->
+<section>
+  <p class="eyebrow">Block A · 00:10</p>
+  <h2>What the aircraft actually knows</h2>
+  <table class="data">
+    <tr><th>Sensor</th><th>Measures</th><th>Rate</th><th>Superpower</th><th>Fatal flaw</th></tr>
+    <tr><td>Gyro (MEMS)</td><td>body rates \(p,q,r\)</td><td>1–8 kHz</td><td>fast, low noise short-term</td><td><b>bias</b> — integrates into unbounded drift</td></tr>
+    <tr><td>Accelerometer</td><td>specific force</td><td>1 kHz</td><td>gravity = an absolute "down"</td><td>noisy; lies whenever you accelerate</td></tr>
+    <tr><td>Barometer</td><td>altitude (pressure)</td><td>~50 Hz</td><td>absolute-ish height</td><td>±0.5 m wander, prop-wash, doors opening</td></tr>
+    <tr><td>ToF laser</td><td>height AGL</td><td>~40 Hz</td><td>cm accuracy low down</td><td>range-limited (~2–4 m); surface-dependent</td></tr>
+    <tr class="hl"><td>Optical flow</td><td>ground-relative velocity</td><td>20–100 Hz</td><td>indoor "GPS" for velocity</td><td>needs <b>texture, light, and height</b> to scale</td></tr>
+    <tr><td>GPS</td><td>position/velocity</td><td>1–10 Hz</td><td>absolute, global</td><td>indoors: nothing at all</td></tr>
+  </table>
+  <p class="muted">No row is sufficient. Every autopilot you have ever seen flies on a <b>combination</b> — today is how.</p>
+  <aside class="notes">Pass the team aircraft's flow deck around; point at the tiny camera. JiangXie ep 4 (gyro) and ep 7 (height) are the read-the-raw-data companions; F570 eps 11–12 are the fusion payoffs.</aside>
+</section>
+
+<!-- 4b. YOUR TURN -->
+<section>
+  <p class="eyebrow">Hands on the table</p>
+  <h2>Design exercise before any math</h2>
+  <div class="turn"><span class="tt">Your turn (3 min, pairs)</span> — using only the table on the previous slide, propose a sensor pairing for each estimate and defend it in one sentence each:
+  <b>attitude</b> · <b>height</b> · <b>horizontal velocity</b>. Where does *yaw* come from indoors, with no compass row on the table? <span class="muted">(Trick question — gyro-integrated yaw drifts unanchored; flow gives no heading. Real answer: accept slow yaw drift, or add a magnetometer/vision. Knowing a problem is *unsolved by your suite* is estimation maturity.)</span></div>
+
+  <div class="fig" data-diagram="fusion"><p class="cap">Where today ends: every loop from Wks 5–7 re-plumbed to consume x̂ instead of truth.</p></div>
+  <aside class="notes">Collect two pairings aloud; the yaw trap sparks the best discussion. The figure frames the lecture's destination before the tools arrive.</aside>
+</section>
+
+<!-- FP 8 -->
+<section>
+  <p class="eyebrow">First principles</p>
+  <h2>Estimation is inference, not measurement</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>No sensor measures 'attitude'. A gyro measures rotation <i>rate</i>; an accelerometer measures specific <i>force</i>. Attitude is <b>inferred</b>.</li>
+    <li>No indoor sensor measures position. Optical flow measures <i>ground-relative velocity in pixels</i>; a ToF laser measures <i>distance to whatever is below</i>. Position is inferred, and it drifts.</li>
+    <li>So the estimator's job is: given a model of how the world evolves and a stream of partial, noisy, delayed clues, maintain the best current belief about twelve numbers nobody can see.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The reframing that matters.</span>
+  Weeks 1–7 treated \( \mathbf x \) as a fact. From today it is a <b>hypothesis with an uncertainty attached</b>.<br/><br/>That change propagates: your controller now acts on a belief, your safety logic must handle low-confidence beliefs, and 'the aircraft knows where it is' becomes a claim requiring evidence.</div>
+    </div>
+  </div>
+  <p class="small muted">This is the week the course stops being about an aircraft and starts being about an aircraft <i>that has to figure things out</i>.</p>
+
+  <aside class="notes">Set the philosophical frame early; it makes the covariance discussion later feel necessary rather than decorative.</aside>
+</section>
+
+<!-- SENS 8 -->
+<section>
+  <p class="eyebrow">Term by term</p>
+  <h2>What each sensor really returns</h2>
+  <table class="data">
+    <tr><th>Sensor</th><th>Physically measures</th><th>NOT what you want</th><th>Bridge required</th></tr>
+    <tr><td>Gyroscope</td><td>angular rate in the <b>body</b> frame</td><td>attitude</td><td>integrate — and it drifts</td></tr>
+    <tr class="hl"><td>Accelerometer</td><td>specific force \( (\mathbf a - \mathbf g) \) in body</td><td>'down'</td><td>true only when \( \mathbf a \approx 0 \)</td></tr>
+    <tr><td>Barometer</td><td>air pressure</td><td>altitude</td><td>a model of the atmosphere; drifts with weather</td></tr>
+    <tr><td>ToF laser</td><td>range to the nearest surface below</td><td>altitude above <i>ground</i></td><td>a step when you fly over a table</td></tr>
+    <tr class="hl"><td>Optical flow</td><td>angular pixel motion</td><td>velocity</td><td>multiply by height — needs the ToF</td></tr>
+    <tr><td>Magnetometer</td><td>local magnetic field</td><td>heading</td><td>distorted by motors, steel, laptops</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">The accelerometer's honest name.</span>
+  It is an <b>accelerometer</b>, and in free fall it reads zero — it does not measure gravity, it measures the force holding you <i>out</i> of free fall. Sitting still, that happens to be \( -\mathbf g \). Accelerating, it is not.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The flow chain.</span>
+  Flow gives \( \omega_{px} \); true velocity \( v = \omega_{px} \times h \). <b>A 10% height error becomes a 10% velocity error</b>, which integrates into position drift. Your ToF's accuracy is your position hold's accuracy, one step removed.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The 'accelerometer measures the force holding you out of free fall' phrasing is the one students remember.</aside>
+</section>
+
+<!-- NOISE 8 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Noise, bias, drift: three different problems</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th></th><th>Noise</th><th>Bias</th><th>Drift</th></tr>
+    <tr><td>Looks like</td><td>fast, zero-mean scatter</td><td>a constant offset</td><td>a slow wander</td></tr>
+    <tr class="hl"><td>Cured by</td><td>averaging / filtering</td><td>calibration or estimation</td><td>an absolute reference</td></tr>
+    <tr><td>Gyro</td><td>0.01 rad/s RMS</td><td>0.5–3 °/s</td><td>temperature-dependent</td></tr>
+    <tr><td>Effect if ignored</td><td>jittery control</td><td><b>unbounded attitude error</b></td><td>slow, plausible lies</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why bias is the dangerous one.</span>
+  Noise averages away — it is annoying, not fatal. Bias does not average away, and integration turns it into an error that <b>grows without limit</b>. A 1 °/s bias is 60° of attitude error after one minute.<br/><br/>That is why every serious estimator either calibrates bias on the ground <i>or</i> carries it as a state and learns it in flight. Your aircraft does the first every time you arm it while holding still.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(90 s)</span> — Your team's gyro sits at 1.2 °/s bias. How long before attitude-from-gyro-alone is 10° wrong? <span class="muted">(8.3 seconds. That is the entire useful life of an uncorrected gyro attitude — and the reason the accelerometer, however noisy, is not optional.)</span></div>
+
+  <aside class="notes">The 8-second number is startling and makes the case for fusion better than any argument.</aside>
+</section>
+
+<!-- MP 8 -->
+<section class="dense">
+  <p class="eyebrow">Mental picture first</p>
+  <h2>Two blurry photographs of the same thing</h2>
+  <div class="cols top">
+    <div>
+  <figure class="photo"><img src="../assets/img/kalman.jpg" alt="" style="max-height:250px"/><figcaption>Rudolf E. Kálmán (1930–2016). His 1960 paper was rejected by one journal and reached the Moon within nine years. <span class="cr">Wikimedia Commons, CC BY-SA 2.0 de.</span></figcaption></figure>
+    </div>
+    <div>
+  <ul class="small">
+    <li>Suppose two people estimate a height: one says \( 2.0 \pm 0.2 \) m, the other \( 2.3 \pm 0.1 \) m. What is the best single answer?</li>
+    <li>Not the average (2.15). Not the more confident one alone (2.3). The right answer is \( 2.24 \) m — and, remarkably, it is <b>sharper than either estimate</b>: \( \pm 0.089 \) m.</li>
+    <li>Two imperfect views, combined by confidence, beat both. <b>That single idea is the Kalman filter</b>; the matrices are bookkeeping for doing it with twelve numbers at 200 Hz.</li>
+  </ul>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — Before we derive anything: why is the fused answer <i>sharper</i> than both inputs? <span class="muted">(Because the errors are independent. Two independent clues about the same fact carry more information than either alone — precision adds. If the errors were correlated, this would not hold, and assuming independence when it is false is how filters quietly go wrong.)</span></div>
+
+  <aside class="notes">Lead with the numeric puzzle before any formalism; the 'sharper than both' surprise is what motivates the whole week.</aside>
+</section>
+
+<!-- INIT 8 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Initialisation: the first second decides the next minute</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>A filter needs \( \hat{\mathbf x}_0 \) <b>and</b> \( P_0 \). Getting \( P_0 \) wrong is the subtler error.</li>
+    <li><b>Too small \( P_0 \):</b> the filter is certain it is at the origin. Measurements are treated as outliers, and it can take many seconds to admit the truth — or never, if gating is on.</li>
+    <li><b>Too large \( P_0 \):</b> it snaps to the first measurement, noise and all — usually harmless, and the safer error.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What arming actually does.</span>
+  Hold still, and the aircraft: levels attitude from the accelerometer, zeros the gyro bias by averaging, sets \( z = 0 \) at the ToF reading, and sets \( P_0 \) generously.<br/><br/><b>That is why 'do not move it while arming' is a real instruction</b>, not superstition — movement corrupts the bias average, and a corrupted bias is the 8-seconds-to-10-degrees problem from earlier.</div>
+    </div>
+  </div>
+  <p class="small muted">Your Week-10 checklist has 'hold still during arming' as a line item. You now know precisely which estimate it protects.</p>
+
+  <aside class="notes">Explaining a procedure the students already follow makes the checklist feel earned rather than bureaucratic.</aside>
+</section>
+
+<!-- BEY 8 -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>Beyond the EKF, in one slide</h2>
+  <table class="data">
+    <tr><th>Method</th><th>Idea</th><th>Cost</th><th>When it earns its place</th></tr>
+    <tr class="hl"><td><b>EKF</b></td><td>linearise about the estimate</td><td>1× propagation</td><td><b>the default; our aircraft</b></td></tr>
+    <tr><td>UKF</td><td>propagate 2n+1 sample points</td><td>~25× for n=12</td><td>strong nonlinearity, no Jacobians available</td></tr>
+    <tr><td>Particle filter</td><td>propagate thousands of samples</td><td>1000×+</td><td>multi-modal beliefs (e.g. 'am I in room A or B?')</td></tr>
+    <tr><td>Complementary</td><td>fixed-gain blend</td><td>trivial</td><td>attitude only, tiny MCUs</td></tr>
+    <tr><td>Factor graph / smoothing</td><td>optimise over a window of past states</td><td>offline or powerful CPU</td><td>visual-inertial odometry, SLAM</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">The pattern.</span>
+  Every row buys accuracy or generality with computation. The EKF sits where it does because a flight controller has microseconds, not milliseconds — and because 'linearise about where I think I am' is a very good approximation when you are usually right.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Where you will meet the last row.</span>
+  Any drone doing visual navigation — DJI's obstacle avoidance, warehouse robots, AR headsets — runs a smoothing back-end. If estimation interests you, that is the direction to read next.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Gives ambitious students a map of where to go next without derailing the lecture.</aside>
+</section>
+
+<!-- CQ 8 -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Two questions before the lab</h2>
+  <div class="quiz">
+    <div class="q">Q1 — Your filter reports σ = 2 cm on position, but comparing with truth shows 15 cm of error. Which is wrong, and what do you change?</div>
+    <p class="fragment"><span class="ok">The filter is overconfident — its uncertainty model is wrong, not its estimate.</span> <span class="why">Raise \( Q \) (admit the model is worse than assumed) or \( R \) (admit the sensor is worse). An overconfident filter is dangerous because downstream logic — outlier gating, safety checks — trusts that σ.</span></p>
+    <div class="q fragment">Q2 — Would running the estimator at 400 Hz instead of 200 Hz improve position accuracy?</div>
+    <p class="fragment"><span class="ok">Almost not at all.</span> <span class="why">Accuracy is set by the <i>measurement</i> rate and quality (flow at 40 Hz), not by how often you predict between measurements. Faster prediction reduces discretisation error only — a second-order effect. Spend the compute on latency compensation instead.</span></p>
+  </div>
+
+  <aside class="notes">Q2 corrects a common instinct: more Hz is not more information.</aside>
+</section>
+
+<!-- 5 GYRO DRIFT -->
+<section>
+  <p class="eyebrow">Block A</p>
+  <h2>Dead reckoning and its debt</h2>
+  <div class="cols">
+    <div>
+      <p>Attitude from the gyro alone: integrate.</p>
+      \[ \hat\theta(t) = \int_0^t \big(\omega_{\text{true}} + b + n(t)\big)\,d\tau
+         = \theta_{\text{true}} + \underbrace{b\,t}_{\text{grows forever}} + \text{noise walk} \]
+      <ul>
+        <li>A modest 1°/s bias ⇒ 60° wrong in one minute. Uncorrected, unflyable.</li>
+        <li>The accelerometer knows which way is down — bias-free, but shaky and fooled by acceleration.</li>
+      </ul>
+    </div>
+    <div class="box"><b>The pattern to memorize:</b><br/>
+    integrate a <i>relative</i> sensor → smooth but drifting;<br/>
+    an <i>absolute</i> sensor → noisy but anchored.<br/><br/>
+    Every fusion problem in robotics is these two characters, forced to cooperate.</div>
+  </div>
+</section>
+
+<!-- 6 COMPLEMENTARY -->
+<section>
+  <p class="eyebrow">Block A</p>
+  <h2>The complementary filter: one line of cooperation</h2>
+  \[ \hat\theta_{k+1} = \underbrace{\alpha\,\big(\hat\theta_k + \omega_k\,\Delta t\big)}_{\text{trust the gyro's motion}} \;+\; \underbrace{(1-\alpha)\,\theta_k^{\text{acc}}}_{\text{let gravity vote}} \]
+  <div class="cols">
+    <ul>
+      <li>High-pass the gyro path, low-pass the accel path — they <i>complement</i>: their transfer functions sum to 1.</li>
+      <li>Crossover \( \tau \approx \frac{\alpha}{1-\alpha}\Delta t \): with \( \alpha=0.98 \) at 50 Hz, ~1 s — faster than bias drift, slower than vibration.</li>
+      <li>Three lines of C. Runs on anything. <b>This is what most hobby flight controllers actually ship.</b></li>
+    </ul>
+    <div class="widget" data-widget="comp"></div>
+  </div>
+  <aside class="notes">Widget: crank gyro bias to 3°/s — amber line walks away, teal stays. Then α→0.999: watch fused inherit the drift (gyro trusted too long). The knob IS the tradeoff.</aside>
+</section>
+
+<!-- DER 8 -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill">interactive</span></p>
+  <h2>The complementary filter, derived rather than asserted</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>gyro path: \( \hat\theta_g(s) = \theta(s) + \dfrac{b}{s} \)  — truth plus an integrated bias</span>
+      <span class="dwhy"><b>Good at high frequency, wrong at low.</b> Integration means the bias enters as \( 1/s \): unbounded at DC.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>accel path: \( \hat\theta_a(s) = \theta(s) + n(s) \)  — truth plus wideband noise</span>
+      <span class="dwhy"><b>Good at low frequency, noisy at high.</b> No drift, because gravity is an absolute reference.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">3</span>combine with complementary weights: \( \hat\theta = \underbrace{\tfrac{\tau s}{\tau s+1}}_{\text{high-pass}}\hat\theta_g + \underbrace{\tfrac{1}{\tau s+1}}_{\text{low-pass}}\hat\theta_a</span>
+      <span class="dwhy"><b>The two filters sum to exactly 1</b> at every frequency — that is what 'complementary' means. So the true signal passes through untouched, while each sensor is used only where it is trustworthy.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>discretise: \( \hat\theta_{k+1} = \alpha(\hat\theta_k + \omega_k\Delta t) + (1-\alpha)\theta^{acc}_k \), \( \alpha = \dfrac{\tau}{\tau + \Delta t} \)</span>
+      <span class="dwhy"><b>Three lines of C.</b> \( \alpha = 0.98 \) at 50 Hz ⇒ \( \tau = 0.98 \) s: trust the gyro for about a second, then let gravity have its say.</span></div>
+  </div>
+  <p class="small muted">Choosing \( \tau \) is choosing a crossover: faster than the bias grows, slower than the vehicle accelerates. On a quadrotor, roughly 0.5–2 s. Everything else is arithmetic.</p>
+
+  <aside class="notes">Deriving the filter in the frequency domain explains WHY it works, which the usual alpha-blend presentation hides.</aside>
+</section>
+
+<!-- LAT 8 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Sensor rates, latency, and the timestamp you must keep</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Sensor</th><th>Rate</th><th>Latency</th><th>Consequence</th></tr>
+    <tr><td>gyro / accel</td><td>1 kHz</td><td>&lt;1 ms</td><td>effectively instant</td></tr>
+    <tr><td>ToF laser</td><td>40 Hz</td><td>5–15 ms</td><td>fine for altitude</td></tr>
+    <tr class="hl"><td>optical flow</td><td>20–100 Hz</td><td><b>20–50 ms</b></td><td>the binding constraint</td></tr>
+    <tr><td>GPS (outdoor)</td><td>1–10 Hz</td><td>100–200 ms</td><td>must be fused, never used raw</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Latency is not noise.</span>
+  A delayed measurement is not a noisy one — it is a <i>correct measurement of the past</i>. Fusing it as if it were current injects a systematic error proportional to velocity.<br/><br/>The professional cure: timestamp every measurement at capture, and fuse it against the state estimate <b>as it was at that instant</b> (a short state buffer). PX4 and ArduPilot both do this. It is why serious estimators keep history.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(90 s)</span> — At 1 m/s with 40 ms of flow latency, how large is the position error if you ignore the delay? <span class="muted">(4 cm at 40 ms — and the Week-10 plant delays GPS by 120–300 ms, so 12–30 cm at the same speed. Latency is not a detail at this scale; it is most of the error budget.)</span></div>
+
+  <aside class="notes">The 4 cm calculation makes latency concrete; scale it to the team plant's 120–300 ms and the Week-10 hunting is predicted in advance.</aside>
+</section>
+
+<!-- TUNE 8 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Tuning \( Q \) and \( R \) — the filter's only real knobs</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>\( R \) is measurable.</b> Sit the aircraft still, record 60 s, compute the variance. That is your \( R \) — no guessing, and it is a Role-4 milestone.</li>
+    <li><b>\( Q \) is a modelling statement:</b> how much do I distrust my own propagation? Larger \( Q \) ⇒ the filter admits the model is wrong ⇒ leans on measurements ⇒ responsive but noisy.</li>
+    <li>Tune \( Q \) by watching the <b>innovation</b> \( z - H\hat{\mathbf x}^- \): it should look like white noise with the variance the filter predicts.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The consistency check that separates real work from decoration.</span>
+  Compute the <b>normalised innovation squared</b>. If the filter's claimed uncertainty is honest, this quantity averages to the measurement dimension (1 for a scalar).<br/><br/>&gt;1 ⇒ the filter is overconfident (raise \( Q \) or \( R \)).<br/>&lt;1 ⇒ underconfident, throwing away information.<br/><br/><b>This is how you know a filter is tuned</b> — not by whether the plot looks smooth.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The NIS consistency check is graduate-level and immediately actionable; it is also the answer to 'how do I know Q is right?'.</aside>
+</section>
+
+<!-- EKF 8 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>EKF: what changes when the model is nonlinear</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Propagate</b> the mean through the <i>true</i> nonlinear \( f \) — no approximation here.</li>
+    <li><b>Propagate covariance</b> through the Jacobian \( F = \partial f/\partial \mathbf x \), evaluated at the <i>current estimate</i>, not at hover.</li>
+    <li><b>Update</b> exactly as before, with \( H = \partial h/\partial\mathbf x \).</li>
+  </ol>
+  <ul class="small">
+    <li>So the EKF re-linearises every step, about wherever it currently believes it is. Week 4's machinery, running at 200 Hz.</li>
+    <li>Cost: the Jacobians. Risk: if the estimate is badly wrong, it linearises about the wrong point and can <b>diverge confidently</b>.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why it still dominates.</span>
+  Nothing else is as cheap. The alternatives — unscented (sample the distribution), particle (sample everything) — cost 2n+1 or thousands of propagations per step. On a flight controller's budget, the EKF's occasional divergence is a better deal than the UKF's certain expense.<br/><br/>PX4, ArduPilot, and your team's firmware all run an EKF. Now you know both why, and what to watch for.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The 'diverge confidently' failure mode is the one to name; it is what innovation monitoring is defending against.</aside>
+</section>
+
+<!-- 7 QUIZ A -->
+<section>
+  <p class="eyebrow">Concept check · 00:50</p>
+  <h2>Predict before you compute</h2>
+  <div class="quiz">
+    <div class="q">Q1 — During a hard forward acceleration, the accelerometer's "down" tilts backward. A complementary filter with \( \alpha=0.90 \) (heavy accel trust) will…</div>
+    <div class="opt">A. be fine — gravity is gravity</div>
+    <div class="opt">B. report a pitch that isn't there, and the controller will "correct" it</div>
+    <div class="opt">C. diverge</div>
+    <p class="fragment"><span class="ok">B.</span> <span class="why">Specific force ≠ gravity when accelerating — the filter feels the maneuver as tilt. Aggressive flight wants higher α (or a Kalman filter that models the difference). This is a real failure mode on aggressive quads.</span></p>
+    <div class="q fragment">Q2 — Optical flow gives pixels/second. To get meters/second it must be multiplied by…</div>
+    <p class="fragment"><span class="ok">height</span> <span class="why">(flow ∝ v/h). No height sensor → no scale → position hold impossible. This is why the flow deck carries its own ToF laser, and why your checklist demands a sane height reading before a flow flight.</span></p>
+  </div>
+</section>
+
+<!-- 7c. KALMAN PORTRAIT + GAUSS REFRESH -->
+<section class="dense">
+  <p class="eyebrow">The man and the prerequisite</p>
+  <h2>One page of probability is all today needs</h2>
+  <div class="cols top">
+    <div>
+      <div style="width:150px;float:right;margin:0 0 8px 12px"><figure class="photo"><img src="../assets/img/kalman.jpg" alt=""/><figcaption>Rudolf E. Kálmán (1930–2016). <span class="cr">Wikimedia Commons, CC BY-SA 2.0 de.</span></figcaption></figure></div>
+      <p class="small">Kálmán's 1960 filter was dismissed by several journals, adopted by the Apollo program within three years, and now runs in every phone, car and aircraft on Earth. It asks one question, recursively: <i>given everything so far, what do I believe, and how strongly?</i></p>
+      <div class="env defn" style="clear:none"><span class="eh">The only prerequisite.</span>
+      A Gaussian \( \mathcal N(\mu, \sigma^2) \) is fully described by mean + variance. Two independent Gaussian beliefs about the same quantity multiply into a Gaussian with
+      \[ \sigma^{-2} = \sigma_1^{-2} + \sigma_2^{-2}, \qquad \mu = \sigma^2\big(\tfrac{\mu_1}{\sigma_1^2} + \tfrac{\mu_2}{\sigma_2^2}\big) \]
+      — <b>precision adds; means average, weighted by confidence.</b> The entire Kalman update is this formula wearing matrices.</div>
+    </div>
+    <div class="env exm"><span class="eh">Worked example <em>(fuse two rulers)</em>.</span>
+    Belief A: height \( 2.00 \) m, \( \sigma = 0.20 \). Sensor B: \( 2.30 \) m, \( \sigma = 0.10 \).
+    Precisions: 25 + 100 = 125 ⇒ \( \sigma_{post} = 0.089 \) m, \( \mu_{post} = (25\cdot2.00 + 100\cdot2.30)/125 = 2.24 \) m.
+    The fused answer sits <b>4× closer to the better sensor</b> and is <b>sharper than either</b>. Do this once by hand and the Kalman gain \( K = P^-/(P^-+R) \) is no longer a formula — it is this example.</div>
+  </div>
+  <aside class="notes">The precision-adds identity is the deepest single line of the week. Students compute the 2.24 by hand in 90 seconds — make them, before showing the matrix version.</aside>
+</section>
+
+<!-- 8 PROBABILISTIC -->
+<section>
+  <p class="eyebrow">Block B · 01:00</p>
+  <h2>From blending to belief</h2>
+  <div class="cols">
+    <ul>
+      <li>The complementary filter blends with a <b>fixed</b> knob. But trust should <i>move</i>: mid-dropout, trust the model; right after three crisp measurements, trust the sensor.</li>
+      <li>Upgrade: carry a full <b>belief</b> — mean \( \hat{\mathbf{x}} \) <i>and</i> covariance \(P\) ("how wrong might I be?").</li>
+      <li>Two honest inputs: process noise \(Q\) (how much the world surprises the model), measurement noise \(R\) (how much the sensor lies).</li>
+    </ul>
+    <div class="box">Everything is Gaussian by fiat, and then two rules run forever:<br/><br/>
+    <b>Predict:</b> push belief through the model — uncertainty <i>grows</i>.<br/>
+    <b>Update:</b> collide belief with a measurement — uncertainty <i>shrinks</i>.<br/><br/>
+    The optimal collision ratio is the Kalman gain.</div>
+  </div>
+</section>
+
+<!-- 8b. DERIVE KF GAIN -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill">interactive</span></p>
+  <h2>The Kalman gain is not a decree — derive it in four steps</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>blend: \( \hat x = \hat x^- + K\,(z - \hat x^-) \), choose \( K \in [0,1] \)</span>
+      <span class="dwhy"><b>Commit to a linear blend</b> of prior and measurement — the only honest move given two uncertain numbers.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>posterior variance: \( P = (1-K)^2 P^- + K^2 R \)</span>
+      <span class="dwhy"><b>Propagate uncertainty through the blend</b> — independent errors add in quadrature, weighted by their coefficients squared.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">3</span>\( \dfrac{dP}{dK} = 0 \Rightarrow K^\ast = \dfrac{P^-}{P^- + R} \)</span>
+      <span class="dwhy"><b>Minimise.</b> One derivative, one line — the "optimal" in optimal filtering is a parabola's vertex, nothing fancier.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>substitute back: \( P = (1-K^\ast)P^- \)</span>
+      <span class="dwhy"><b>Uncertainty shrinks by exactly the trust you placed in the sensor.</b> The matrix equations on the next slide are steps 1–4 with \( H \) bolted on.</span></div>
+  </div>
+  <div class="turn fragment" style="margin-top:.4em"><span class="tt">(90 s)</span> — plug the two-rulers numbers in: \( P^- = 0.04, R = 0.01 \Rightarrow K = 0.8 \), \( \hat x = 2.0 + 0.8(0.3) = 2.24 \) m. Same answer as the precision formula — as it must be.</div>
+  <aside class="notes">Deriving the scalar gain kills the black-box feeling permanently. The matrix version then reads as bookkeeping, which is the correct level of awe.</aside>
+</section>
+
+<!-- 9 KF EQUATIONS -->
+<section>
+  <p class="eyebrow">Block B</p>
+  <h2>The Kalman filter on one slide</h2>
+  <div class="cols top">
+    <div class="box"><b>Predict</b> (every step)
+    \[ \hat{\mathbf{x}}^- = A\hat{\mathbf{x}} + B\mathbf{u} \]
+    \[ P^- = APA^\top + Q \]
+    <span class="muted">model forward; add humility \(Q\)</span></div>
+    <div class="box"><b>Update</b> (when a measurement \( \mathbf{z} \) lands)
+    \[ K = P^-H^\top (HP^-H^\top + R)^{-1} \]
+    \[ \hat{\mathbf{x}} = \hat{\mathbf{x}}^- + K(\mathbf{z} - H\hat{\mathbf{x}}^-) \]
+    \[ P = (I - KH)P^- \]
+    <span class="muted">correct by the surprise, weighted by trust</span></div>
+  </div>
+  <p style="margin-top:.4em">Read the gain as a fraction: \( K \approx \dfrac{P^-}{P^- + R} \) — <b>my uncertainty over total uncertainty</b>.
+  Sensor dies (\(R\to\infty\)) ⇒ \(K\to 0\): coast on the model, let \(P\) balloon. Perfect sensor ⇒ \(K\to 1\): believe it outright.</p>
+  <div class="box warn" style="font-size:.7em">Optimal — <i>given</i> linear dynamics, Gaussian noises, correct \(Q,R\). None of those are true on a quad. It works anyway, because the gain-from-uncertainty <b>mechanism</b> is right even when the assumptions wobble. Nonlinear model? Linearize about the current estimate each step: the <b>EKF</b> — which is what real autopilots (PX4, Betaflight, quadsim's estimator) run.</div>
+</section>
+
+<!-- 9b. KF CYCLE FIG -->
+<section>
+  <p class="eyebrow">The rhythm · drawn</p>
+  <h2>Predict / update, forever</h2>
+
+  <div class="fig" data-diagram="kfcycle"><p class="cap">Two moves, alternating. The ellipses are the belief: prediction inflates them, measurement collides and shrinks them.</p></div>
+  <aside class="notes">Point at the ellipses and connect to the widget's ±2σ band coming next — same object, live.</aside>
+</section>
+
+<!-- 10 KF WIDGET -->
+<section>
+  <p class="eyebrow">Interactive</p>
+  <h2>Watch belief breathe</h2>
+  <div class="widget" data-widget="kalman" style="max-width:820px;margin:0 auto"></div>
+  <p class="muted" style="font-size:.55em">Click the dropout: coasting on the model, band inflating — the filter <i>knows</i> it doesn't know.</p>
+  <aside class="notes">Ask: "during dropout, should the position controller keep flying aggressively?" — no: gain-schedule on covariance, or hover-and-hold. Real autopilots do exactly this on GPS loss; it belongs in their final-project failure handling too.</aside>
+</section>
+
+<!-- 11 CLOSING THE LOOP -->
+<section>
+  <p class="eyebrow">Block B</p>
+  <h2>Feeding the estimate to the controller</h2>
+  <div class="cols">
+    <ul>
+      <li>Swap: \( \mathbf{u} = -K_{\text{lqr}}\hat{\mathbf{x}} \) instead of \( \mathbf{x} \). (LQR + KF = <b>LQG</b>.)</li>
+      <li><b>Separation principle:</b> for linear-Gaussian systems, designing the controller and estimator independently is exactly optimal. Lovely theorem, real caveat: margins can vanish (LQG has <i>no</i> guaranteed robustness — Doyle, 1978, in one line).</li>
+      <li>Practically: estimator lag acts like sensor delay ⇒ effective phase loss ⇒ <b>back off the gains you tuned on truth</b>.</li>
+    </ul>
+    <div class="box"><b>Rule for Lab 5 and for the aircraft:</b><br/>estimator bandwidth ≳ 3× the loop that consumes it. Attitude loop at 20 Hz wants attitude estimates good to ~60 Hz — which the IMU can feed. Position from 20 Hz flow feeds a ~2 Hz outer loop. The cascade's timescales (Wk 6) were secretly a sensor-rate budget all along.</div>
+  </div>
+</section>
+
+<!-- 11b. BIAS STATE -->
+<section>
+  <p class="eyebrow">One level deeper · the estimator's best trick</p>
+  <h2>Estimate what you cannot measure: the bias state</h2>
+  <div class="cols top">
+    <ul class="small">
+      <li>The gyro's slow bias \( b \) poisoned dead reckoning (slide 5). But bias is <i>observable through its consequences</i>: it makes the gyro path disagree with gravity in a <b>consistent direction</b>.</li>
+      <li>So promote it to a state: \( \mathbf x = (\theta, b) \), model \( \dot\theta = \omega_{gyro} - b \), \( \dot b \approx 0 \) (+ small \(Q_b\)) — and let the filter <i>learn the bias online</i>.</li>
+      <li>This is the standard attitude EKF everywhere (PX4, Betaflight, phones): 7 states = quaternion + 3 gyro biases. Your aircraft recalibrating "level" while sitting still is this state converging.</li>
+    </ul>
+    <div class="env rmk"><span class="eh">Remark <em>(the pattern generalises)</em>.</span>
+    Anything constant-ish that corrupts a measurement can be appended and co-estimated: baro drift, flow-scale error, even battery-sag thrust loss. The price: each new state needs <i>excitation</i> to become observable — a perfectly still quad teaches the filter nothing about flow scale. Observability = "does the data distinguish this state?", and it is checkable (rank test), not vibes.</div>
+  </div>
+  <aside class="notes">This is the week's most transferable systems idea. The "recalibrating while still" observation gives students a real artifact they have already seen.</aside>
+</section>
+
+<!-- 12 QUIZ B -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Diagnosis drill</h2>
+  <div class="quiz">
+    <div class="q">Lab-5 symptom: on truth, your quad holds position rock-steady; on the estimate, it orbits the setpoint in a slow ~1 Hz circle. The estimate plots look smooth. Most likely?</div>
+    <div class="opt">A. Estimator noise too high</div>
+    <div class="opt">B. Estimator <b>lag</b> — smooth is not the same as timely</div>
+    <div class="opt">C. The controller is broken</div>
+    <p class="fragment"><span class="ok">B.</span> <span class="why">Over-smoothed = delayed; delay in a feedback loop = phase loss = the orbit. Raise \(Q\) (or α down): accept some noise, buy back phase. "Smooth" is a seduction — controllers eat <i>fresh</i>, not pretty.</span></p>
+  </div>
+  <aside class="notes">This is THE estimation lesson for flight: students instinctively over-filter. The orbit failure will reappear on the Week-10 team plant, whose GPS is 120–300 ms late — name it now so they recognize it then.</aside>
+</section>
+
+<!-- WEX 8 -->
+<section class="dense">
+  <p class="eyebrow">Worked example · by hand</p>
+  <h2>One full Kalman step, on paper</h2>
+  <p>Scalar altitude. Prior: \( \hat z^- = 1.80 \) m, \( P^- = 0.04 \) (σ = 20 cm). ToF reads \( z = 2.05 \) m with \( R = 0.01 \) (σ = 10 cm).</p>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Innovation: \( y = 2.05 - 1.80 = 0.25 \) m.</li>
+    <li>Innovation covariance: \( S = P^- + R = 0.05 \).</li>
+    <li>Gain: \( K = P^-/S = 0.04/0.05 = 0.8 \).</li>
+    <li>Update: \( \hat z = 1.80 + 0.8(0.25) = 2.00 \) m.</li>
+    <li>Covariance: \( P = (1-K)P^- = 0.008 \) ⇒ σ = 8.9 cm.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Read every number.</span>
+  <b>K = 0.8:</b> the sensor is twice as precise as the prior, so it gets 80% of the vote.<br/><br/><b>σ fell from 20 cm to 8.9 cm</b> — <i>sharper than either input</i>. That is the whole point: two independent, imperfect views beat both.<br/><br/><b>Sanity check the innovation:</b> 0.25 m against \( \sqrt S = 0.22 \) m ⇒ 1.1σ. Perfectly ordinary. Had it been 5σ, the honest response is to reject the measurement as an outlier, not to swallow it.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — Repeat with a barometer instead: \( R = 0.25 \) (σ = 50 cm). What is \( K \) now, and what does the filter conclude? <span class="muted">(\( K = 0.04/0.29 = 0.14 \) ⇒ \( \hat z = 1.835 \) m, σ = 18.6 cm. The filter politely ignores a sensor worse than its own prediction — automatically, with no special case in the code.)</span></div>
+
+  <aside class="notes">Doing one step by hand with real numbers is the moment the Kalman filter stops being intimidating.</aside>
+</section>
+
+<!-- OUT 8 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Outlier rejection: the guard every real filter has</h2>
+  <div class="cols top">
+    <div>
+  <p>Before accepting a measurement, test whether it is plausible under the filter's own belief:</p>
+  \[ \text{accept if}\quad \frac{(z - H\hat{\mathbf x}^-)^2}{S} < \chi^2_{\text{thresh}} \;\;(\text{e.g. } 9 = 3\sigma) \]
+  <ul class="small">
+    <li>A flow sensor crossing a shadow, a laser catching a table edge, a GPS multipath spike — all produce measurements the model says are impossible.</li>
+    <li>Rejecting them is not cheating: it is refusing to update on data inconsistent with everything else you know.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">And the trap.</span>
+  Reject too eagerly and the filter becomes <b>self-confirming</b>: it ignores every correction that disagrees with its drift, and sails confidently into a wall.<br/><br/>The standard defence is a counter: if \( N \) consecutive measurements are rejected, the <i>filter</i> is probably wrong — inflate \( P \) and start accepting again. Humility, implemented.</div>
+    </div>
+  </div>
+  <p class="small">Your Week-10 demonstration floor has a shiny patch and a shadow. Both will produce outliers. Whether your team's aircraft handles them gracefully or lurches is decided by this slide.</p>
+
+  <aside class="notes">Tie directly to the demo floor; teams that implement gating see a visible difference.</aside>
+</section>
+
+<!-- ARCH 8 -->
+<section class="dense">
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Where the estimator sits in the loop — and what it costs</h2>
+  <div class="fig plain" data-diagram="fusion"><p class="cap">Sensors in, one belief out, every controller from Weeks 5–7 downstream of it. The dashed feedback is now closed through an inference, not a fact.</p></div>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Order matters:</b> estimate first, then control, within the same tick. Using last tick's estimate adds a full period of delay for free.</li>
+    <li><b>Rate matters:</b> run the predict step at the full loop rate (200 Hz) and the update step whenever a measurement arrives (asynchronously). This is what 'multi-rate fusion' means in practice.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The budget on a real flight controller.</span>
+  Predict: a 12×12 matrix product, ~2 μs. Update: a small inverse, ~5 μs. Total well under 1% of a 200 Hz budget.<br/><br/><b>Estimation is cheap; the expensive part is getting it right.</b> That asymmetry is why estimator bugs, not estimator cost, dominate real projects.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The microsecond budget reassures students worried about implementing this on an MCU.</aside>
+</section>
+
+<!-- FAIL 8 -->
+<section>
+  <p class="eyebrow">Common failure gallery</p>
+  <h2>Five ways Lab 5 goes wrong</h2>
+  <table class="data">
+    <tr><th>Symptom</th><th>Cause</th><th>Check</th></tr>
+    <tr class="hl"><td>Estimate lags visibly; quad orbits</td><td>over-smoothed: \( Q \) too small</td><td>raise \( Q \); check innovation whiteness</td></tr>
+    <tr><td>Estimate is jumpy; motors buzz</td><td>\( R \) too small — sensor over-trusted</td><td>measure \( R \) from static data</td></tr>
+    <tr><td>±2σ band does not bracket the error</td><td>filter is inconsistent</td><td>run the NIS test; fix \( Q \) first</td></tr>
+    <tr><td>Diverges after 30 s</td><td>unmodelled bias; no bias state</td><td>augment the state with gyro bias</td></tr>
+    <tr class="hl"><td>Fine in sim, wild on hardware</td><td>latency ignored; timestamps missing</td><td>buffer states; fuse against the right epoch</td></tr>
+  </table>
+  <p class="small">Rows 1 and 5 are the two that will actually bite your team. Both are <b>timing</b> problems dressed as accuracy problems — which is why 'make the plot smoother' is almost always the wrong instinct.</p>
+
+  <aside class="notes">Reiterate: smooth is not the goal. Fresh and consistent are the goals.</aside>
+</section>
+
+<!-- TH 8 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Derive the complementary filter's \( \alpha \) from a desired crossover \( \tau \) and sample rate, and evaluate it for \( \tau = 1 \) s at 200 Hz and 50 Hz.</li>
+    <li>Show algebraically that the two-Gaussian product formula and the scalar Kalman update give identical answers. (You did the numbers in class; now do the symbols.)</li>
+    <li>Simulate a 1.2 °/s gyro bias for 60 s with and without a bias state in the filter. Plot both attitude errors.</li>
+    <li>Implement 3σ outlier gating on the position update, inject a 2 m spike at \( t=5 \) s, and compare gated and ungated estimates.</li>
+    <li>Compute the NIS for your Lab-5 filter over a 30 s run. Is it consistent? If not, state which of \( Q, R \) you would change and in which direction.</li>
+    <li>Your flow sensor has 40 ms latency. Quantify the position error at 1 m/s, then implement a one-step state buffer and show the improvement.</li>
+  </ol>
+  <div class="box warn">Question 5 is the one that turns a working filter into a <i>defensible</i> one — and it is the single most valuable figure you can put in a final-project report that involves estimation.</div>
+
+  <aside class="notes">Q2 is the elegant one; Q5 and Q6 are the practically valuable ones.</aside>
+</section>
+
+<!-- MAP 8 -->
+<section class="dense">
+  <p class="eyebrow">Concept map</p>
+  <h2>Week 8, in one page</h2>
+  <div class="fig plain" data-diagram="kfcycle"><p class="cap">Predict and update, forever. Everything else this week is detail hung on those two moves.</p></div>
+  <table class="data">
+    <tr><th>Concept</th><th>One-line statement</th><th>Where it returns</th></tr>
+    <tr><td>sensors measure proxies</td><td>attitude and position are always inferred</td><td>every autonomous system you meet</td></tr>
+    <tr><td>bias ≠ noise</td><td>noise averages out; bias integrates</td><td>the case for fusion, and for bias states</td></tr>
+    <tr><td>complementary filter</td><td>high-pass the gyro, low-pass the accel</td><td>what most firmware ships</td></tr>
+    <tr class="hl"><td>\( K = P^-/(P^-+R) \)</td><td>the gain is a trust ratio</td><td>Wk 14's uncertainty discussion</td></tr>
+    <tr><td>consistency (NIS)</td><td>a filter must be honest, not smooth</td><td>how you defend a filter in a viva</td></tr>
+    <tr><td>latency</td><td>a delayed truth, not noise</td><td>the flow-based demo, Wk 10</td></tr>
+  </table>
+
+  <aside class="notes">Sixty seconds. The 'honest, not smooth' row is the week's thesis.</aside>
+</section>
+
+<!-- AHEAD 8 -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: missions, and the first free flight</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>You can now control an aircraft that only <i>believes</i> it knows where it is. That is the last structural piece of a classical autopilot.</li>
+    <li>Week 9 adds the mission layer — waypoints, smooth trajectories, feedforward — and the metrics we will grade flights with.</li>
+    <li>It also ends with the <b>team dry-run</b>: the Week-10 mission on the nominal model, so next week's hour is all diagnosis.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Bring to Week 9:</b> Lab 5 flying on estimates, plus the estimation-error figure with its ±2σ band.<br/><br/><b>Team:</b> the estimator wired into the shared <code>student.py</code> stack; the <code>latency</code> widget tried at 100, 200 and 300 ms — Week 10's plant delivers GPS fixes that late, and it does not tell you.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The floor-check warning is worth repeating; shiny floors have cost teams their L3 in past cohorts.</aside>
+</section>
+
+<!-- DEGRADE 8 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>What the controller should do when the estimate is poor</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>The filter publishes \( P \) — <b>use it</b>. A controller that ignores its own uncertainty acts confidently on nonsense.</li>
+    <li><b>Gain scheduling on covariance:</b> when position σ passes a threshold, cut outer-loop gains and shrink the velocity limit. Fly slower when less sure.</li>
+    <li><b>Mode fallback:</b> beyond a hard limit, abandon position hold and revert to altitude hold with level attitude. Drift gently rather than chase a fiction.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What commercial drones do.</span>
+  Lose GPS and a DJI aircraft announces 'switching to ATTI mode': it stops holding position, holds attitude, and hands the pilot the decision.<br/><br/>That is this slide, shipped. The estimator said 'I no longer know where I am', and the control system <b>changed its ambitions</b> instead of pretending.</div>
+    </div>
+  </div>
+  <p class="small">For Week 10: if the GPS fixes arrive late — and on the team plant they will — the graceful behaviour is a slow drift, not a hunt. Deciding how much to trust a stale fix <i>in advance, in code</i>, is what separates a diagnosis from a surprise.</p>
+
+  <aside class="notes">The estimation lecture's robustness payload; it directly shapes the Week-10 latency diagnosis.</aside>
+</section>
+
+<!-- DELAY 8 -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>Why delay destabilises rather than merely annoys</h2>
+  <div class="cols top">
+    <div>
+  <p>A pure delay contributes phase lag proportional to frequency:</p>
+  \[ \angle e^{-j\omega T_d} = -\omega T_d \quad\Rightarrow\quad \text{at } \omega = 2.2,\; T_d = 0.06\,\text{s}: \; -7.6^\circ \]
+  <ul class="small">
+    <li>Small at the outer loop's bandwidth — tolerable.</li>
+    <li>At the inner loop's 13.4 rad/s the same delay costs \( 46^\circ \) — most of a typical phase margin.</li>
+    <li><b>Hence: attitude from the fast IMU, never from a delayed vision pipeline.</b></li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The rule this gives you.</span>
+  Each loop must be fed by sensing at least an order of magnitude faster than itself. Week 6's timescale ladder was, all along, a <b>sensor-latency budget</b> in disguise — the cascade exists partly because our sensors run at different speeds.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Revealing the cascade as a latency budget retroactively explains Wk 6; it is the week's most unifying idea.</aside>
+</section>
+
+<!-- WIDGET latency -->
+<section>
+  <p class="eyebrow">Block B · interactive</p>
+  <h2>Delay, live — find the gain where your loop starts to hunt</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="latency"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> Kp 6, Kd 4: at what delay (ms) does the step response start to oscillate? Compute the phase lost at ω<sub>n</sub> first. The Week-10 plant delays GPS by 120–300 ms — will these gains survive it?</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#latency">Digital Lab → latency</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">The single most predictive widget for the Week-10 workshop. Have them write their number down.</aside>
+</section>
+
+<!-- MAP 8 -->
+<section class="dense">
+  <p class="eyebrow">Concept map</p>
+  <h2>Week 8, in one page</h2>
+  <div class="fig plain" data-diagram="fusion"><p class="cap">Sensors in, one belief out, every controller downstream of it. The loop now closes through an inference.</p></div>
+  <table class="data">
+    <tr><th>Concept</th><th>One-line statement</th><th>Where it returns</th></tr>
+    <tr><td>sensors measure proxies</td><td>attitude and position are always inferred</td><td>every autonomous system</td></tr>
+    <tr><td>bias ≠ noise</td><td>noise averages out; bias integrates</td><td>the case for fusion and bias states</td></tr>
+    <tr><td>complementary filter</td><td>high-pass gyro, low-pass accel</td><td>what most firmware ships</td></tr>
+    <tr class="hl"><td>\( K = P^-/(P^-+R) \)</td><td>the gain is a trust ratio</td><td>Wk 14's uncertainty discussion</td></tr>
+    <tr><td>consistency (NIS)</td><td>a filter must be honest, not smooth</td><td>how you defend a filter in a viva</td></tr>
+    <tr><td>latency</td><td>a delayed truth, not noise</td><td>the flow-based demo, Wk 10</td></tr>
+  </table>
+
+  <aside class="notes">Sixty seconds. 'Honest, not smooth' is the week's thesis.</aside>
+</section>
+
+<!-- AHEAD 8 -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: missions — and the first free flight</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>You can now control an aircraft that only <i>believes</i> it knows where it is. That is the last structural piece of a classical autopilot.</li>
+    <li>Week 9 adds the mission layer — waypoints, smooth trajectories, feedforward — and the metrics we grade flights with.</li>
+    <li>It also ends with the <b>team dry-run</b>: the Week-10 mission on the nominal model, so next week's hour is all diagnosis.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Bring to Week 9:</b> Lab 5 flying on estimates, plus the estimation-error figure with its ±2σ band.<br/><br/><b>Team:</b> the estimator wired into the shared <code>student.py</code> stack; the <code>latency</code> widget tried at 100, 200 and 300 ms — Week 10's plant delivers GPS fixes that late, and it does not tell you.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Repeat the floor-check warning; shiny floors have cost teams their L3 in past cohorts.</aside>
+</section>
+
+<!-- WILD 8 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Estimation in the wild — where you have already trusted one</h2>
+  <table class="data">
+    <tr><th>System</th><th>What it fuses</th><th>Failure you may have seen</th></tr>
+    <tr><td>Phone navigation</td><td>GPS + accelerometer + gyro + map</td><td>the blue dot jumping between parallel streets</td></tr>
+    <tr><td>AirPods / VR headsets</td><td>IMU + optical tracking</td><td>drift when you cover the cameras</td></tr>
+    <tr><td>Car ABS / stability control</td><td>wheel speeds + yaw rate + steering</td><td>intervention on ice, where wheel speed lies</td></tr>
+    <tr><td>Weather forecasting</td><td>satellite + station data into a physics model</td><td>the same predict/update cycle, at planetary scale</td></tr>
+  </table>
+  <p class="small muted">Kálmán's filter is arguably the most-executed algorithm in engineering history. Every one of these is the same two moves you did by hand today: <b>propagate a belief, then collide it with evidence.</b></p>
+
+  <aside class="notes">Ending with the ubiquity of the method leaves students with the sense they have learned something genuinely large.</aside>
+</section>
+
+<!-- F570 8a -->
+<section>
+  <p class="eyebrow">The instructor's aircraft</p>
+  <h2>What the F570 actually runs: the explicit complementary filter</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Predict attitude by integrating the quaternion: \( \dot q = \tfrac12 q \otimes [0, \boldsymbol\omega] \).</li>
+    <li>Predict which way 'down' <i>should</i> look, from the current quaternion: \( \hat{\mathbf v} = R^\top(0,0,-1)^\top \).</li>
+    <li>Measure which way down <i>does</i> look: \( \hat{\mathbf a} = \mathbf a/\lVert\mathbf a\rVert \).</li>
+    <li>Error as a <b>rotation</b>: \( \hat{\mathbf e} = \hat{\mathbf a} \times \hat{\mathbf v} \) — the axis and (sine of the) angle needed to reconcile them.</li>
+    <li>Correct the gyro with a <b>PI controller on that error</b>: \( \boldsymbol\delta = k_p\hat{\mathbf e} + k_i\sum \hat{\mathbf e} \), then integrate \( \boldsymbol\omega + \boldsymbol\delta \).</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Two things worth noticing.</span>
+  <b>(a) The cross product is the error.</b> Week 1's axis–angle representation, doing real work: \( \mathbf a \times \mathbf v \) is exactly the rotation that would align the two vectors — no Euler angles, no singularity.<br/><br/><b>(b) The integral term learns the gyro bias.</b> \( k_i \sum \hat{\mathbf e} \) accumulates the persistent disagreement between gyro and gravity — which <i>is</i> the bias. This is the bias-state idea, implemented as an integrator rather than a Kalman state.</div>
+    </div>
+  </div>
+  <p class="small muted">This is Mahony's filter, and it is what runs on small aircraft that cannot afford a full EKF. <b>Three of our lecture ideas — quaternions, axis–angle error, and integral action — combined into twenty lines of C.</b></p>
+
+  <aside class="notes">A beautiful synthesis slide: it shows three separate lecture threads converging in one real algorithm.</aside>
+</section>
+
+<!-- F570 8b -->
+<section>
+  <p class="eyebrow">The instructor's aircraft</p>
+  <h2>Complementary filter vs Kalman — the vendor's choice, defended</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th></th><th>ECF (F570)</th><th>EKF (PX4-class)</th></tr>
+    <tr><td>Carries uncertainty?</td><td><b>no</b> — fixed \( k_p, k_i \)</td><td>yes — full \( P \)</td></tr>
+    <tr><td>Handles dropouts?</td><td>poorly — no notion of confidence</td><td>gracefully — \( P \) inflates</td></tr>
+    <tr><td>Compute</td><td>~20 lines, microseconds</td><td>matrix algebra, ~10× more</td></tr>
+    <tr><td>Tuning</td><td>two scalars, by feel</td><td>\( Q, R \), with a consistency test</td></tr>
+    <tr class="hl"><td>Good enough for attitude?</td><td><b>yes, and it ships everywhere</b></td><td>overkill for attitude alone</td></tr>
+    <tr class="hl"><td>Good enough for position?</td><td>no</td><td>yes — and required</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The engineering judgement.</span>
+  Attitude has a <b>permanent absolute reference</b> (gravity), so a fixed-gain blend suffices. Position has none indoors — flow gives velocity, which must be integrated — so you need a filter that <i>tracks its own uncertainty</i> and can fall back on prediction.<br/><br/><b>Different problems, different filters, on the same aircraft.</b> The F570 uses ECF for attitude and a separate scheme for position, which is exactly the right split.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(90 s)</span> — Your team aircraft needs position hold from optical flow. Which of the two rows above forces your choice? <span class="muted">(The last one. Flow-derived position has no absolute reference and will drift, so you need explicit uncertainty — and a plan for what to do when the flow quality collapses.)</span></div>
+
+  <aside class="notes">Justifies why the course teaches Kalman even though their demo aircraft uses a simpler filter. The attitude/position split is the key insight.</aside>
+</section>
+
+<!-- 13 BREAK -->
+<section class="divider">
+  <h2><span class="tchip">01:30</span> Break — 10 minutes</h2>
+  <hr class="drule"/>
+  <p>When we return: Lab 5 — the training wheels (<code>x = truth</code>) come off.</p>
+</section>
+
+<!-- 14 LAB BRIEFING -->
+<section>
+  <p class="eyebrow">Lab briefing · 01:40</p>
+  <h2>Lab 5 graded — fly on your own estimate</h2>
+  <div class="cols top">
+    <ol class="small">
+      <li><code>quadsim.sensors</code> ON: noisy IMU @200 Hz, position fix @10 Hz. Truth is now contraband.</li>
+      <li>Attitude: complementary filter from gyro+accel.</li>
+      <li>Position: constant-velocity Kalman filter over the 10 Hz fix; predict at 200 Hz.</li>
+      <li>Point your Wk-6 cascade at \( \hat{\mathbf{x}} \). Re-fly the Lab-3 step.</li>
+    </ol>
+    <div class="box"><b>Pass graded:</b> stable flight on estimates only, + <b>two plots</b>: estimation error vs truth (with ±2σ), and truth-fed vs estimate-fed tracking, honestly compared.<br/><br/>
+    Expect degradation. <i>Quantifying</i> it is the deliverable, not hiding it.</div>
+  </div>
+  <p class="muted">Traps: over-smoothing → the orbit from the quiz · covariance never checked against actual error (should bracket it ~95%) · estimator initialized at zero while the quad starts at 2 m (watch the first second).</p>
+</section>
+
+<!-- 15 LAB SESSION -->
+<section>
+  <div class="labwrap">
+    <p class="eyebrow" style="color:#1ec8c8">Lab session · 01:50 → 02:50</p>
+    <h3>Build order &amp; checkpoints</h3>
+    <p class="cp"><b>02:05</b> — attitude estimate tracks truth &lt; 2° RMSE under noise</p>
+    <p class="cp"><b>02:20</b> — position KF running; ±2σ band actually brackets the error</p>
+    <p class="cp"><b>02:35</b> — closed loop flies the step on estimates; orbit (if any) diagnosed</p>
+    <p class="cp"><b>02:50</b> — comparison figure + 3-sentence honesty paragraph in the report</p>
+    <p style="margin-top:.8em"><a class="btn" href="../labs/week08-state-estimation-fusion.html">Open the Week 8 lab sheet →</a></p>
+    <span class="assess" style="background:#2a4463;border-color:#3d5a7d;color:#f5d28a">Assessed: Lab Report 5 — 5% of the course grade. Marked on: stable flight on estimates · the ±2σ band honestly brackets the error · the truth-vs-estimate degradation quantified, not hidden.</span>
+  </div>
+  <aside class="notes">Fast teams: 2 s measurement dropout mid-flight — does the quad survive on prediction? Ties directly to the Week-10 plant's late GPS.</aside>
+</section>
+
+<!-- 16 MILESTONE -->
+<section>
+  <p class="eyebrow">Team project · Wk 8 of 10 — two weeks out</p>
+  <h2>Milestone check</h2>
+  <div class="miles">
+    <div class="m"><b>1 · Modeling</b>the IMU model read: what the accelerometer <i>actually</i> measures, and why hovering reads \( +g \)</div>
+    <div class="m"><b>2 · Inner loop</b>the loop re-run on the estimate; the degradation vs truth quantified, not hidden</div>
+    <div class="m due"><b>3 · Outer loop</b><b>This week:</b> the <code>latency</code> widget at 100 / 200 / 300 ms with your Lab-3 gains — write down where it starts to hunt</div>
+    <div class="m due"><b>4 · Estimation</b><b>This week:</b> <code>EstimatedStateController</code> wired into the team <code>student.py</code> stack; ±2σ band plotted</div>
+    <div class="m"><b>5 · Integration</b>estimator log saved with every run — the Week-10 diagnosis needs it</div>
+  </div>
+  <p class="muted" style="margin-top:.6em">Next week is the last classical week and the dry-run of the Week-10 mission. The team plant delivers GPS fixes 120–300 ms late and does not tell you — today&#39;s latency slide is the warning.</p>
+</section>
+
+<!-- MISCONCEPTIONS -->
+<section>
+  <p class="eyebrow">Before you leave</p>
+  <h2>The traps, named</h2>
+  <table class="data">
+    <tr><th>The trap</th><th>The truth</th></tr>
+    <tr><td>"Filter harder until the estimate looks clean."</td><td>Smooth = delayed; delayed = phase loss; phase loss = the 1-Hz orbit. Controllers eat <i>fresh</i>, not pretty. Tune to the loop, not the plot.</td></tr>
+    <tr><td>"\(P\) is the error."</td><td>\(P\) is the filter's <i>claimed</i> uncertainty. It is only meaningful if validated: the ±2σ band should bracket the true error ~95% of the time — a graded check in Lab 5.</td></tr>
+    <tr><td>"The accelerometer measures gravity."</td><td>It measures <b>specific force</b>. In free-fall it reads zero; in a hard turn it lies about "down" exactly when you care. High-α or model the difference.</td></tr>
+    <tr><td>"KF assumptions fail on a quad, so it shouldn't work."</td><td>The <i>mechanism</i> — trust weighted by uncertainty — is robust to the Gaussian fiction. Engineering happily runs on theorems slightly out of warranty, consciously.</td></tr>
+  </table>
+  <aside class="notes">Row 2's band-validation habit separates real estimation work from decorative filtering — it is in the lab rubric.</aside>
+</section>
+
+<!-- 17 SUMMARY -->
+<section>
+  <p class="eyebrow">Wrap-up</p>
+  <h2>What to remember</h2>
+  <ul>
+    <li>Sensors split into <b>relative-smooth-drifting</b> vs <b>absolute-noisy-anchored</b>; fusion marries them.</li>
+    <li>Complementary filter: one α, three lines, ships everywhere. Kalman: trust that <b>moves</b> with uncertainty.</li>
+    <li>\(K = P^-/(P^-+R)\) — the gain <i>is</i> a trust ratio. Dropout ⇒ coast and confess (P grows).</li>
+    <li>Over-smoothing is delay; delay is phase loss; phase loss is the orbit. <b>Fresh beats pretty.</b></li>
+    <li><b>Next week:</b> trajectories worth tracking — and the dry-run of the Week-10 mission.</li>
+  </ul>
+  <p class="muted" style="margin-top:1em">Reading: rlabbe, <i>Kalman &amp; Bayesian Filters in Python</i> Ch. 4–8 (interactive) · Lab 5 report due before Wk 9.</p>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+  Reveal.on("ready", () => { window.MLTEWidgets && MLTEWidgets.init(); window.MLTEDiagrams && MLTEDiagrams.init(); });
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 4 Lab — Linearization, Trim &amp; Hover · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css?v=5" />
+<!-- KaTeX for the bit of math in the recap -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+</head>
+<body data-lab="week04-linearization-trim-hover">
+
+<div class="lab-progress"><i></i></div>
+
+<!-- ============ HEADER ============ -->
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Week 4 · Lab (second half of session)</div>
+    <h1>Linearization, Trim &amp; Hover — the design model</h1>
+    <div class="sub">Freeze the quad at hover, linearize it, and read the poles every later controller is built on.</div>
+    <div class="meta">
+      <span>⏱ <b>~75 min</b></span>
+      <span>🧩 New script <b>examples/wk4_analysis.py</b></span>
+      <span>📦 Deliverable: <b>pole map + rank</b></span>
+      <span>⭐ <b>Graded checkpoint</b></span>
+    </div>
+    <p style="margin-top:14px"><a class="btn ghost" href="../slides/week04-linearization-trim-hover.html">← Back to the Week 4 slides</a>
+       <a class="btn ghost" href="../index.html">Course home</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Goal</span>
+  Use <code>quadsim.analysis</code> to linearize the nonlinear model about <b>hover</b>, obtaining
+  \( (A,B) \). Plot the <b>open-loop poles</b> and see them sit at the origin (a chain of integrators —
+  marginally stable, so feedback is mandatory), then confirm the system is <b>controllable</b> with
+  \( \operatorname{rank}\mathcal C = 12 \). This \( (A,B) \) is the exact model Weeks 7 (LQR) and 11–12 (MPC) reuse.
+</div>
+
+<!-- ============ 1. RECAP ============ -->
+<h2>1 · The 5-minute recap</h2>
+<p><b>Hover trim</b> is the quad's one equilibrium: <b>level</b> (\( \boldsymbol\eta=\mathbf 0 \)),
+   <b>at rest</b> (\( \mathbf v=\boldsymbol\omega=\mathbf 0 \)), <b>thrust = weight</b> (\( T=mg \), along
+   \(+\)body-z, which is world-up in our z-up / ENU convention), and <b>zero torque</b>. By construction the
+   state-derivative vanishes there:</p>
+<p style="text-align:center">
+  \[ \mathbf u_{eq}=\begin{bmatrix} mg & 0 & 0 & 0 \end{bmatrix}^{\!\top},\qquad f(\mathbf x_{eq},\mathbf u_{eq})=\mathbf 0. \]
+</p>
+<p>Write \( \mathbf x=\mathbf x_{eq}+\delta\mathbf x \), \( \mathbf u=\mathbf u_{eq}+\delta\mathbf u \) and keep
+   first order. <code>analysis.linearize</code> does this with <b>central finite differences</b> of the
+   <em>real</em> nonlinear \( f= \)<code>state_derivative</code>:</p>
+<p style="text-align:center">
+  \[ \dot{\delta\mathbf x}\approx A\,\delta\mathbf x + B\,\delta\mathbf u,\qquad A=\tfrac{\partial f}{\partial \mathbf x}\big|_{eq}\ (12\times12),\quad B=\tfrac{\partial f}{\partial \mathbf u}\big|_{eq}\ (12\times4). \]
+</p>
+<p>The <b>poles</b> are \( \operatorname{eig}(A) \); at hover several are exactly zero (integrators) ⇒ marginally
+   stable, <b>not</b> asymptotically stable. The fix is feedback. First check it is even fixable —
+   <b>controllability</b>:</p>
+<p style="text-align:center">
+  \[ \mathcal C=\big[\,B\ \ AB\ \ A^2B\ \cdots\ A^{11}B\,\big],\qquad \operatorname{rank}\mathcal C \overset{!}{=} 12. \]
+</p>
+
+<div class="callout">
+  <span class="ttl">Convention guardrail</span>
+  Everything here follows <a href="../../simulator/CONVENTIONS.md"><code>CONVENTIONS.md</code></a>: <b>z-up / ENU</b>
+  (gravity \(-z\), thrust \(+\)body-z), <b>intrinsic ZYX</b> Euler, the <b>X-frame</b> mixer (every motor
+  contributes to roll <em>and</em> pitch — <b>not</b> plus-frame), scalar-first quaternions. Because
+  <code>linearize</code> differentiates the real <code>state_derivative</code>, \( (A,B) \) inherit these
+  signs automatically — there is no separate matrix to get wrong.
+</div>
+
+<!-- ============ 2. SETUP ============ -->
+<h2>2 · Setup (2 min)</h2>
+<p>From the <code>simulator/</code> directory, in your virtual environment:</p>
+<div class="code"><pre><span class="cm"># one-time</span>
+python -m venv .venv &amp;&amp; source .venv/bin/activate   <span class="cm"># Windows: .venv\Scripts\activate</span>
+pip install -r requirements.txt
+<span class="cm"># every session — so `import quadsim` works</span>
+export PYTHONPATH=.                                <span class="cm"># Windows: set PYTHONPATH=.</span></pre></div>
+<p>Everything today lives in <code>quadsim/analysis.py</code> (read it — it is short and well commented) and
+   the reference walk-through <code>examples/04_analysis.py</code>. You will write a small new script,
+   <code>examples/wk4_analysis.py</code>, that isolates the Week-4 pieces.</p>
+
+<!-- ============ 3. THE TASK ============ -->
+<h2>3 · Build the linear model</h2>
+<p>Work through the steps. Each adds a few lines to <code>examples/wk4_analysis.py</code>. The functions you
+   need — <code>hover_equilibrium</code>, <code>linearize</code>, <code>poles</code>, <code>controllability</code> —
+   all live in <code>quadsim.analysis</code>.</p>
+
+<details class="step" open>
+  <summary><span class="num">1</span> Find the hover trim &amp; sanity-check it <span class="tag">equilibrium</span></summary>
+  <div class="step-body">
+    <p>Get \( (\mathbf x_{eq},\mathbf u_{eq}) \) and confirm the state-derivative really is zero there
+       (this is what "equilibrium" means):</p>
+    <div class="code"><pre>import numpy as np
+from quadsim import QuadParams, analysis as an
+from quadsim.dynamics import state_derivative
+
+p = QuadParams()
+x_eq, u_eq = an.hover_equilibrium(p)          <span class="cm"># u_eq = [p.weight, 0, 0, 0]</span>
+print(<span class="st">"max |f(x_eq,u_eq)| ="</span>, np.max(np.abs(state_derivative(x_eq, u_eq, p))))</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">2</span> Linearize about hover → \( (A,B) \) <span class="tag">the core</span></summary>
+  <div class="step-body">
+    <p>One call differentiates the real nonlinear model by central differences. Check the shapes:</p>
+    <div class="code"><pre>A, B = an.linearize(p)                        <span class="cm"># about hover by default</span>
+print(<span class="st">"A:"</span>, A.shape, <span class="st">" B:"</span>, B.shape)   <span class="cm"># (12, 12)  (12, 4)</span></pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">3</span> Open-loop poles &amp; count those at the origin <span class="tag">eig(A)</span></summary>
+  <div class="step-body">
+    <p>The poles are the eigenvalues of \(A\). Count how many sit on the imaginary axis (\( \operatorname{Re}\approx0 \)) —
+       those are the integrators that make hover only marginally stable:</p>
+    <div class="code"><pre>ol = an.poles(A)
+n_origin = int(np.sum(np.abs(ol.real) &lt; 1e-6))
+print(f<span class="st">"{n_origin} open-loop poles at the origin (marginally stable)"</span>)</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">4</span> Controllability rank — must be 12 <span class="tag">prerequisite</span></summary>
+  <div class="step-body">
+    <p>Build \( \mathcal C \) and take its rank. Full rank means the four-component wrench can steer all
+       twelve states — the green light for LQR/MPC:</p>
+    <div class="code"><pre>C, rank = an.controllability(A, B)
+print(f<span class="st">"controllability rank {rank}/12"</span>)
+assert rank == 12, <span class="st">"system is not controllable — check A,B"</span></pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">5</span> Plot the pole map <span class="tag">deliverable</span></summary>
+  <div class="step-body">
+    <p>Use the built-in plotter. It shades the unstable (\( \operatorname{Re}&gt;0 \)) half-plane and marks the
+       imaginary axis — the stability boundary. Pass a <em>list</em> of eigenvalue arrays:</p>
+    <div class="code"><pre>from quadsim import plotting as viz
+viz.plot_poles([ol], labels=[<span class="st">"open loop (hover)"</span>],
+               save=<span class="st">"wk4_poles.png"</span>, show=False)
+print(<span class="st">"saved wk4_poles.png"</span>)</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">✓</span> Stuck? Reveal the full <code>examples/wk4_analysis.py</code></summary>
+  <div class="step-body">
+    <div class="callout warn"><span class="ttl">Try first</span> You learn the model by assembling it. Peek only after a genuine attempt.</div>
+    <div class="code"><pre><span class="cm"># examples/wk4_analysis.py — Week 4: linearize about hover, poles, controllability</span>
+import numpy as np
+from quadsim import QuadParams, analysis as an
+from quadsim.dynamics import state_derivative
+from quadsim import plotting as viz
+
+p = QuadParams()
+
+<span class="cm"># 1) hover trim — state-derivative must vanish</span>
+x_eq, u_eq = an.hover_equilibrium(p)
+print(<span class="st">"max |f(x_eq,u_eq)| ="</span>, np.max(np.abs(state_derivative(x_eq, u_eq, p))))
+
+<span class="cm"># 2) linearize the real nonlinear model about hover</span>
+A, B = an.linearize(p)
+print(<span class="st">"A:"</span>, A.shape, <span class="st">" B:"</span>, B.shape)        <span class="cm"># (12,12) (12,4)</span>
+
+<span class="cm"># 3) open-loop poles</span>
+ol = an.poles(A)
+n_origin = int(np.sum(np.abs(ol.real) &lt; 1e-6))
+print(f<span class="st">"{n_origin} poles at the origin (marginally stable)"</span>)
+
+<span class="cm"># 4) controllability</span>
+C, rank = an.controllability(A, B)
+print(f<span class="st">"controllability rank {rank}/12"</span>)
+assert rank == 12
+
+<span class="cm"># 5) deliverable: the pole map</span>
+viz.plot_poles([ol], labels=[<span class="st">"open loop (hover)"</span>],
+               save=<span class="st">"wk4_poles.png"</span>, show=False)
+print(<span class="st">"saved wk4_poles.png"</span>)</pre></div>
+  </div>
+</details>
+
+<!-- ============ 4. RUN & VERIFY ============ -->
+<h2>4 · Run &amp; verify</h2>
+<p>Save the script above as <code>examples/wk4_analysis.py</code>, then run it:</p>
+<div class="code"><pre>export PYTHONPATH=.
+python examples/wk4_analysis.py</pre></div>
+
+<div class="callout goal">
+  <span class="ttl">Expected — your graded checkpoint ⭐</span>
+  <ul style="margin:6px 0 0">
+    <li><b><code>max |f(x_eq,u_eq)|</code> ≈ 0</b> (to numerical precision) — hover really is an equilibrium.</li>
+    <li><b><code>A</code> is (12, 12)</b> and <b><code>B</code> is (12, 4)</b>.</li>
+    <li><b>Several poles at the origin</b> (\( \operatorname{Re}\approx0 \)) — marginally stable, motivating feedback.</li>
+    <li><b>controllability rank 12/12</b> — the <code>assert</code> passes.</li>
+    <li>The saved <code>wk4_poles.png</code> shows the open-loop poles clustered on the imaginary axis (none strictly left).</li>
+  </ul>
+</div>
+
+<p>For the bigger picture, run the reference walk-through — it does the same Week-4 analysis, then goes on to
+   design the Week-7 LQR gain on this very \( (A,B) \) and flies a figure-eight (a preview of where this leads):</p>
+<div class="code"><pre>python examples/04_analysis.py</pre></div>
+
+<h2 class="dl-h">Try it live — the Digital Lab</h2>
+<p class="muted" style="margin:-4px 0 10px">The same physics as the lab, with sliders. Predict, then check; the full catalogue is in the <a href="../digital-lab.html">Digital Lab</a>.</p>
+<div class="callout"><span class="ttl">integ</span>Choose the Δt you will use in the harness with evidence: push dt until RK4 fails; note how much earlier Euler did. <a href="../digital-lab.html#integ">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="integ"></div>
+<div class="callout"><span class="ttl">jacobian</span>quadsim.analysis.linearize uses central differences near h = 1e-5. Find that minimum yourself before you call it. <a href="../digital-lab.html#jacobian">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="jacobian"></div>
+
+<h3>Self-check</h3>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="a"/><label>I confirmed <code>f(x_eq, u_eq)</code> is zero — so hover is a genuine equilibrium.</label></li>
+  <li><input type="checkbox" data-id="b"/><label><code>A</code> is 12×12 and <code>B</code> is 12×4, and I can say what each block maps (state→state, wrench→state).</label></li>
+  <li><input type="checkbox" data-id="c"/><label>I see several open-loop poles at the origin and can explain why that is "marginally stable, not asymptotically stable".</label></li>
+  <li><input type="checkbox" data-id="d"/><label>Controllability rank is 12, and I understand why that is the prerequisite for LQR/MPC.</label></li>
+</ul>
+
+<!-- ============ 5. GO FURTHER ============ -->
+<h2>5 · Going further (optional)</h2>
+<ul>
+  <li><b>Look inside <code>A</code>.</b> Print <code>np.round(A, 2)</code>. Find the integrator blocks — where position rows pick up velocity, and Euler rows pick up body rates (a sub-diagonal of 1's).</li>
+  <li><b>Off-hover trim.</b> Call <code>an.hover_equilibrium(p, yaw=np.deg2rad(30))</code> and re-linearize. Do the poles move? (They should not — hover is hover, just rotated.)</li>
+  <li><b>Peek ahead to Week 7.</b> Run <code>K,_,cl = an.lqr(A,B,Q,R)</code> with the \(Q,R\) from <code>04_analysis.py</code> and overlay <code>plot_poles([ol, cl], labels=["open loop","LQR closed loop"])</code>. Watch the poles march into the left half-plane.</li>
+</ul>
+
+<!-- ============ DELIVERABLE / SUBMIT ============ -->
+<h2>6 · Deliverable &amp; submission</h2>
+<table class="rubric">
+  <tr><th>Criterion</th><th>What we look for</th><th>Weight</th></tr>
+  <tr><td>Correct linear model</td><td><code>linearize</code> used about hover; \(A\) (12×12), \(B\) (12×4); equilibrium verified</td><td>40%</td></tr>
+  <tr><td>Poles &amp; controllability</td><td>The <code>wk4_poles.png</code> map + printed origin-pole count and rank = 12</td><td>35%</td></tr>
+  <tr><td>Understanding</td><td>One short paragraph: why hover poles are marginally stable &amp; why rank 12 matters</td><td>25%</td></tr>
+</table>
+
+<div class="submit-box">
+  <h3>📤 Submit on the course platform</h3>
+  <p style="margin:0 0 10px;font-size:14px">⭐ <b>This submission is graded (5%).</b> Full requirements &amp; rubric: <a href="../assignments/lab1.html">Lab 1 assignment brief</a>.</p>
+  <div class="row">
+    <div>What</div><div><code>wk4_analysis.py</code> + <code>wk4_poles.png</code> + a 3–5 line note (one PDF or zip)</div>
+    <div>Filename</div><div><code>MLTE03_Wk4_&lt;studentID&gt;.zip</code></div>
+    <div>Where</div><div>the <a href="https://course.ainrobotics.com/mlte03/">course platform</a> → <i>Week 4 Lab</i> upload box (log in at the Ken Sir course hub; every version you upload is kept)</div>
+    <div>Deadline</div><div><span class="tofill">date / time — TO FILL</span> (before Week 5)</div>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin:10px 0 0">Submissions go through the course platform (<a href="https://course.ainrobotics.com/mlte03/">course.ainrobotics.com/mlte03/</a>) — log in at the Ken Sir course hub; nothing is uploaded to this static site itself.</p>
+</div>
+
+<p style="margin:30px 0;color:var(--muted)">Next week → <a href="../index.html#weeks">Week 5: attitude control</a>. You take this marginally-stable
+   model and close the <em>first</em> feedback loop — attitude — pulling the rotational poles into the left half-plane.</p>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<!-- KaTeX auto-render for the inline math -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Final Project Assignment · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css" />
+</head>
+<body data-lab="week15-assignment">
+
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Assignment · Final Project (proposal Wk 10 → viva Wk 15) · ⭐ graded</div>
+    <h1>Final Project — Certify the Controller, Then Defend It</h1>
+    <div class="sub">Design a controller for <b>your own</b> simulated quadrotor, submit it for certification against a written specification, and defend your understanding of it 1-on-1.</div>
+    <div class="meta">
+      <span>⚖️ Weight: <b>40%</b> of the course</span>
+      <span>🧍 <b>Individual</b> — all 100 marks, no team block</span>
+      <span>🆔 <b>Your own vehicle</b>: <code>--student &lt;your ID&gt;</code></span>
+      <span>📄 Report <b>≤6 pages</b> + <b>individual viva, 5 min hard cut</b> (Week 15)</span>
+    </div>
+    <p style="margin-top:14px">
+      <a class="btn ghost" href="team-case-study.html">← Team case study brief (Week 10)</a>
+      <a class="btn ghost" href="../index.html#assign">All assignments</a> <a class="btn ghost" href="../pdf/MLTE03_Assignment_final-project.pdf">Download PDF</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Task</span>
+  <b>This project is individual.</b> One mission, the same for everyone: <b>M3, the payload drop</b> —
+  but <b>every student certifies a different aircraft</b>. Certify your Week-9 autopilot against it and
+  watch it fail exactly one requirement. Upgrade it with <b>MPC</b> (Week 12). Certify again. Then explain
+  <i>why</i> the number moved. Your controller is tested by the same automated script, run once, the same
+  way for every student, against a written specification — not a live demo. See
+  <a href="../../simulator/CERTIFICATION.md">simulator/CERTIFICATION.md</a> for what certification means as an
+  engineering practice and why the project is graded this way.
+</div>
+
+<h2>Your own aircraft — <code>--student &lt;your ID&gt;</code></h2>
+<p>The final project is <b>individual</b>, and so is the vehicle. Passing <code>--student &lt;your ID&gt;</code>
+   makes the harness build <i>your</i> quadcopter before it flies the mission: your <b>mass</b> (and your mass
+   step), your <b>arm length</b>, your <b>yaw-torque ratio</b>, your <b>inertia</b> — all derived from your
+   student ID. See your own numbers with:</p>
+<pre><code>python -m quadsim.student_params &lt;your ID&gt;</code></pre>
+<p>The derivation is <b>deterministic, not random</b>: the same ID always produces the same aircraft, on any
+   machine, forever — so your result reproduces exactly, and a different ID never produces yours. The
+   <b>requirements do not change</b>: same three IDs, same 0.50 m bars, same graded seed, for everyone.</p>
+<div class="callout warn">
+  <span class="ttl">What this changes, and what it does not</span>
+  <b>Still fine, still encouraged:</b> discuss the theory, argue about horizons and cost weights, read each
+  other's code, help each other past an import error. <b>What no longer works:</b> copying a tuned controller
+  — gains that close REQ-M3-1 on one vehicle are not guaranteed to close it on another.
+  <b>Record your student ID in your README:</b> a run with the wrong ID certifies an aircraft that is not
+  yours and does not count.
+</div>
+
+<h2>The mission — M3, payload drop</h2>
+<p>The quadrotor holds position at [0, 0, 1.5]. At <b>t = 5 s</b> <b>its mass steps down</b> — a package
+   released (<b>0.65 kg → 0.45 kg</b> on the course default vehicle; your own two masses come from your ID).
+   <b>Your controller is never told.</b> It has one continuous instance for the whole 15 s flight and has to
+   notice and correct through feedback alone, exactly as a real flight computer would. Three requirements:</p>
+<table class="rubric">
+<thead><tr><th>ID</th><th>Requirement</th><th>Threshold</th></tr></thead>
+<tbody>
+<tr><td><code>REQ-M3-1</code></td><td>Max deviation across the entire post-drop window</td><td>&lt; 0.50 m</td></tr>
+<tr><td><code>REQ-M3-2</code></td><td>Max transient deviation in the first 3 s after the drop</td><td>&lt; 0.50 m</td></tr>
+<tr><td><code>REQ-M3-3</code></td><td>Position RMSE over the last 5 s of the run</td><td>&lt; 0.50 m</td></tr>
+</tbody>
+</table>
+<p>Graded on estimator <b>seed 0</b> — one command shape, the same fixed draw for everyone, with your own ID:</p>
+<pre><code>python certify.py --controller &lt;your.module:YourClass&gt; --student &lt;your ID&gt; --mission M3</code></pre>
+<p><code>--seeds 0,1,2</code> exists to <i>measure the spread</i> for the one required sentence in your report.
+   It is not the grading rule: <b>the grade comes from seed 0</b>.</p>
+<p>Here is the whole project in one before-and-after, using the course's own reference controllers on the
+   <b>course default vehicle</b> (run with no <code>--student</code> flag) — the shared worked example used in
+   lectures. <b>Your own numbers will differ</b>, because your aircraft differs; the <b>pattern</b> holds for
+   everyone (verified by sweeping 200 synthetic student IDs): the classical baseline fails <b>exactly one</b>
+   requirement, and the MPC upgrade fixes that one.</p>
+<table class="rubric">
+<thead><tr><th>Course default vehicle</th><th>Baseline — cascade PID</th><th>Upgrade — MPC</th></tr></thead>
+<tbody>
+<tr><td><b>Verdict</b></td><td>NOT CERTIFIED</td><td><b>CERTIFIED</b></td></tr>
+<tr><td><code>REQ-M3-1</code></td><td>FAIL — max = 0.540 m</td><td>PASS — max = 0.473 m</td></tr>
+<tr><td><code>REQ-M3-2</code></td><td>PASS</td><td>PASS</td></tr>
+<tr><td><code>REQ-M3-3</code></td><td>PASS</td><td>PASS</td></tr>
+</tbody>
+</table>
+<p><b>M4</b> (constrained corridor) is an ungraded warm-up — your Week-9 controller should already
+   certify it on your vehicle, and seeing a green report first makes the red one legible. <b>M1</b> and <b>M2</b> are
+   demonstration missions only: their bars are not achievable by any controller, which is itself the
+   Week-11 requirements-review exercise. Full detail in
+   <a href="../../simulator/CERTIFICATION.md">simulator/CERTIFICATION.md</a> §2.</p>
+
+<h2>What you hand in — three things</h2>
+<ol>
+  <li><b>The two certification reports, pasted verbatim</b> — your frozen Week-12 baseline and your
+      final submission, both run with <code>--student &lt;your ID&gt;</code>. Not paraphrased, not retyped.</li>
+  <li><b>What you changed, written as engineering</b> — the MPC formulation in plain terms with its key
+      equations: prediction model, horizon, what is in the cost, what you constrained and whether it was
+      hard or soft. Every symbol one you chose and can defend.</li>
+  <li><b>One figure and one paragraph explaining the mechanism</b> — a plot showing <i>why</i> the number
+      moved (the altitude trace through the mass drop is usually clearest), and a paragraph naming the
+      specific feature of MPC responsible.</li>
+</ol>
+<p>Plus <b>one honest sentence</b> on the across-seed spread (run <code>--seeds 0,1,2</code> once — it measures
+   spread, it does not change the grade) and one paragraph on what you would do next with another month.
+   <b>Six pages is plenty.</b></p>
+<div class="callout">
+  <span class="ttl">Optional stretch</span>
+  A constraint-activation plot, a solve-time histogram against the deadline, or an ablation table
+  (shorter horizon / hard-only constraints / no Δu term). Not required, and not needed for full marks —
+  attempt these only once the three required items are genuinely finished.
+</div>
+
+<h2>Milestones</h2>
+<ul>
+  <li><b>Week 11</b> — one-page proposal <b>per person</b>, justified by <i>your own</i> baseline certification numbers on <i>your own</i> vehicle: your student ID and vehicle parameters, which requirement you are attacking, your approach, your fallback</li>
+  <li><b>Week 12</b> — baseline <b>frozen</b> (metrics script + student ID + seeds committed); post-freeze changes need sign-off</li>
+  <li><b>Week 13</b> — method running on your vehicle + first evidence figure</li>
+  <li><b>Week 14</b> — supervised clinic: results complete and a full <b>certification dry run</b> passed (fresh clone, tag <code>final</code>, network off)</li>
+  <li><b>Before the Week 15 session</b> — code + report + engineering log submitted, both certification reports pasted in</li>
+  <li><b>Week 15 session</b> — <b>individual viva only, 5 minutes hard cut per person</b> — no presentation, no live demo; the team case study was Week 10. Full brief, marking anchors and the question bank: <a href="viva-week15.html">Week 15 viva brief</a></li>
+</ul>
+
+<h2>Assessment criteria</h2>
+<p><b>Every one of the 100 marks is individual.</b> There is no team block and <b>no peer rating</b> on this
+   project — Week 10's team case study keeps its own.</p>
+<table class="rubric">
+<thead><tr><th>Criterion</th><th>Marks</th><th>What earns full marks</th></tr></thead>
+<tbody>
+<tr><td><b>Certification results</b></td><td style="text-align:center">20</td><td><code>certify.py --student &lt;your ID&gt; --mission M3</code> run against your final submission on the graded seed 0, output pasted verbatim into the report; marks follow how many requirements certify and how honestly a remaining failure is diagnosed.</td></tr>
+<tr><td><b>Improvement over baseline</b></td><td style="text-align:center">15</td><td>The same command, same student ID, run against your frozen Week-12 baseline and your final submission; the upgrade closes REQ-M3-1, or a rigorous negative result is honestly analysed. One sentence on the across-seed spread is required.</td></tr>
+<tr><td><b>Report depth</b></td><td style="text-align:center">15</td><td>Correct formulation; all three required items present and done properly; failure analysis you found yourself.</td></tr>
+<tr><td><b>Code quality &amp; reproducibility</b></td><td style="text-align:center">10</td><td>One-command run from a clean clone, README (<b>with your student ID</b>), clean structure; no ground-truth leakage.</td></tr>
+<tr><td><b>Viva (5 min hard cut)</b></td><td style="text-align:center">20</td><td>1-on-1: explain a line from your own certification report, one question from the published bank, one code-ownership check on your own submitted code. Full details and the question bank: <code>final-project-assessment.md</code> §5–6.</td></tr>
+<tr><td><b>Engineering log + git trail</b></td><td style="text-align:center">10</td><td>A 1-page log of <b>what you tried, what failed, what you decided</b> — parameter, value, date, one sentence of justification — corroborated by your commit history.</td></tr>
+<tr><td><b>Concept quizzes</b> <span class="muted">(Wks 12–14, in class; best 2 of 3)</span></td><td style="text-align:center">10</td><td>Short written checks on the requirement→evidence chain, OCP anatomy, constraint activation, evaluation protocol.</td></tr>
+<tr><td><b>Total</b></td><td style="text-align:center"><b>100</b></td><td></td></tr>
+</tbody></table>
+<div class="callout warn">
+  <span class="ttl">Fallback rule</span>
+  If MPC does not close REQ-M3-1, submit the <b>baseline's</b> certification with a rigorous negative-result
+  analysis. The four artifact items (certification 20 + improvement 15 + report 15 + code 10 = <b>60</b>) then
+  cap at <b>45/60</b>; the <b>viva, engineering log and quizzes are unaffected</b>. A well-understood negative
+  result can still earn full viva marks.
+</div>
+
+<h2>Rules</h2>
+<ul>
+  <li><b>This is individual work.</b> Discuss the theory freely, read each other's code, help each other debug — but the controller you submit, the report, the log and the viva answers must be yours. Because every student's vehicle differs, borrowed tuning does not transfer anyway.</li>
+  <li><b>Your student ID is part of the submission.</b> Put it in your README. A run with the wrong ID certifies a vehicle that is not yours and does not count.</li>
+  <li>Certification runs once, by the instructor, from a fresh clone of your repo at tag <code>final</code>, with <code>--student &lt;your ID&gt;</code> and the network off — the same procedure for every student. Run it yourself first; the instructor's run is a confirmation, not a surprise.</li>
+  <li>The viva timer is a hard cut — it ends at 5:00 regardless of where the conversation is.</li>
+  <li>AI &amp; code provenance: use whatever tools you like, declare what you used and for what, and be ready to explain <i>every line you submit</i> at the viva. Unexplainable code is not your evidence.</li>
+  <li><b>Late code/report:</b> −20% per day; nothing accepted after the Week 15 session (the viva schedule cannot be made up except for institutional cases).</li>
+</ul>
+
+<div class="submit-box">
+  <h3>📤 Submit on the course platform</h3>
+  <div class="row">
+    <div>What</div><div>one zip <b>per student</b> (code + README with your student ID + report + engineering log)</div>
+    <div>Filename</div><div><code>MLTE03_Final_&lt;your student ID&gt;.zip</code></div>
+    <div>Where</div><div>the <a href="https://course.ainrobotics.com/mlte03/">course platform</a> → <i>Final Project</i> upload box (log in at the Ken Sir course hub; every version you upload is kept)</div>
+    <div>Deadline</div><div><span class="tofill">date / time — TO FILL</span> (before the Week 15 session)</div>
+  </div>
+</div>
+
+</main>
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

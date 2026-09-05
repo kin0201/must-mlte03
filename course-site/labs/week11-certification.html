@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 11 Lab — Certify Your Own Autopilot · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css" />
+<!-- KaTeX for the bit of math in the recap -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+</head>
+<body data-lab="week11-certification">
+
+<div class="lab-progress"><i></i></div>
+
+<!-- ============ HEADER ============ -->
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Week 11 · Lab (second half of session)</div>
+    <h1>Certify Your Own Autopilot — find your red line</h1>
+    <div class="sub">Run the certification harness against the controller you have been building since Week 5, and diagnose exactly what it fails.</div>
+    <div class="meta">
+      <span>⏱ <b>~40 min</b></span>
+      <span>🧩 Run <b>simulator/certify.py</b></span>
+      <span>🆔 <b>Your own vehicle</b> — <code>--student &lt;your ID&gt;</code></span>
+      <span>📦 Deliverable: <b>two reports, verbatim + a diagnosis</b></span>
+      <span>🎯 <b>Project gate: individual proposal due</b></span>
+    </div>
+    <p style="margin-top:14px"><a class="btn ghost" href="../slides/week11-certification.html">← Back to the Week 11 slides</a>
+       <a class="btn ghost" href="../index.html">Course home</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Goal</span>
+  Stop asking &ldquo;does my controller work?&rdquo; and start answering &ldquo;which requirements does it meet?&rdquo;
+  You will certify your Week-9 autopilot against <b>M4</b> (expect green) and against <b>M3</b>, the payload-drop
+  mission that is your final project (expect red on at least one requirement) — both on <b>your own aircraft</b>,
+  built from your student ID. The numbers you record today are the <b>baseline evidence</b> for your entire
+  project, and your individual proposal is due before you leave.
+</div>
+
+<!-- ============ 1. RECAP ============ -->
+<h2>1 · The 5-minute recap</h2>
+<p>A <b>requirement</b> says what must be true, a <b>verification method</b> says how you check it, and
+   <b>evidence</b> is the record that it held. The links between them are called <b>traceability</b>. Today
+   the method is always <em>test</em>, and the evidence is the harness's own printed report.</p>
+
+<p>Mission <b>M3</b> is a payload drop. The quad holds \( [0,\,0,\,1.5] \); at \(t = 5\) s its mass steps down. On the
+   <b>course default vehicle</b> — the one used in the lecture — that step is</p>
+<p style="text-align:center">
+  \[ m: \; 0.65\ \text{kg} \;\longrightarrow\; 0.45\ \text{kg} \]
+</p>
+<p><b>Your own two masses are different</b>: the final project is individual, and <code>--student &lt;your ID&gt;</code> derives
+   your aircraft — mass, arm length, \(k_\tau\), inertia — from your student ID. Look yours up before you start:</p>
+<div class="code"><pre>python -m quadsim.student_params &lt;your ID&gt;</pre></div>
+<p>And <b>your controller is never told</b>. It has one continuous instance for the whole 15 s flight, so it has
+   to notice the change through feedback alone — exactly like a real flight computer, which does not get handed
+   an updated mass model in mid-air. On the default vehicle the loop is still commanding thrust sized for
+   0.65 kg, an excess of roughly</p>
+<p style="text-align:center">
+  \[ \Delta T \;=\; (0.65 - 0.45)\,g \;\approx\; 2\ \text{N}, \]
+</p>
+<p>so the aircraft accelerates upward until the feedback unwinds it. <b>How far it gets is the whole test.</b>
+   Redo that arithmetic with <i>your</i> two masses — it is the first line of your own diagnosis, and it will not
+   come to 2 N.</p>
+
+<div class="callout">
+  <span class="ttl">Why your numbers will not match the lecture's</span>
+  Every reference number in the Week-11 deck — 0.540 m for <code>CascadePID</code>, 0.473 m for <code>LinearMPC</code> —
+  is the <b>course default vehicle</b>, run with no <code>--student</code> flag. It is a shared worked example, not
+  a target. Your aircraft has a different mass step and different control authority, so your numbers will differ.
+  What holds for everyone is the <b>pattern</b>: the classical baseline misses REQ-M3-1, and the MPC upgrade
+  closes it. The requirement thresholds themselves never change — 0.50 m, for all of you.
+</div>
+
+<div class="callout warn">
+  <span class="ttl">The loop closes on the estimate</span>
+  Every mission wraps your controller in <code>EstimatedStateController</code> — the same noisy IMU and low-rate
+  GPS you fused in Week 8. You never see the simulator's ground truth. A controller that peeks at true state is
+  not a flight controller and will not certify anything.
+</div>
+
+<!-- ============ 2. STEPS ============ -->
+<h2>2 · Do it</h2>
+
+<details class="step" open>
+  <summary><span class="num">1</span> Certify the reference controller first <span class="tag">sanity check</span></summary>
+  <div class="step-body">
+    <p>Before you point the harness at your own code, watch it work on the controller you already trust.
+       Run both of these from the <code>simulator/</code> directory — <b>no <code>--student</code> flag</b>, so this is the
+       course default vehicle, exactly what the lecture showed:</p>
+    <div class="code"><pre>python certify.py --controller quadsim.controllers.cascade_pid:CascadePID --mission M4
+python certify.py --controller quadsim.controllers.cascade_pid:CascadePID --mission M3</pre></div>
+    <p>M4 comes back <b>CERTIFIED</b>. M3 comes back <b>NOT CERTIFIED</b>, failing exactly one requirement
+       (max = 0.540 m against the 0.50 m bar). Note <em>which</em> one before you read on — this is the same
+       <em>shape</em> of result you are about to reproduce with your own controller on your own aircraft, with
+       different digits.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">2</span> Certify <em>your</em> controller on M4 <span class="tag">expect green</span></summary>
+  <div class="step-body">
+    <p>Now the one you built, on the aircraft that is yours. Point <code>--controller</code> at your own class and
+       <b>add your student ID</b>:</p>
+    <div class="code"><pre>python certify.py --controller quadsim.controllers.student:StudentController --student &lt;your ID&gt; --mission M4</pre></div>
+    <p>Everything from here carries <code>--student</code>. A run without it certifies the course default vehicle,
+       which is <b>not yours</b> and does not count as your evidence.</p>
+    <p>M4 is the constrained corridor — a rectangular route at 1.5 m and 0.5 m/s with a hard lateral bound.
+       Your Week-9 controller should already pass it:</p>
+    <div class="code"><pre><span class="cm">REQ-M4-1  Max lateral deviation from the route   &lt; 0.30 m
+REQ-M4-2  Final position error from last waypoint &lt; 0.20 m</span></pre></div>
+    <div class="callout warn">
+      <span class="ttl">If M4 fails</span>
+      Fix that before touching M3. A red M4 almost always means an import problem, a wrong return shape, or a
+      controller that never initialised — not a control-design problem. See §4.
+    </div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">3</span> Certify your controller on M3 <span class="tag">expect red</span></summary>
+  <div class="step-body">
+    <p>Your project mission, on your vehicle:</p>
+    <div class="code"><pre>python certify.py --controller quadsim.controllers.student:StudentController --student &lt;your ID&gt; --mission M3</pre></div>
+    <p>The three requirements, all measured over the post-drop window:</p>
+    <div class="code"><pre><span class="cm">REQ-M3-1  Max deviation across the entire post-drop window &lt; 0.50 m
+REQ-M3-2  Max transient deviation in the first 3 s          &lt; 0.50 m
+REQ-M3-3  Position RMSE over the last 5 s                   &lt; 0.50 m</span></pre></div>
+    <p><b>Save the raw output.</b> Copy it to a file — do not retype it and do not summarise it. You will paste
+       it verbatim into your report, and a retyped report is not evidence.</p>
+    <div class="code"><pre>python certify.py --controller quadsim.controllers.student:StudentController --student &lt;your ID&gt; --mission M3 | tee baseline_M3.txt</pre></div>
+    <p>Record your <b>student ID in your README</b> alongside it. The report and the ID travel together: without the
+       ID, nobody — including you, next month — can reproduce the run.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">4</span> Look at the spread across seeds <span class="tag">one run is one sample</span></summary>
+  <div class="step-body">
+    <p>You are <b>graded on seed 0</b> — one fixed draw, the same for everyone. But the seed sets the
+       sensor-noise history your controller had to survive, so it is part of the experiment. Run the sweep once,
+       to <em>measure</em> the spread — it does not change the grading rule:</p>
+    <div class="code"><pre>python certify.py --controller quadsim.controllers.student:StudentController --student &lt;your ID&gt; --mission M3 --seeds 0,1,2</pre></div>
+    <p>It prints every seed's number per requirement and names any seed that failed. For scale, the reference
+       <code>CascadePID</code> on the default vehicle across eight seeds ranges from <b>0.211 m</b> to <b>0.721 m</b> on
+       REQ-M3-1 — a 3.4&times; spread, with the verdict flipping, on a controller with nothing random in it at all.</p>
+    <div class="callout warn">
+      <span class="ttl">Required in your report</span>
+      One sentence stating your graded number <em>and</em> the spread. For example: &ldquo;my margin on REQ-M3-1
+      is 0.47 m on the graded seed, but ranges 0.21&ndash;0.72 m across seeds 0&ndash;2, so I would not claim a
+      robust pass.&rdquo; The grade still comes from <b>seed 0 alone</b>.
+    </div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">5</span> Diagnose, don't just report <span class="tag">this is the mark</span></summary>
+  <div class="step-body">
+    <p>Write one short paragraph per failed requirement, naming the <b>physical</b> cause. The gap between these
+       two answers is most of your report mark:</p>
+    <table class="data">
+      <tr><th>A diagnosis that scores</th><th>A diagnosis that does not</th></tr>
+      <tr>
+        <td>&ldquo;REQ-M3-1 fails at 0.54 m. After the drop the loop is still commanding thrust for the pre-drop
+            mass, so it accelerates upward for roughly 0.4 s before the integrator unwinds. The peak is the
+            overshoot, not the settling &mdash; REQ-M3-3 passes at 0.21 m.&rdquo;
+            <p class="muted" style="font-size:.85em;margin-top:.4em">Use <em>your</em> masses and <em>your</em>
+            measured numbers here, not these.</p></td>
+        <td>&ldquo;REQ-M3-1 failed because my controller was not good enough.&rdquo;</td>
+      </tr>
+    </table>
+    <p>Plot the altitude trace through the mass step if it helps you see it. You will need that figure later
+       anyway &mdash; it is the clearest way to show <em>why</em> the number moves once you upgrade in Week 12.</p>
+  </div>
+</details>
+
+<!-- ============ 3. DELIVERABLE ============ -->
+<h2>3 · What to hand in</h2>
+<div class="callout goal">
+  <span class="ttl">Before you leave the room</span>
+  <ul>
+    <li><b>Your student ID and your vehicle's parameters</b> (the output of <code>quadsim.student_params</code>).</li>
+    <li>Both certification reports, <b>pasted verbatim</b> &mdash; M4 (green) and M3 (red), both run with <code>--student</code>.</li>
+    <li>One paragraph per failed requirement, diagnosing the physical cause <em>on your aircraft</em>.</li>
+    <li>One sentence on the seed spread from <code>--seeds 0,1,2</code>.</li>
+    <li><b>Your project proposal, one page, written by you alone</b>: your measured baseline numbers, which
+        requirement you will attack and why that one, your intended approach in two sentences, and your fallback
+        if it does not close the gap.</li>
+  </ul>
+</div>
+<p>Note what your proposal is built on: <b>your own measured numbers, on your own aircraft</b>, not an intention.
+   That is the method of this whole session applied to your own planning. The final project is <b>individual</b>
+   — all 100 marks, no team block — so from here every artefact you hand in is yours.</p>
+
+<!-- ============ 4. TROUBLESHOOTING ============ -->
+<h3>Self-check</h3>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="a"/><label>I ran <code>certify.py --student &lt;my ID&gt; --mission M4</code> (green) and <code>--mission M3</code> (red) on my own vehicle, and both reports are pasted <b>verbatim</b>.</label></li>
+  <li><input type="checkbox" data-id="b"/><label>For every failed requirement I wrote one paragraph of <i>physical</i> diagnosis — mechanism, not "needs tuning".</label></li>
+  <li><input type="checkbox" data-id="c"/><label>I can point at the line of <code>CERTIFICATION.md</code> each PASS/FAIL line traces to.</label></li>
+  <li><input type="checkbox" data-id="d"/><label>I tried the <a href="../digital-lab.html#seeds">seed-spread widget</a> and can say in one sentence why "graded on seed 0" and "report the spread" are both required.</label></li>
+</ul>
+
+<h2>4 · If it will not run</h2>
+<table class="data">
+  <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+  <tr><td><code>ModuleNotFoundError</code></td><td>Running from the wrong directory</td>
+      <td>Run from <code>simulator/</code>, or set <code>PYTHONPATH=.</code></td></tr>
+  <tr><td><code>--controller must be module.path:ClassName</code></td><td>Missing the colon, or you passed a file path</td>
+      <td>Use <code>quadsim.controllers.student:StudentController</code></td></tr>
+  <tr><td>Every mission fails identically with huge errors</td><td>Wrong return shape, or the controller never initialised</td>
+      <td><code>control()</code> must return four values: \( [T,\ \tau_x,\ \tau_y,\ \tau_z] \)</td></tr>
+  <tr><td>M3 passes outright</td><td>Possible ground-truth leakage</td>
+      <td>Tell the instructor &mdash; this is unexpected and worth checking together</td></tr>
+  <tr><td>Your numbers match the lecture's exactly</td><td>You forgot <code>--student</code>, so you certified the default vehicle</td>
+      <td>Re-run with <code>--student &lt;your ID&gt;</code>; only that run is your evidence</td></tr>
+  <tr><td>A classmate's tuned gains do not pass for you</td><td>Expected &mdash; different vehicle, different margins</td>
+      <td>Tune against your own numbers; share reasoning, not gains</td></tr>
+</table>
+<p>All of these are import-and-interface problems rather than control problems. They are also exactly what breaks
+   a fresh-clone run in the Week-14 dry run, so fixing them today is not wasted time.</p>
+
+<p style="margin:30px 0;color:var(--muted)">Next week &rarr; <a href="../index.html#weeks">Week 12: Model Predictive Control</a> &mdash; the method
+   that closes the requirement you just failed. On the <b>course default vehicle</b> the reference <code>LinearMPC</code>
+   takes REQ-M3-1 from <b>0.540 m</b> to <b>0.473 m</b> and certifies M3; on <i>your</i> vehicle both numbers will be
+   different, but the same move is available to you. Reading: <code>simulator/CERTIFICATION.md</code> §1&ndash;§2 and §6.</p>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<!-- KaTeX auto-render for the inline math -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

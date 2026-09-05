@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 7 Lab — LQR Optimal Control · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css?v=5" />
+<!-- KaTeX for the bit of math in the recap -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+</head>
+<body data-lab="week07-lqr-optimal-control">
+
+<div class="lab-progress"><i></i></div>
+
+<!-- ============ HEADER ============ -->
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Week 7 · Lab (second half of session)</div>
+    <h1>LQR Optimal Control — one cost, one gain</h1>
+    <div class="sub">Design an optimal full-state gain on the Week-4 hover model, then prove it stabilizes the quad.</div>
+    <div class="meta">
+      <span>⏱ <b>~75 min</b></span>
+      <span>🧩 Use <b>quadsim.analysis.lqr</b></span>
+      <span>📦 Deliverable: <b>pole map + PID-vs-LQR note</b></span>
+      <span>⭐ <b>Graded checkpoint</b></span>
+    </div>
+    <p style="margin-top:14px"><a class="btn ghost" href="../slides/week07-lqr-optimal-control.html">← Back to the Week 7 slides</a>
+       <a class="btn ghost" href="../index.html">Course home</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Goal</span>
+  Take the linear hover model from Week 4 and design an <b>LQR</b> gain \( K \) so the input
+  \( \mathbf{u}=-K\mathbf{x} \) minimizes \( \int (\mathbf{x}^\top Q\mathbf{x}+\mathbf{u}^\top R\mathbf{u})\,dt \).
+  By the end you will have a <b>pole map</b> showing the open-loop poles dragged firmly into the left
+  half-plane, and a short <b>PID-vs-LQR</b> comparison on the same step.
+</div>
+
+<!-- ============ 1. RECAP ============ -->
+<h2>1 · The 5-minute recap</h2>
+<p>About hover the quad is a <b>linear</b> system \( \dot{\mathbf{x}}=A\mathbf{x}+B\mathbf{u} \), where
+   \( \mathbf{x} \) is the 12-state deviation and \( \mathbf{u}=[\,\delta T,\tau_x,\tau_y,\tau_z\,] \) the wrench
+   deviation. \(A\) is \(12\times12\), \(B\) is \(12\times4\) — exactly the matrices
+   <code>analysis.linearize(p)</code> returned in Week 4.</p>
+
+<p>LQR chooses the input that minimizes a quadratic cost; the answer is linear full-state feedback:</p>
+<p style="text-align:center">
+  \[ J = \int_0^\infty \big(\mathbf{x}^\top Q\,\mathbf{x} + \mathbf{u}^\top R\,\mathbf{u}\big)\,dt,
+     \qquad \mathbf{u} = -K\mathbf{x}, \qquad K = R^{-1}B^\top P \]
+</p>
+<p>where \( P=P^\top\succeq 0 \) solves the <b>continuous-time algebraic Riccati equation</b> (CARE):</p>
+<p style="text-align:center">
+  \[ A^\top P + P A - P B R^{-1} B^\top P + Q = 0 \]
+</p>
+<p>The closed loop is \( \dot{\mathbf{x}}=(A-BK)\mathbf{x} \); LQR <b>guarantees</b> every eigenvalue of
+   \(A-BK\) has \( \mathrm{Re}<0 \). \(Q\) penalizes state error (bigger ⇒ faster, more effort),
+   \(R\) penalizes control effort (bigger ⇒ gentler). Only the ratio \(Q/R\) matters.</p>
+
+<div class="callout">
+  <span class="ttl">Convention check</span>
+  Same frames as all term (see <code>simulator/CONVENTIONS.md</code>): <b>z-up / ENU</b> (gravity \(-z\),
+  thrust \(+\)body-\(z\)), <b>ZYX intrinsic</b> Euler, the <b>X-frame</b> mixer, scalar-first quaternions.
+  Here \( \mathbf{x},\mathbf{u} \) are <em>deviations from the hover trim</em> — apply the gain as
+  \( \mathbf{u}=\mathbf{u}_{\text{hover}}-K(\mathbf{x}-\mathbf{x}_{\text{eq}}) \).
+</div>
+
+<!-- ============ 2. SETUP ============ -->
+<h2>2 · Setup (2 min)</h2>
+<p>From the <code>simulator/</code> directory, in your virtual environment:</p>
+<div class="code"><pre><span class="cm"># one-time</span>
+python -m venv .venv &amp;&amp; source .venv/bin/activate   <span class="cm"># Windows: .venv\Scripts\activate</span>
+pip install -r requirements.txt
+<span class="cm"># every session — so `import quadsim` works</span>
+export PYTHONPATH=.                                <span class="cm"># Windows: set PYTHONPATH=.</span></pre></div>
+<p>Everything you need lives in <code>quadsim/analysis.py</code> (<code>linearize</code>, <code>poles</code>,
+   <code>care</code>, <code>lqr</code>) and <code>quadsim/plotting.py</code> (<code>plot_poles</code>). The reference
+   walkthrough is <code>examples/04_analysis.py</code> — open it alongside this sheet.</p>
+
+<!-- ============ 3. THE TASK ============ -->
+<h2>3 · Design the LQR gain</h2>
+<p>Work through the steps. You'll write a short script <code>examples/wk7_lqr.py</code> that linearizes the
+   model, designs \(K\), and renders the pole map. The state order is
+   <code>[p(3), v(3), (φ,θ,ψ), ω(3)]</code>; the wrench is <code>[T, τx, τy, τz]</code>.</p>
+
+<details class="step" open>
+  <summary><span class="num">1</span> Linearize the hover model <span class="tag">reuse Week 4</span></summary>
+  <div class="step-body">
+    <p>Get the same \((A,B)\) you analyzed in Week 4, and look at the open-loop poles — they sit
+       <b>at the origin</b> (pure integrators), so the open loop is only marginally stable.</p>
+    <div class="code"><pre>import numpy as np
+from quadsim import QuadParams, analysis as an
+
+p = QuadParams()
+A, B = an.linearize(p)          <span class="cm"># A: 12x12, B: 12x4 — the hover linear model</span>
+ol = an.poles(A)                <span class="cm"># open-loop eigenvalues</span>
+print(<span class="st">"open-loop max Re(pole) ="</span>, ol.real.max())</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">2</span> Choose the cost weights \(Q,R\) <span class="tag">the design knobs</span></summary>
+  <div class="step-body">
+    <p>Diagonal weights — one number per state and per channel. Start from the values in
+       <code>examples/04_analysis.py</code>: position &amp; attitude weighted 10, their rates 1; cheap thrust,
+       costly torques so the motors aren't slammed.</p>
+    <div class="code"><pre>Q = np.diag([10, 10, 10,  1, 1, 1,  10, 10, 10,  1, 1, 1.0])  <span class="cm"># pos, vel, euler, rates</span>
+R = np.diag([1.0, 10, 10, 10])                               <span class="cm"># [T, tau_x, tau_y, tau_z]</span></pre></div>
+    <p><b>\(R\) must be positive definite</b> (every entry &gt; 0) — you always pay something for effort.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">3</span> Solve for the gain <span class="tag">the core</span></summary>
+  <div class="step-body">
+    <p>One call solves CARE (via the Hamiltonian eigenvector method, pure NumPy) and returns the gain,
+       the cost matrix \(P\), and the closed-loop poles \( \mathrm{eig}(A-BK) \):</p>
+    <div class="code"><pre>K, P, cl = an.lqr(A, B, Q, R)   <span class="cm"># u = -K x ; cl = closed-loop poles</span>
+print(<span class="st">"closed-loop max Re(pole) ="</span>, cl.real.max())   <span class="cm"># ~ -1.74</span>
+print(<span class="st">"stable:"</span>, np.all(cl.real &lt; 0))</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">4</span> Plot open-loop vs closed-loop poles <span class="tag">the deliverable</span></summary>
+  <div class="step-body">
+    <p>Overlay both pole sets. The shaded region is the unstable half-plane; LQR drags the origin poles
+       left, clear of the imaginary axis.</p>
+    <div class="code"><pre>from quadsim import plotting as viz
+viz.plot_poles([ol, cl], labels=[<span class="st">"open loop"</span>, <span class="st">"LQR closed loop"</span>],
+               save=<span class="st">"wk7_poles.png"</span>, show=False)
+print(<span class="st">"saved wk7_poles.png"</span>)</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">5</span> Feel the \(Q/R\) trade-off <span class="tag">tune</span></summary>
+  <div class="step-body">
+    <p>Re-run with the torque cost \(R\) scaled up and down and watch the rightmost pole move:</p>
+    <div class="code"><pre>for scale in (0.1, 1.0, 10.0):
+    _, _, cl_s = an.lqr(A, B, Q, scale * R)
+    print(f<span class="st">"R x{scale:>4}: max Re = {cl_s.real.max():7.3f}"</span>)</pre></div>
+    <p>Smaller \(R\) (cheaper effort) ⇒ poles further left (faster) but larger \(K\), more motor demand.
+       Larger \(R\) ⇒ gentler, slower. Only the ratio \(Q/R\) matters.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">✓</span> Stuck? Reveal the full <code>wk7_lqr.py</code></summary>
+  <div class="step-body">
+    <div class="callout warn"><span class="ttl">Try first</span> You learn LQR by wiring \(Q,R\) yourself. Peek only after a genuine attempt.</div>
+    <div class="code"><pre><span class="cm"># examples/wk7_lqr.py — Week 7 checkpoint: LQR pole map on the hover model</span>
+import numpy as np
+from quadsim import QuadParams, analysis as an
+from quadsim import plotting as viz
+
+p = QuadParams()
+A, B = an.linearize(p)
+ol = an.poles(A)
+
+Q = np.diag([10, 10, 10,  1, 1, 1,  10, 10, 10,  1, 1, 1.0])
+R = np.diag([1.0, 10, 10, 10])
+K, P, cl = an.lqr(A, B, Q, R)
+
+print(f<span class="st">"open-loop   max Re(pole) = {ol.real.max():7.3f}"</span>)
+print(f<span class="st">"closed-loop max Re(pole) = {cl.real.max():7.3f}  stable={np.all(cl.real &lt; 0)}"</span>)
+
+viz.plot_poles([ol, cl], labels=[<span class="st">"open loop"</span>, <span class="st">"LQR closed loop"</span>],
+               save=<span class="st">"wk7_poles.png"</span>, show=False)
+print(<span class="st">"saved wk7_poles.png"</span>)</pre></div>
+  </div>
+</details>
+
+<!-- ============ 4. RUN & VERIFY ============ -->
+<h2>4 · Run &amp; verify</h2>
+<p>Run your script — and the shared reference example, which does the same design and also flies a
+   figure-eight with the cascade controller:</p>
+<div class="code"><pre>export PYTHONPATH=.
+python examples/wk7_lqr.py
+python examples/04_analysis.py     <span class="cm"># reference: prints the same LQR line, saves analysis_poles.png</span></pre></div>
+
+<div class="callout goal">
+  <span class="ttl">Expected — your graded checkpoint ⭐</span>
+  <ul style="margin:6px 0 0">
+    <li><b>Open-loop max Re(pole) ≈ 0</b> — poles sit at the origin (marginally stable, needs feedback).</li>
+    <li><b>Closed-loop max Re(pole) ≈ −1.74</b> and <b>all poles have Re &lt; 0</b> — LQR stabilizes it.</li>
+    <li><code>wk7_poles.png</code> shows the open-loop poles at the origin and the LQR poles pulled left, clear of the imaginary axis.</li>
+  </ul>
+</div>
+
+<h2 class="dl-h">Try it live — the Digital Lab</h2>
+<p class="muted" style="margin:-4px 0 10px">The same physics as the lab, with sliders. Predict, then check; the full catalogue is in the <a href="../digital-lab.html">Digital Lab</a>.</p>
+<div class="callout"><span class="ttl">lqr</span>Dial q and r; watch the response and peak effort trade. Bryson's rule gives you a first (q, r) — this is what iterating on it looks like. <a href="../digital-lab.html#lqr">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="lqr"></div>
+<div class="callout"><span class="ttl">riccati</span>Press ×10 until ΔP stops changing: that P is what quadsim.analysis.lqr returns, and the terminal cost your Week-12 MPC will reuse. <a href="../digital-lab.html#riccati">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="riccati"></div>
+
+<h3>Self-check</h3>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="a"/><label>Every closed-loop pole has a strictly negative real part (max Re ≈ −1.74).</label></li>
+  <li><input type="checkbox" data-id="b"/><label>Scaling <code>R</code> up moved the rightmost pole toward the origin; scaling it down moved it left.</label></li>
+  <li><input type="checkbox" data-id="c"/><label>I can explain why <code>R</code> must be positive definite and <code>Q</code> only PSD.</label></li>
+  <li><input type="checkbox" data-id="d"/><label>I compared LQR to my Week-5/6 PID on the same step: overshoot, settling, and effort.</label></li>
+</ul>
+
+<!-- ============ 5. GO FURTHER ============ -->
+<h2>5 · Going further (optional)</h2>
+<ul>
+  <li><b>PID vs LQR, head to head.</b> From a 20° tilt, run your Week-5 PID and the LQR law on the same start. Compare <b>overshoot</b>, <b>settling time</b>, and <b>control effort</b> \( \int \|\mathbf{u}\|^2\,dt \) — one short paragraph.</li>
+  <li><b>Bryson's rule.</b> Set \(Q_{ii}=1/x_{i,\max}^2\) and \(R_{jj}=1/u_{j,\max}^2\) from your own "acceptable" limits, and see how the pole map shifts.</li>
+  <li><b>Controllability.</b> Call <code>an.controllability(A, B)</code> and confirm rank 12 — the precondition that makes LQR stabilizing in the first place.</li>
+</ul>
+
+<!-- ============ DELIVERABLE / SUBMIT ============ -->
+<h2>6 · Deliverable &amp; submission</h2>
+<table class="rubric">
+  <tr><th>Criterion</th><th>What we look for</th><th>Weight</th></tr>
+  <tr><td>Correct LQR design</td><td>Sensible \(Q,R\); <code>lqr(A,B,Q,R)</code> used; all closed-loop poles Re &lt; 0 (max ≈ −1.74)</td><td>50%</td></tr>
+  <tr><td>Pole map</td><td>The <code>wk7_poles.png</code> overlay: open-loop at origin, LQR poles pulled left</td><td>25%</td></tr>
+  <tr><td>PID-vs-LQR note</td><td>A short paragraph comparing overshoot / settling / effort, with the right intuition on \(Q,R\)</td><td>25%</td></tr>
+</table>
+
+<div class="submit-box">
+  <h3>📤 Submit on the course platform</h3>
+  <p style="margin:0 0 10px;font-size:14px">⭐ <b>This submission is graded (5%).</b> Full requirements &amp; rubric: <a href="../assignments/lab4.html">Lab 4 assignment brief</a>.</p>
+  <div class="row">
+    <div>What</div><div><code>wk7_lqr.py</code> + <code>wk7_poles.png</code> + a 3–5 line PID-vs-LQR note (one PDF or zip)</div>
+    <div>Filename</div><div><code>MLTE03_Wk7_&lt;studentID&gt;.zip</code></div>
+    <div>Where</div><div>the <a href="https://course.ainrobotics.com/mlte03/">course platform</a> → <i>Week 7 Lab</i> upload box (log in at the Ken Sir course hub; every version you upload is kept)</div>
+    <div>Deadline</div><div><span class="tofill">date / time — TO FILL</span> (before Week 8)</div>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin:10px 0 0">Submissions go through the course platform (<a href="https://course.ainrobotics.com/mlte03/">course.ainrobotics.com/mlte03/</a>) — log in at the Ken Sir course hub; nothing is uploaded to this static site itself.</p>
+</div>
+
+<p style="margin:30px 0;color:var(--muted)">Reference: MIT 16.323 (How), Lec 3–4 —
+   <a href="https://ocw.mit.edu/courses/16-323-principles-of-optimal-control-spring-2008/pages/lecture-notes/">ocw.mit.edu/courses/16-323</a>;
+   conventions in <code>simulator/CONVENTIONS.md</code>.
+   Next week → <a href="../index.html#weeks">Week 8: model-predictive control</a> — LQR with a horizon and input limits.</p>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<!-- KaTeX auto-render for the inline math -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

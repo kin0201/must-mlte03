@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 14 — Final-Project Clinic · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 14 · Clinic<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1 TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Final-Project Clinic</h1>
+    <p class="tp-sub">期末專案工作坊</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 14 · Supervised working session · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. Keep it up for two minutes while students settle and open their repos — nothing today is a lecture, so start the clock early.</aside>
+</section>
+
+<!-- 2 AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours · run of show</p>
+  <h2>Mostly build time — the clock protects it</h2>
+  <table class="agenda">
+    <tr><th>Clock</th><th>Segment</th><th></th></tr>
+    <tr><td class="t">00:00</td><td><b>Quiz Q-Wk14</b> (on Week 13: read an activation plot · p95 vs mean · spot the protocol sins) · then: the gate, the dry run, how to use me today</td><td>10′</td></tr>
+    <tr class="lab"><td class="t">00:10</td><td><b>Checkpoint round 1</b> — I visit every bench, three questions each</td><td>35′</td></tr>
+    <tr class="lab"><td class="t">00:45</td><td><b>Build</b> — you work, I circulate; plenary only if something hits two or more of you</td><td>60′</td></tr>
+    <tr class="break"><td class="t">01:45</td><td>Break</td><td>10′</td></tr>
+    <tr class="lab"><td class="t">01:55</td><td><b>Certification dry runs</b> — fresh clone, tag <code>final</code>, network off, at your bench</td><td>50′</td></tr>
+    <tr><td class="t">02:45</td><td><b>Exit gate</b> — sign-off per student · Week-15 viva slots drawn</td><td>15′</td></tr>
+  </table>
+  <p class="muted">The only fixed points are the two checkpoints and the exit gate. Everything between them is yours; I move, you stay put.</p>
+  <aside class="notes">Quiz first, ten minutes, no extension — it is the Week-13 material and it primes the room for reading plots. Then say the sentence that frames the day: the only fixed points are the two checkpoints and the exit gate; everything else is theirs. Do not let the run-of-show slide become a lecture.</aside>
+</section>
+
+<!-- 3 HOW TODAY WORKS -->
+<section>
+  <p class="eyebrow">How today works</p>
+  <h2>Today you build. I circulate.</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>This is <b>not a lecture</b>. There are no new concepts today — everything you need was delivered in Weeks 11–13.</li>
+    <li>Sit at your own machine with your own repo open. The project is <b>individual</b> — you may talk to your neighbours about method, but the repo, the runs and the report are yours.</li>
+    <li>Raise a hand and I come to you. I will also come to you whether or not you raise one.</li>
+    <li>If a problem hits <b>two or more of you</b>, I stop the room for ninety seconds and we fix it together. Otherwise the room stays quiet.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why a clinic and not a lecture.</span>
+  Every remaining mark in this project is now earned by <i>execution</i>: a controller that certifies from a clean clone, a report that pastes its own evidence, and a person who can defend it for five minutes.<br/><br/><b>None of that improves by being told about it again.</b> It improves by being attempted in a room where the person who marks it is standing three metres away.</div>
+    </div>
+  </div>
+  <p class="small muted">Use me for the questions you are embarrassed to ask. That is the entire point of the session, and it costs you nothing today — next week it costs marks.</p>
+
+  <aside class="notes">Say the "embarrassed to ask" line explicitly. It is the single sentence that changes how much value students extract from a clinic.</aside>
+</section>
+
+<!-- 4 THE GATE -->
+<section>
+  <p class="eyebrow">The gate</p>
+  <h2>Week 14 gate: results complete + dry run passed</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">The gate, stated exactly.</span>
+  You pass Week 14 when <b>(1)</b> your results are complete — both certification runs done <b>on your own student ID</b>, the figure produced, the seed spread measured — and <b>(2)</b> the certification <b>dry run</b> has been executed here, in front of me, and passed.<br/><br/>Then, and only then, you draw your Week-15 viva slot.</div>
+    </div>
+    <div>
+  <ul class="small">
+    <li><b>Results complete</b> ≠ report written. The report can be finished after today; the <i>numbers</i> cannot.</li>
+    <li><b>Dry run passed</b> means: fresh clone, tag <code>final</code>, network off, <code>certify.py --student &lt;your ID&gt;</code> run on both the frozen baseline and your submission — and both produced a report, both carrying <b>your</b> ID.</li>
+    <li>A dry run that produces <b>NOT CERTIFIED</b> for your submission is still a passed dry run. The gate tests the <i>procedure</i>, not the verdict.</li>
+  </ul>
+    </div>
+  </div>
+  <span class="assess">Assessed: the gate itself is not marked, but everything it protects is. Anyone who leaves today without a clean dry run is submitting untested work — and every year that is where marks are lost, not in the control theory.</span>
+  <aside class="notes">Make the distinction explicit: the gate tests the procedure, not the verdict. A dry run that prints NOT CERTIFIED is a passed dry run. Students confuse these every year and spend the session tuning instead of delivering — name that trap before the build block starts.</aside>
+</section>
+
+<!-- 5 THE MISSION -->
+<section class="dense">
+  <p class="eyebrow">The mission, restated</p>
+  <h2>M3 — payload drop. One mission, every student, a different aircraft.</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>The quadrotor <b>holds position at [0, 0, 1.5]</b>.</li>
+    <li>At <b>t = 5 s</b> the mass <b>steps down</b>: a package is released. <span class="muted">(0.65 → 0.45 kg on the course-default vehicle; <b>your</b> two masses come from your student ID.)</span></li>
+    <li><b>The controller is never told.</b> There is no flag, no event, no second instance — one continuous controller object, running through the step.</li>
+    <li>It must <b>notice through feedback</b> and correct. That is the whole engineering problem.</li>
+    <li>Total run: <b>15 s</b>. Graded on estimator <b>seed 0</b>, on <b>your own vehicle</b>.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why the controller is not told.</span>
+  Because on a real aircraft nothing tells it. A release mechanism fires, thrust is suddenly far too high for the new mass (about 44% on the course-default vehicle; your own figure depends on your drop fraction), and the only evidence available to the autopilot is that the vehicle is climbing when it asked to hover.<br/><br/><b>A controller that must be informed of a plant change is not a controller; it is a schedule.</b> M3 exists to make that distinction concrete.</div>
+    </div>
+  </div>
+  <p class="small">One command produces the verdict — and it must carry <b>your student ID</b>:</p>
+  <pre><code class="language-bash">python certify.py --controller &lt;yours&gt; --student &lt;your ID&gt; --mission M3
+python -m quadsim.student_params &lt;your ID&gt;    # your own mass, arm, k_torque, inertia</code></pre>
+  <p class="small muted"><b>Every student certifies against a different quadcopter</b>, derived deterministically from the student ID — same ID, same aircraft, always. A run with the wrong ID is a run on somebody else's aircraft and does not count, so <b>record your ID in your README</b>.</p>
+  <aside class="notes">Restate rather than re-teach — they have seen this three times. The two sentences that matter today: the controller is never told, and the run must carry their own student ID. Have them run student_params live and read their pre-drop mass aloud; the ones who cannot are your first bench visits.</aside>
+</section>
+
+<!-- 6 REQUIREMENTS -->
+<section>
+  <p class="eyebrow">The specification</p>
+  <h2>Three requirements — that is the entire spec</h2>
+  <table class="data">
+    <tr><th>ID</th><th>Requirement</th><th>Bar</th></tr>
+    <tr class="hl"><td><b>REQ-M3-1</b></td><td>maximum deviation over the post-drop window</td><td>&lt; 0.50 m</td></tr>
+    <tr><td><b>REQ-M3-2</b></td><td>transient deviation in the first 3 s after the drop</td><td>&lt; 0.50 m</td></tr>
+    <tr><td><b>REQ-M3-3</b></td><td>post-recovery RMSE over the last 5 s</td><td>&lt; 0.50 m</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">Certified.</span>
+  <b>All three</b> requirements PASS. Two out of three is <b>NOT CERTIFIED</b> — there is no partial credit inside the tool, and there is no negotiation about it afterwards.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Read the three carefully — they are not the same test.</span>
+  REQ-M3-2 asks <i>how badly did it lurch</i>. REQ-M3-3 asks <i>did it settle</i>. REQ-M3-1 is the envelope over everything after the drop.<br/><br/>A controller can settle beautifully and still fail REQ-M3-1 on a single spike it recovered from. <b>That is exactly what happens to the baseline.</b></div>
+    </div>
+  </div>
+  <aside class="notes">Point at the highlighted row. The baseline fails REQ-M3-1 on a single spike it recovers from — that is the whole project's shape, and it is why REQ-M3-2 and -3 being green is not comfort. No partial credit inside the tool; say that once and do not re-litigate it at benches.</aside>
+</section>
+
+<!-- 7 BEFORE / AFTER -->
+<section class="dense">
+  <p class="eyebrow">The whole project in one comparison · <b>course-default vehicle</b></p>
+  <h2>Baseline fails one requirement. The upgrade fixes that one.</h2>
+  <p class="small muted">These two rows are the <b>shared lecture example</b>, run with no <code>--student</code> argument. <b>Your own numbers will differ</b> — but the shape holds for every student vehicle: the baseline fails REQ-M3-1, the reference MPC certifies.</p>
+  <table class="data">
+    <tr><th>Controller</th><th>REQ-M3-1</th><th>REQ-M3-2</th><th>REQ-M3-3</th><th>Verdict</th></tr>
+    <tr><td>reference <code>CascadePID</code> (baseline)</td><td><b>[FAIL]</b> max = <b>0.540 m</b></td><td>PASS</td><td>PASS</td><td><b>NOT CERTIFIED</b></td></tr>
+    <tr class="hl"><td>reference <code>LinearMPC</code> (upgrade)</td><td><b>[PASS]</b> max = <b>0.473 m</b></td><td>PASS</td><td>PASS</td><td><b>CERTIFIED</b></td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Why this is the ideal shape for a project.</span>
+  The baseline fails <b>exactly one</b> requirement, narrowly. The upgrade passes that one and changes nothing else.<br/><br/>So the claim you defend is narrow, specific and checkable: <i>"On my vehicle, MPC moved REQ-M3-1 from ___ m to ___ m under identical conditions, because …"</i> — one sentence, one mechanism, two numbers, both of them yours.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">And why it is uncomfortable.</span>
+  On the course-default vehicle the margin is <b>0.027 m</b> below the bar — and on every student vehicle it is comparably thin. That is not a triumphant result; it is a marginal one, and a marginal result is far more interesting to examine than a comfortable one.<br/><br/>Expect the viva to ask what makes <i>your</i> number robust, and be ready for the honest answer.</div>
+    </div>
+  </div>
+  <aside class="notes">Put these two rows on the board and leave them there all session, labelled "course default". Nearly every question asked today is answerable by pointing at this table — but never let a student quote these two numbers as their own.</aside>
+</section>
+
+<!-- 8 READING THE VERDICT -->
+<section>
+  <p class="eyebrow">Checkpoint</p>
+  <h2>Reading a certification report properly</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>A verdict line is worthless without its <b>measured value</b>. "PASS" tells you nothing about margin; <code>max = 0.473 m</code> does.</li>
+    <li>Report the <b>value and the bar together</b>, every time: 0.473 m against 0.50 m.</li>
+    <li>Two controllers can both be CERTIFIED and be nothing alike — one at 0.20 m, one at 0.49 m.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The sentence I want to hear at the viva.</span>
+  <i>"I pass REQ-M3-1 at ___ m against the 0.50 m bar — a ___% margin, which is thin, and here is the seed sweep that shows how thin."</i><br/><br/>Not <i>"I passed"</i>. Everyone passed, or did not; the mark is in what you know about <b>how</b>.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — Your current run: name REQ-M3-1's measured value and its margin to the bar, out loud, without looking it up. <span class="muted">(If you cannot, that is today's first task — not a hypothetical one.)</span></div>
+  <aside class="notes">Run the two-minute turn for real: pick three students at random and have them say their REQ-M3-1 value and margin without looking. Whoever cannot has found their first task. The sentence in the example box is exactly what you will listen for in the Week-15 viva — say so.</aside>
+</section>
+
+<!-- 9 SEEDS -->
+<section>
+  <p class="eyebrow">Honesty requirement</p>
+  <h2>Graded on seed 0 — but you must say what the other seeds do</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>The grade uses <b>seed 0</b>, on <b>your</b> vehicle. The seed is fixed, published and identical for everyone; the aircraft is yours.</li>
+    <li>Your report must carry <b>one sentence</b> on the spread from <code>--seeds 0,1,2</code>. One sentence — not a section.</li>
+    <li>Across 8 seeds the same <code>CascadePID</code> ranges <b>0.211 m – 0.721 m</b> on REQ-M3-1 <span class="muted">(course-default vehicle)</span>.</li>
+    <li>That range straddles the 0.50 m bar. <b>The verdict flips on the seed alone.</b></li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">What this sentence is really testing.</span>
+  Whether you know the difference between <i>a controller that is better</i> and <i>a run that came out better</i>.<br/><br/>A student who reports "CERTIFIED" and stops has made a claim about a single sample from a distribution and presented it as a property of their design. <b>Stating the spread is what turns a number into a result.</b></div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(3 min)</span> — Run <code>--student &lt;your ID&gt; --seeds 0,1,2</code> now, and draft the one sentence. <span class="muted">(Template: "On seed 0 I certify at ___ m; across seeds 0–2 REQ-M3-1 ranges ___ to ___ m, so the margin is / is not robust to estimator noise.")</span></div>
+
+  <aside class="notes">The 0.211–0.721 range is the most persuasive number in the whole course. Say it slowly and let the room sit with the fact that the verdict flips on the seed.</aside>
+</section>
+
+<!-- 10 CHECKPOINT 1 -->
+<section>
+  <p class="eyebrow">Checkpoint round 1 · a few minutes per bench</p>
+  <h2>The three questions I ask at your bench</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>"Show me your current certification report."</b> On screen, now, not from memory. If it cannot be produced in sixty seconds, that is the finding.</li>
+    <li><b>"Which requirement does your baseline fail, and by how much?"</b> Numbers, both sides of the bar — <b>and read me the student ID at the top of the report.</b></li>
+    <li><b>"What is the one thing most likely to stop you tonight?"</b> Name it; we fix that one thing while I am standing there.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What a good answer to Q3 sounds like.</span>
+  <i>"My controller imports fine here but I have never tried it from a clean clone, and the mass is read from a config file that is gitignored."</i><br/><br/>That student has just diagnosed themselves. Ninety seconds of my time saves their submission.<br/><br/><b>"Nothing really"</b> is never true in Week 14, and I will keep asking until something surfaces.</div>
+    </div>
+  </div>
+  <span class="assess">Not graded — but what I record here tells me who to revisit during the build block, and who to watch during the dry run.</span>
+  <aside class="notes">These are your script for checkpoint round 1 — about one minute per bench, 35 benches, 35 minutes. Q1 is produce-it-now, not describe-it. Q2 must include reading the ID off the report. Q3: 'nothing really' is never accepted; keep asking until something surfaces, then fix that one thing while you stand there. Note who to revisit.</aside>
+</section>
+
+<!-- 11 DRY RUN WHY -->
+<section>
+  <p class="eyebrow">The dry run</p>
+  <h2>Do it exactly as the real thing, or it proves nothing</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">The dry run.</span>
+  Reproduce the marking environment on your own machine, deliberately and pessimistically: <b>fresh clone · tag <code>final</code> · network off · <code>certify.py</code> on both the frozen baseline and the current submission.</b></div>
+  <p class="small">Every one of those four conditions exists because a previous cohort lost marks to its absence.</p>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The test is not "does it work".</span>
+  It is <b>"does it work for someone who is not you, on a machine that is not yours, from what you actually pushed"</b>.<br/><br/>Those are different questions, and only the second one gets marked. The gap between them is the single commonest way a working project scores badly.</div>
+    </div>
+  </div>
+  <p class="small muted">Nothing about the dry run is about control theory. It is about the difference between a system that exists and a system that has been delivered — and that distinction is a professional one you will use for the rest of your career.</p>
+  <aside class="notes">Four conditions — fresh clone, tag final, network off, both certify runs. Each exists because a previous cohort lost marks to its absence. The line to land: the marked question is not 'does it work' but 'does it work for someone who is not you, on a machine that is not yours, from what you actually pushed'.</aside>
+</section>
+
+<!-- 12 DRY RUN CHECKLIST -->
+<section class="vdense">
+  <p class="eyebrow">The dry run · do this at your bench now</p>
+  <h2>The checklist, literally</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Check your student ID</b> — the one in your <code>README</code>, digit by digit.</li>
+    <li><b>Push everything, then tag it.</b> <code>git status</code> clean, nothing stashed; <code>git tag final</code> and push the tag. <b>The tag is what gets marked.</b></li>
+    <li><b>Fresh clone</b> into a new empty directory — <i>not</i> your working copy — and check out the tag there.</li>
+    <li><b>Network off</b>, physically; build the environment only from what the repo declares.</li>
+    <li>Run <code>certify.py --controller &lt;baseline&gt; --student &lt;your ID&gt; --mission M3</code>. Save the report.</li>
+    <li>Run <code>certify.py --controller &lt;yours&gt; --student &lt;your ID&gt; --mission M3</code>. Save the report.</li>
+    <li>Run <code>--seeds 0,1,2</code>. Record the range.</li>
+    <li><b>Read the ID printed in both reports.</b> Same, and yours — or the comparison is void.</li>
+    <li><b>Paste both reports</b> into the report file — verbatim, before you forget.</li>
+  </ol>
+    </div>
+    <div>
+  <pre><code class="language-bash">grep -i student README*      # your ID, confirmed
+git status                   # must be clean
+git tag final &amp;&amp; git push --tags
+
+cd /tmp &amp;&amp; rm -rf dryrun
+git clone &lt;your-repo&gt; dryrun
+cd dryrun &amp;&amp; git checkout final
+
+#  ---- Wi-Fi OFF now ----
+
+ID=&lt;your ID&gt;
+python certify.py --controller baseline --student $ID --mission M3
+python certify.py --controller mine     --student $ID --mission M3
+python certify.py --controller mine     --student $ID --mission M3 --seeds 0,1,2</code></pre>
+  <div class="box warn" style="font-size:.8em"><b>Nine steps, about fifteen minutes.</b> Re-running in your working copy instead of a fresh clone teaches you nothing — the working copy is precisely the thing that is untrustworthy.</div>
+    </div>
+  </div>
+  <span class="assess">The exit gate is this checklist, executed and observed. Bring me the two saved reports.</span>
+
+  <aside class="notes">Insist on step 5. Network-off catches the "it pip-installs something at import time" failure, which is invisible on a connected machine.</aside>
+</section>
+
+<!-- 13 FAILURE MODES TABLE -->
+<section class="dense">
+  <p class="eyebrow">What goes wrong</p>
+  <h2>Seven failure modes, and the fix for each</h2>
+  <table class="data">
+    <tr><th>Failure mode</th><th>How it shows up</th><th>The fix</th></tr>
+    <tr class="hl"><td>Certified on the wrong vehicle</td><td>a missing <code>--student</code>, or a classmate's ID copied from their command line</td><td>your ID in the README; <b>read it back out of both reports</b></td></tr>
+    <tr class="hl"><td>Controller not importable from a clean clone</td><td><code>ModuleNotFoundError</code>, or an import that needs your <code>PYTHONPATH</code></td><td><b>fresh clone + run it</b>; declare every dependency in the repo</td></tr>
+    <tr><td>Ground-truth leakage</td><td>controller reads true mass / true state, certifies suspiciously well</td><td>read only what the estimator provides; grep your own code for it</td></tr>
+    <tr><td>Hard-coded mass or path</td><td>works on your laptop, fails or cheats elsewhere</td><td>no absolute paths; mass comes from the model, not a literal</td></tr>
+    <tr><td>Certify report not pasted verbatim</td><td>a summarised table instead of the tool's own output</td><td>copy the whole block, including the FAIL lines</td></tr>
+    <tr class="hl"><td>A pass claimed with no seed spread</td><td>"CERTIFIED", full stop</td><td>the one sentence from <code>--seeds 0,1,2</code></td></tr>
+    <tr><td>A figure with no stated claim</td><td>a plot, a caption naming the axes, nothing else</td><td>one sentence saying what the figure proves</td></tr>
+  </table>
+  <p class="small muted">Six of the seven cost marks without touching your controller's quality at all. That is why they are worth fifteen minutes today.</p>
+  <aside class="notes">Six of the seven cost marks without touching controller quality — that is the argument for spending fifteen minutes here. Walk the highlighted rows only (wrong vehicle, clean clone, seed spread); the next three slides expand modes 1–3. Ask the room which one they suspect applies to them.</aside>
+</section>
+
+<!-- 14 FM: IMPORTABLE -->
+<section>
+  <p class="eyebrow">Failure mode 1</p>
+  <h2>"It runs on my machine" — the clean-clone test</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Typical causes: a file never committed · a package installed months ago and never declared · an import that resolves only because your shell exports <code>PYTHONPATH</code> · a notebook that defines a helper your module quietly needs.</li>
+    <li>None of these are visible in your working copy. <b>All of them are fatal at marking time</b>, because the marking run is a clean clone.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The two-minute version.</span>
+  Clone into <code>/tmp</code>, check out <code>final</code>, and run the single certify command. If it produces a report, this failure mode is dead. If it raises, you have found — for free, today — the exact error the marker would have hit.<br/><br/><b>There is no cheaper mark in the whole project.</b></div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(5 min)</span> — Do the clean clone now, before anything else on your list. <span class="muted">(Already done it? Do it again after your last commit. The failure mode returns every time you push.)</span></div>
+  <aside class="notes">Five-minute turn: everyone clones into /tmp and runs certify once. Expect two or three ModuleNotFoundError or PYTHONPATH failures in a room of 35 — celebrate them out loud: found for free today, fatal at marking time. Anyone already done it re-does it after their last commit.</aside>
+</section>
+
+<!-- 15 FM: LEAKAGE -->
+<section>
+  <p class="eyebrow">Failure mode 2</p>
+  <h2>Ground-truth leakage — the one that voids the result</h2>
+  <div class="cols top">
+    <div>
+  <div class="env defn"><span class="eh">Leakage.</span>
+  The controller consumes information the real system would not give it: the <b>true mass</b> after the drop, the <b>true state</b> instead of the estimate, or the <b>drop time</b> t = 5 s as a literal. Reading <code>p_light</code>, or anything derived from it, is the same offence.</div>
+  <p class="small">M3's entire difficulty is that the controller is not told. A controller that is told has solved a different, easier problem — and the certification report will not say so, which is why you must.</p>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">It is almost never deliberate.</span>
+  It arrives through convenience: a debug line that read the true state and was never removed; a mass parameter passed in during development "just to check the maths"; a schedule keyed to <code>t &gt; 5.0</code> that started as a plotting aid.<br/><br/><b>Grep your own controller for the true-state handle, for the post-drop mass value, and for the literal 5.0 — right now.</b> Finding it yourself costs nothing; me finding it at the viva costs the claim.</div>
+    </div>
+  </div>
+  <span class="assess">A leaked result is not a low mark, it is a void one — the evidence no longer supports the claim being made. Self-declared and fixed today, it is simply a bug you found.</span>
+
+  <aside class="notes">Have everyone run the three greps while you say this. Expect at least one student to find something.</aside>
+</section>
+
+<!-- 16 FM: HARDCODING -->
+<section>
+  <p class="eyebrow">Failure mode 3</p>
+  <h2>Hard-coded mass, hard-coded paths</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>An absolute path — <code>/Users/…/final/data</code> — is a guaranteed failure on any machine but yours.</li>
+    <li>A mass literal baked into the controller is <b>either</b> a portability bug (your pre-drop mass, hard-coded instead of read from the model) <b>or</b> leakage (your post-drop mass, which nothing tells the controller). Both are bad; one is worse. <b>And this year a hard-coded mass is almost certainly the <i>wrong</i> mass</b> — the course-default 0.65 kg is not your aircraft.</li>
+    <li>A config file that is gitignored is the same failure wearing a disguise.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The honest use of the pre-drop mass.</span>
+  Designing your MPC around <b>your own pre-drop mass</b> — the one <code>student_params</code> prints — is legitimate. That is your design model, known before flight, and you should say so.<br/><br/>Using your <b>post-drop</b> mass anywhere in the controller is not, because nothing tells the controller the drop happened.<br/><br/><b>State your student ID and which mass model you designed against, in one line of the report.</b> That line pre-empts both questions at once.</div>
+    </div>
+  </div>
+  <p class="small muted">The clean-clone dry run catches the paths. Only reading your own code catches the mass.</p>
+  <aside class="notes">The subtle point: a hard-coded mass is either a portability bug (pre-drop) or leakage (post-drop), and this year it is almost certainly the wrong mass anyway because 0.65 kg is the course default, not theirs. Legitimate use: designing the MPC around their own pre-drop mass from student_params — but they must say so in one line of the report.</aside>
+</section>
+
+<!-- 17 FM: EVIDENCE HYGIENE -->
+<section>
+  <p class="eyebrow">Failure modes 4–6</p>
+  <h2>Three ways to lose marks on work you already did</h2>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">Not verbatim.</span>
+  A tidy summary table you typed is <i>your</i> claim. The tool's raw output — including <code>[FAIL] REQ-M3-1 max = 0.540 m</code> — is <b>evidence</b>. Paste the block, keep the FAIL lines, do not reformat it.<br/><br/>Deleting a FAIL line from the baseline report removes the whole point of having a baseline.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">A pass with no seed sentence.</span>
+  One sentence. Its absence reads as either not knowing the spread exists, or knowing and omitting it. Neither is a good look at a viva where the examiner has the 0.211–0.721 range in front of him.</div>
+    </div>
+  </div>
+  <div class="env rmk"><span class="eh">A figure with no stated claim.</span>
+  A caption that says "altitude versus time" describes the axes, which the reader can already see. A caption that says <b>"the baseline overshoots to 0.540 m at t = 5.4 s while MPC peaks at 0.473 m; the difference is the anticipated thrust reduction visible from t = 5.1 s"</b> makes an argument.<br/><br/><b>Every figure must assert something a reader could disagree with.</b> If it cannot, it is decoration and it is costing you a page.</div>
+  <aside class="notes">Verbatim means including the FAIL line — deleting it from the baseline report deletes the reason the baseline exists. The seed sentence is one sentence, not a section. For figures, the test is 'could a reader disagree with the caption?' If not, it is decoration costing a page of the six.</aside>
+</section>
+
+<!-- 18 REPORT -->
+<section class="dense">
+  <p class="eyebrow">The report</p>
+  <h2>Three required items. Six pages, maximum.</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Both certification reports, pasted verbatim</b> — the frozen baseline and your submission. Raw output, FAIL lines intact.</li>
+    <li><b>The MPC formulation, written as engineering</b> — model, horizon, weights, constraints, and <i>why each choice</i>. Not a textbook restatement; your actual numbers, with reasons.</li>
+    <li><b>One figure + one paragraph on the mechanism</b> — what MPC does differently at the drop, shown and then argued.</li>
+  </ol>
+  <p class="small">Plus the one seed sentence, and your <b>student ID</b>. That is the whole required content.</p>
+  <p class="small"><b>Separately: the engineering log</b> — one page, <b>10 marks</b>. What you tried, what failed, what you decided. Written as you went, not reconstructed tonight.</p>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why the cap is six pages.</span>
+  Because a marginal result explained clearly in four pages is worth more than the same result buried in twelve. The cap forces you to decide what your argument actually is.<br/><br/><b>Length is not evidence.</b> Every year the strongest reports are among the shortest, and this is not a coincidence.</div>
+  <div class="box warn" style="font-size:.78em"><b>All 100 marks are individual.</b> Certification 20 · improvement 15 · report depth 15 · code &amp; reproducibility 10 · <b>viva 20</b> · engineering log + git trail 10 · quizzes 10. The fallback rule caps the four artifact items (60 marks) at <b>45/60</b>; viva, log and quizzes are unaffected.</div>
+    </div>
+  </div>
+  <span class="assess">Marked on: evidence completeness (are both reports there, verbatim, with your ID?) · formulation quality (are the choices justified with <i>your</i> numbers?) · mechanism (does the figure support the claim in the paragraph?).</span>
+  <aside class="notes">Do not enumerate the marks table aloud; it is on the slide and in the brief. Spend the time on the six-page argument: length is not evidence, and the strongest reports are among the shortest every year. Remind them the engineering log is separate and worth 10 — written as they go, not reconstructed tonight.</aside>
+</section>
+
+<!-- 19 THE FIGURE -->
+<section>
+  <p class="eyebrow">The report · the figure</p>
+  <h2>One figure, doing one job</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Put <b>baseline and MPC on the same axes</b>, same seed, same window. Two lines, one comparison.</li>
+    <li><b>Draw the 0.50 m bar.</b> A requirement that is not drawn cannot be seen to be met.</li>
+    <li>Mark <b>t = 5 s</b>. The reader should not have to infer where the drop is.</li>
+    <li>Label the two peaks with <b>your</b> two values, not the lecture example's.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The paragraph beneath it.</span>
+  Say what happens, when, and <b>by what mechanism</b>. Something in the shape of: <i>"At t = 5 s thrust becomes ___% excessive for my aircraft's new mass. The baseline reacts only through accumulated altitude error and peaks at ___ m. MPC re-solves over its horizon and reduces commanded thrust within ___ ms, capping the excursion at ___ m."</i><br/><br/>Then check your own numbers support every clause. If one does not, delete that clause.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(during the build block)</span> — Produce this figure from your own two runs before you write a word of prose. <span class="muted">(The figure usually changes what you were going to claim — which is the point of making it first.)</span></div>
+  <aside class="notes">Insist they make the figure before writing prose — it usually changes the claim, which is the point. Four non-negotiables: both controllers on the same axes, the 0.50 m bar drawn, t = 5 s marked, their own two peak values labelled. Check for the lecture-example numbers (0.540/0.473) appearing on a student figure; that is copying, not evidence.</aside>
+</section>
+
+<!-- 20 STRETCH -->
+<section>
+  <p class="eyebrow">Optional · only after the required three</p>
+  <h2>Stretch evidence — only if you are already finished</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Constraint-activation plot</b> — bounds drawn, active regions shaded. Shows the constraints are doing work rather than decorating the formulation.</li>
+    <li><b>Timing histogram</b> — solve time against your control period. Answers "would this run on the aircraft?".</li>
+    <li><b>Ablation table</b> — shorter horizon, different weights. Shows you <i>chose</i> your parameters.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Order matters.</b> A stretch item added to an incomplete required three is worth nothing. Finish the gate, then stretch.<br/><br/>If you are reading this before your clean clone has run, this slide is not for you yet.</div>
+    </div>
+  </div>
+  <p class="small muted">The ablation is the one that most often changes a viva. A student who can say "at N = 6 I revert to baseline behaviour, so the horizon is doing the work" has evidence for a claim the report could otherwise only assert.</p>
+  <aside class="notes">Gate this slide hard: if the clean clone has not run, this slide is not for them yet. If you have a strong student who is genuinely done, point them at the ablation — 'at N = 6 I revert to baseline' is the single most useful viva sentence a stretch item can buy.</aside>
+</section>
+
+<!-- 21 EXIT GATE -->
+<section class="dense">
+  <p class="eyebrow">The exit gate</p>
+  <h2>What "done" looks like tonight</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>☐ <b>Your student ID confirmed and recorded in the README</b>, and read back out of <b>both</b> certification reports.</li>
+    <li>☐ Fresh clone of tag <code>final</code>, network off, both certify runs completed with <code>--student &lt;your ID&gt;</code>.</li>
+    <li>☐ Both reports <b>saved and pasted verbatim</b> into the report file.</li>
+    <li>☐ <code>--seeds 0,1,2</code> run; the one sentence drafted.</li>
+    <li>☐ The comparison figure produced, with the bar and t = 5 s drawn.</li>
+    <li>☐ Grep for leakage done: true state, post-drop mass, the literal 5.0.</li>
+    <li>☐ Engineering log up to date — one page: tried, failed, decided.</li>
+    <li>☐ Viva slot drawn, and the time written down.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">What is <i>not</i> required tonight.</span>
+  A finished report. Polished prose. A better number.<br/><br/>Improving your number is optional. <b>Being able to reproduce it from a clean clone is not.</b> Students routinely get this backwards in the last week and spend the evening tuning a controller whose submission does not import.</div>
+    </div>
+  </div>
+  <p class="small">Come to me with the eight ticks. I sign the gate at the bench, and you draw your slot on the way out.</p>
+  <aside class="notes">This is the exit-gate checklist — the same eight ticks on your sign-off sheet. You sign at the bench, they draw a slot on the way out; gate first, slot second, always. Stress what is NOT required: a finished report, a better number. Reproducibility beats improvement tonight.</aside>
+</section>
+
+<!-- 22 VIVA -->
+<section>
+  <p class="eyebrow">Week 15</p>
+  <h2>Individual vivas only — 5 minutes, hard cut</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Individual, one-to-one.</b> 35 students, 5 minutes each, hard cut at 5:00.</li>
+    <li><b>No team presentation.</b> The team reality-gap workshop and case study happened in Week 10, are team-graded, and are already done. <b>The final project is individual, end to end.</b></li>
+    <li>I choose the question and the code block; you choose nothing. The bank, the marking anchors and the day's rules are published in the <a href="../assignments/viva-week15.html">Week 15 viva brief</a>.</li>
+    <li>Expect to be asked about <b>a line from your own certification report</b> and about <b>any block of your own code</b> — all of it is yours now.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The shape of a strong five minutes.</span>
+  Numbers at hand, margins known, one mechanism explained without notes, and an honest answer about what is thin.<br/><br/><i>"REQ-M3-1 passes at ___ m — a ___% margin. Across seeds 0–2 it moves ___, so I would not call it robust; the horizon is what buys the margin, and at N = 6 I lose it."</i><br/><br/><b>Five minutes is enough for exactly one good idea, said clearly.</b> Prepare that one.</div>
+    </div>
+  </div>
+  <span class="assess">The viva examines the individual — as does everything else this year. Your vehicle is yours, your certification is yours, and five minutes one-to-one is where you show the reasoning behind both.</span>
+  <aside class="notes">Point them to the Week 15 viva brief on the course site for the full flow, anchors and question bank — do not read it out. The one message: five minutes is enough for exactly one good idea said clearly, so prepare that one. Numbers at hand, margin known, one mechanism, one honest sentence about what is thin.</aside>
+</section>
+
+<!-- 23 SLOTS -->
+<section>
+  <p class="eyebrow">Week 15 · logistics</p>
+  <h2>How slots are drawn — in the last fifteen minutes today</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>You draw only <b>after</b> your exit gate is signed. Gate first, slot second — always.</li>
+    <li><b>One slot per student</b>, drawn by that student. Thirty-five slots, thirty-five people.</li>
+    <li>Draw order is the order gates are signed. <b>Finish early, choose early.</b></li>
+    <li>Slots are recorded on the board and photographed before anyone leaves. That photograph is the schedule.</li>
+    <li>Swaps are between students, agreed directly, and told to me <b>before</b> Week 15 — not on the day.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why one slot each.</span>
+  Because the project is individual: every viva examines a different aircraft, a different controller and a different set of numbers. There is nothing to gain from sitting together, and nothing to wait for.<br/><br/><b>A missed slot is a missed viva</b> — with 35 students at five minutes there is no slack in the schedule to absorb one. Set an alarm today, not next week.</div>
+    </div>
+  </div>
+  <p class="small muted">Bring the same laptop and the same clean clone you used today, and know your own vehicle's numbers. You will be asked to open the code, not to describe it.</p>
+  <aside class="notes">Mechanics: gate signed → student draws one slot → recorded on the board → board photographed before anyone leaves. That photograph is the schedule (transcribed to the course platform afterwards; the printed sheet is teaching/templates/viva-schedule-week15.md). Swaps are student-to-student and told to you before Week 15, never on the day. A missed slot is a missed viva — there is no slack in 35 × 5.</aside>
+</section>
+
+<!-- 24 LAST CHECK -->
+<section>
+  <p class="eyebrow">Before you leave the room</p>
+  <h2>The two-minute end-of-session check</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Tag <code>final</code> pushed? <b>Confirm it on the remote</b>, not locally.</li>
+    <li>Both certification reports saved somewhere that is not a terminal scrollback.</li>
+    <li>Figure file committed, not sitting in <code>/tmp</code>.</li>
+    <li>Your viva time written down, not remembered.</li>
+    <li>Your student ID in the README, and in both saved reports.</li>
+    <li>Engineering log committed with today's entry — what you tried, what failed, what you decided.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>The most common Week-14 casualty</b> is a dry run that passed, was never committed, and could not be reproduced two days later. <br/><br/>Commit the state that passed <b>before</b> you continue improving it. If tonight goes badly, that commit is your submission.</div>
+    </div>
+  </div>
+  <p class="small muted">A tag costs one command and has rescued a project in every cohort that has run this assessment.</p>
+  <aside class="notes">Run it as a literal two-minute countdown before the wrap. The casualty you are preventing: a dry run that passed, was never committed, and could not be reproduced two days later. 'Commit the state that passed before you continue improving it' — say it twice.</aside>
+</section>
+
+<!-- 25 WRAP -->
+<section>
+  <p class="eyebrow">Wrap</p>
+  <h2>Where this leaves you</h2>
+  <ul>
+    <li>The project is now one narrow, checkable claim: <b>your baseline's number → your MPC's number on REQ-M3-1, on your own aircraft, under identical conditions, by a named mechanism.</b></li>
+    <li>Everything remaining is delivery: it must reproduce from a clean clone, the evidence must be pasted verbatim, and one person must be able to defend it alone for five minutes.</li>
+    <li><b>Due before Week 15:</b> tag <code>final</code> pushed with your student ID in the README · report ≤ 6 pages with the three required items · the one-page engineering log · viva slot in your calendar.</li>
+  </ul>
+  <p class="muted" style="margin-top:1em">A marginal result that you understand precisely is a better piece of engineering than a comfortable one you cannot account for. You have the first kind — spend the remaining week making sure it survives contact with a machine that is not yours.</p>
+  <p class="muted" style="margin-top:.4em">Refs: <code>simulator/CERTIFICATION.md</code> · <code>final-project-assessment.md</code> · <a href="../labs/week14-clinic.html">today's worksheet</a>.</p>
+
+  <aside class="notes">End on time. The room should leave with tags pushed and slots drawn, not with a closing thought.</aside>
+</section>
+
+<!-- 26 REFERENCE -->
+<section class="vdense">
+  <p class="eyebrow">Reference</p>
+  <h2>Today's numbers, in one place</h2>
+  <table class="data">
+    <tr><th>Quantity</th><th>Value</th></tr>
+    <tr><td>mission</td><td>M3, payload drop — hold [0, 0, 1.5], 15 s total</td></tr>
+    <tr class="hl"><td><b>your vehicle</b></td><td>derived from your student ID — <code>python -m quadsim.student_params &lt;your ID&gt;</code></td></tr>
+    <tr><td>mass step</td><td>steps down at t = 5 s, controller not informed <span class="muted">(0.65 → 0.45 kg on the course default)</span></td></tr>
+    <tr><td>graded seed</td><td>0</td></tr>
+    <tr class="hl"><td>command</td><td><code>python certify.py --controller &lt;yours&gt; --student &lt;your ID&gt; --mission M3</code></td></tr>
+    <tr><td>REQ-M3-1 / -2 / -3</td><td>max dev · 3 s transient · last-5 s RMSE — all &lt; 0.50 m</td></tr>
+    <tr><td>baseline <code>CascadePID</code> <span class="muted">(course default)</span></td><td>NOT CERTIFIED — REQ-M3-1 max = 0.540 m</td></tr>
+    <tr><td>upgrade <code>LinearMPC</code> <span class="muted">(course default)</span></td><td>CERTIFIED — REQ-M3-1 max = 0.473 m</td></tr>
+    <tr><td>seed spread (CascadePID, 8 seeds, course default)</td><td>0.211 m – 0.721 m on REQ-M3-1</td></tr>
+    <tr><td>report</td><td>≤ 6 pages · 3 required items · 1 seed sentence · student ID</td></tr>
+    <tr class="hl"><td>marks (all individual)</td><td>certification 20 · improvement 15 · report 15 · code 10 · <b>viva 20</b> · log + git 10 · quizzes 10</td></tr>
+    <tr><td>fallback rule</td><td>the four artifact items (60) capped at 45/60; viva, log and quizzes unaffected</td></tr>
+    <tr><td>Week 15</td><td>individual viva, 5 min hard cut, 35 students</td></tr>
+  </table>
+  <p class="small muted">Photograph this slide. The two reference numbers are the <b>course-default</b> vehicle; everything else is checkable by you, today, with one command on your own ID.</p>
+  <aside class="notes">Leave this up while they pack. Tell them to photograph it, and repeat that the two reference numbers are the course-default vehicle — their own come from one command on their own ID. Nothing new here; it is a checklist for their evening.</aside>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+  Reveal.on("ready", () => { window.MLTEWidgets && MLTEWidgets.init(); window.MLTEDiagrams && MLTEDiagrams.init(); });
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

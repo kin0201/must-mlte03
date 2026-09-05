@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 3 Lab — Quadrotor Modeling · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css?v=5" />
+<!-- KaTeX for the bit of math in the recap -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+</head>
+<body data-lab="week03-quadrotor-modeling">
+
+<div class="lab-progress"><i></i></div>
+
+<!-- ============ HEADER ============ -->
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Week 3 · Lab (second half of session)</div>
+    <h1>Quadrotor Modeling — thrust, torque &amp; the X-frame mixer</h1>
+    <div class="sub">Build the mixing matrix by hand, invert it, and prove a hover allocates four equal motor thrusts.</div>
+    <div class="meta">
+      <span>⏱ <b>~75 min</b></span>
+      <span>🧩 Work in <b>examples/wk3_mixer.py</b></span>
+      <span>📦 Deliverable: <b>the mixer + a hover-allocation check</b></span>
+      <span>⭐ <b>Graded checkpoint</b></span>
+    </div>
+    <p style="margin-top:14px"><a class="btn ghost" href="../slides/week03-quadrotor-modeling.html">← Back to the Week 3 slides</a>
+       <a class="btn ghost" href="../index.html">Course home</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Goal</span>
+  Construct the <b>X-frame</b> mixing matrix \( \mathbf{M} \) that maps 4 motor thrusts → the control wrench
+  \([T,\tau_x,\tau_y,\tau_z]\), invert it to get the allocation, and verify two things: a pure-hover wrench
+  \([mg,0,0,0]\) allocates to <b>four equal</b> motor thrusts \(mg/4\), and the round-trip
+  <b>wrench → motors → wrench</b> returns the original. This is the actuator model every later controller relies on.
+</div>
+
+<!-- ============ 1. RECAP ============ -->
+<h2>1 · The 5-minute recap</h2>
+<p>Each rotor makes thrust along <b>+body-z</b>, quadratic in speed \( f_i = k_f\,\omega_i^2 \), plus a reaction
+   <b>drag torque</b> about z that <b>alternates sign</b> — two rotors spin CW, two CCW — so it cancels at hover and
+   the residual gives yaw control. We model each motor directly by its thrust \(f_i\) [N]; the yaw torque is \( \pm c\,f_i \)
+   with \( c=\)<code>k_torque</code>.</p>
+
+<p>The course is <b>X-frame</b>: every arm sits at 45° to the body axes, so <b>every motor has a moment arm on both
+   roll and pitch</b>. With arm \(l\) and torque ratio \(c\):</p>
+<p style="text-align:center">
+  \[ \begin{bmatrix}T\\\tau_x\\\tau_y\\\tau_z\end{bmatrix}=
+     \underbrace{\begin{bmatrix}1&1&1&1\\-l&-l&l&l\\ l&-l&-l&l\\-c&c&-c&c\end{bmatrix}}_{\mathbf{M}}
+     \begin{bmatrix}f_1\\f_2\\f_3\\f_4\end{bmatrix} \]
+</p>
+
+<div class="callout warn">
+  <span class="ttl">Convention hazard — read before you code</span>
+  Most free references (MathWorks NMPC, Bresciani, Gibiansky) print the <b>plus-frame</b> matrix, where roll uses
+  only motors&nbsp;2&amp;4 and pitch only 1&amp;3. <b>That is a different airframe.</b> If you copy it, your roll and pitch
+  will be wrong. Use the X-frame \(\mathbf{M}\) above — it matches <code>quadsim.params.mixer_matrix()</code>. See
+  <code>simulator/CONVENTIONS.md</code>.
+</div>
+
+<!-- ============ 2. SETUP ============ -->
+<h2>2 · Setup (2 min)</h2>
+<p>From the <code>simulator/</code> directory, in your virtual environment:</p>
+<div class="code"><pre><span class="cm"># one-time</span>
+python -m venv .venv &amp;&amp; source .venv/bin/activate   <span class="cm"># Windows: .venv\Scripts\activate</span>
+pip install -r requirements.txt
+<span class="cm"># every session — so `import quadsim` works</span>
+export PYTHONPATH=.                                <span class="cm"># Windows: set PYTHONPATH=.</span></pre></div>
+<p>The reference implementation lives in <code>quadsim/params.py</code> (<code>mixer_matrix</code>, <code>allocation_matrix</code>)
+   and <code>quadsim/dynamics.py</code> (<code>wrench_to_motor_forces</code>, <code>motor_forces_to_wrench</code>). You'll build the
+   mixer yourself first, then check it against those.</p>
+
+<!-- ============ 3. THE TASK ============ -->
+<h2>3 · Build &amp; invert the mixer</h2>
+<p>Work through the steps. You'll write everything into one script, <code>examples/wk3_mixer.py</code>.
+   Recall the wrench layout: <code>u[0]</code> total thrust \(T\), <code>u[1:4]</code> body torques \((\tau_x,\tau_y,\tau_z)\).</p>
+
+<details class="step" open>
+  <summary><span class="num">1</span> Per-motor hover thrust <span class="tag">start here</span></summary>
+  <div class="step-body">
+    <p>At a level hover the four motors share the weight equally. Total thrust must equal \(mg\), so each motor carries \(mg/4\):</p>
+    <div class="code"><pre>import numpy as np
+from quadsim import QuadParams
+
+p = QuadParams()
+hover_total      = p.weight                 <span class="cm"># = mass * g  [N]</span>
+hover_per_motor  = hover_total / p.n_rotors <span class="cm"># = mg / 4    [N]</span>
+print(hover_per_motor)                      <span class="cm"># -> 1.594...  (≈ mg/4)</span></pre></div>
+    <p><code>QuadParams</code> also exposes <code>p.hover_thrust_per_motor</code> — use it to cross-check your number.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">2</span> Build the X-frame mixer \( \mathbf{M} \) by hand <span class="tag">the core</span></summary>
+  <div class="step-body">
+    <p>Type the matrix out from the equation above, using \(l=\)<code>p.arm</code> and \(c=\)<code>p.k_torque</code>.
+       <b>Do not</b> copy a plus-frame matrix — every torque row must have a nonzero entry for <em>all four</em> motors.</p>
+    <div class="code"><pre>l, c = p.arm, p.k_torque
+M = np.array([
+    [ 1.0,  1.0,  1.0,  1.0],   <span class="cm"># T     : sum of thrusts</span>
+    [  -l,   -l,    l,    l],    <span class="cm"># tau_x : roll  — all four contribute</span>
+    [   l,   -l,   -l,    l],    <span class="cm"># tau_y : pitch — all four contribute</span>
+    [  -c,    c,   -c,    c],    <span class="cm"># tau_z : yaw   — CW/CCW pattern</span>
+])
+print(np.allclose(M, p.mixer_matrix()))     <span class="cm"># -> True (matches quadsim)</span></pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">3</span> Invert it → the allocation matrix <span class="tag">wrench → motors</span></summary>
+  <div class="step-body">
+    <p>The controller speaks in wrench; the motors need thrusts. Invert \(\mathbf{M}\). It is invertible by construction:</p>
+    <div class="code"><pre>M_inv = np.linalg.inv(M)
+print(np.allclose(M_inv, p.allocation_matrix()))   <span class="cm"># -> True</span></pre></div>
+    <p>In production <code>quadsim</code> calls <code>p.allocation_matrix()</code>, which is exactly this inverse.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">4</span> Hover-allocation check <span class="tag">graded ⭐</span></summary>
+  <div class="step-body">
+    <p>Feed a pure-hover wrench (thrust only, zero torque) through the allocation. It must split into <b>four equal</b>
+       motor thrusts \(mg/4\):</p>
+    <div class="code"><pre>u_hover = np.array([p.weight, 0.0, 0.0, 0.0])
+f_hover = M_inv @ u_hover
+print(f_hover.round(4))                              <span class="cm"># -> [1.594 1.594 1.594 1.594]</span>
+print(np.allclose(f_hover, p.weight / 4))            <span class="cm"># -> True</span></pre></div>
+    <p>If the four numbers aren't equal, a sign in \(\mathbf{M}\) is wrong (most likely a torque row).</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">5</span> Round-trip check + saturation <span class="tag">verify</span></summary>
+  <div class="step-body">
+    <p>Compare your hand-built map against <code>quadsim</code>'s, and confirm wrench → motors → wrench returns the original
+       <em>when nothing saturates</em>. <code>wrench_to_motor_forces</code> clips each \(f_i\) to \([f_{\min},f_{\max}]\):</p>
+    <div class="code"><pre>from quadsim.dynamics import wrench_to_motor_forces, motor_forces_to_wrench
+
+f = wrench_to_motor_forces(u_hover, p)               <span class="cm"># allocation @ u, then clip</span>
+u_back = motor_forces_to_wrench(f, p)                <span class="cm"># mixer @ f</span>
+print(np.allclose(u_back, u_hover))                  <span class="cm"># -> True (unsaturated round-trip)</span>
+
+<span class="cm"># Now over-drive yaw so a motor clips at f_max = 4 N and the round-trip BREAKS:</span>
+u_big = np.array([p.weight, 0.0, 0.0, 5.0])
+f_clip = wrench_to_motor_forces(u_big, p)            <span class="cm"># some f_i pinned at f_max</span>
+print(np.allclose(motor_forces_to_wrench(f_clip, p), u_big))  <span class="cm"># -> False</span></pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">✓</span> Stuck? Reveal the full <code>wk3_mixer.py</code></summary>
+  <div class="step-body">
+    <div class="callout warn"><span class="ttl">Try first</span> You learn the model by typing the matrix out and watching the round-trip. Peek only after a genuine attempt.</div>
+    <div class="code"><pre><span class="cm"># examples/wk3_mixer.py — Week 3: build & invert the X-frame mixer</span>
+import numpy as np
+from quadsim import QuadParams
+from quadsim.dynamics import wrench_to_motor_forces, motor_forces_to_wrench
+
+p = QuadParams()
+l, c = p.arm, p.k_torque
+
+M = np.array([
+    [ 1.0,  1.0,  1.0,  1.0],
+    [  -l,   -l,    l,    l],
+    [   l,   -l,   -l,    l],
+    [  -c,    c,   -c,    c],
+])
+assert np.allclose(M, p.mixer_matrix())
+
+M_inv = np.linalg.inv(M)
+assert np.allclose(M_inv, p.allocation_matrix())
+
+u_hover = np.array([p.weight, 0.0, 0.0, 0.0])
+f_hover = M_inv @ u_hover
+print(<span class="st">"hover motor thrusts:"</span>, f_hover.round(4))
+assert np.allclose(f_hover, p.weight / 4)            <span class="cm"># four equal = mg/4</span>
+
+f = wrench_to_motor_forces(u_hover, p)
+assert np.allclose(motor_forces_to_wrench(f, p), u_hover)
+print(<span class="st">"round-trip OK; hover = mg/4 per motor"</span>)</pre></div>
+  </div>
+</details>
+
+<!-- ============ 4. RUN & VERIFY ============ -->
+<h2>4 · Run &amp; verify</h2>
+<p>Save your work as <code>examples/wk3_mixer.py</code> and run it from the <code>simulator/</code> directory:</p>
+<div class="code"><pre>export PYTHONPATH=.
+python examples/wk3_mixer.py</pre></div>
+
+<div class="callout goal">
+  <span class="ttl">Expected — your graded checkpoint ⭐</span>
+  <ul style="margin:6px 0 0">
+    <li>Your hand-built \(\mathbf{M}\) <b>matches</b> <code>p.mixer_matrix()</code> and \(\mathbf{M}^{-1}\) matches <code>p.allocation_matrix()</code>.</li>
+    <li><b>Hover motor thrusts ≈ [1.594, 1.594, 1.594, 1.594] N</b> — four equal values, each \(=mg/4\).</li>
+    <li>The unsaturated round-trip <b>wrench → motors → wrench returns the original</b> (<code>np.allclose → True</code>).</li>
+  </ul>
+</div>
+
+<h2 class="dl-h">Try it live — the Digital Lab</h2>
+<p class="muted" style="margin:-4px 0 10px">The same physics as the lab, with sliders. Predict, then check; the full catalogue is in the <a href="../digital-lab.html">Digital Lab</a>.</p>
+<div class="callout"><span class="ttl">mixer</span>Drive T and τx until two motors clip at 4 N; note that the achieved wrench (yaw!) is no longer the commanded one. Your round-trip test in §3 assumes no clipping. <a href="../digital-lab.html#mixer">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="mixer"></div>
+<div class="callout"><span class="ttl">kffit</span>Drag the bench points and watch the fit. The course's 1.594 N hover-per-motor number sits at Ω ≈ 800 rad/s on this curve. <a href="../digital-lab.html#kffit">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="kffit"></div>
+
+<h3>Self-check</h3>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="a"/><label>My hand-built mixer matches <code>params.mixer_matrix()</code> to machine precision.</label></li>
+  <li><input type="checkbox" data-id="b"/><label>A pure-hover wrench allocates to four <b>equal</b> motor thrusts, each \(mg/4 \approx 1.59\) N.</label></li>
+  <li><input type="checkbox" data-id="c"/><label>The wrench → motors → wrench round-trip returns the original when no motor saturates.</label></li>
+  <li><input type="checkbox" data-id="d"/><label>I can explain why the <b>X-frame</b> mixer differs from the textbook <b>plus-frame</b> one (every motor rolls AND pitches).</label></li>
+</ul>
+
+<!-- ============ 5. GO FURTHER ============ -->
+<h2>5 · Going further (optional)</h2>
+<ul>
+  <li><b>Pure-roll command.</b> Send \(\mathbf{u}=[mg, 0.05, 0, 0]\). Which motors increase, which decrease? Confirm all four change (the X-frame signature).</li>
+  <li><b>Yaw split.</b> Send a small \(\tau_z\) only. Verify the CW pair and CCW pair split in opposite directions while \(T\) stays \(mg\).</li>
+  <li><b>Plus-frame trap.</b> Type the plus-frame matrix (roll = motors 2&amp;4 only) and feed it the hover wrench. Does it still give \(mg/4\)? Now feed a roll command — where does it go wrong?</li>
+</ul>
+
+<!-- ============ DELIVERABLE / SUBMIT ============ -->
+<h2>6 · Deliverable &amp; submission</h2>
+<table class="rubric">
+  <tr><th>Criterion</th><th>What we look for</th><th>Weight</th></tr>
+  <tr><td>Correct X-frame mixer</td><td>Hand-built \(\mathbf{M}\) matches <code>mixer_matrix()</code>; every torque row uses all four motors</td><td>50%</td></tr>
+  <tr><td>Allocation &amp; hover check</td><td>Inverse computed; hover wrench gives four equal \(mg/4\) thrusts; round-trip holds</td><td>25%</td></tr>
+  <tr><td>Understanding</td><td>One short paragraph: why X-frame ≠ plus-frame, and what saturation does to the wrench</td><td>25%</td></tr>
+</table>
+
+<div class="submit-box">
+  <h3>📤 Submit on the course platform</h3>
+  <div class="row">
+    <div>What</div><div><code>wk3_mixer.py</code> + console output + a 3–5 line note (one PDF or zip)</div>
+    <div>Filename</div><div><code>MLTE03_Wk3_&lt;studentID&gt;.zip</code></div>
+    <div>Where</div><div>the <a href="https://course.ainrobotics.com/mlte03/">course platform</a> → <i>Week 3 Lab</i> upload box (log in at the Ken Sir course hub; every version you upload is kept)</div>
+    <div>Deadline</div><div><span class="tofill">date / time — TO FILL</span> (before Week 4)</div>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin:10px 0 0">Submissions go through the course platform (<a href="https://course.ainrobotics.com/mlte03/">course.ainrobotics.com/mlte03/</a>) — log in at the Ken Sir course hub; nothing is uploaded to this static site itself.</p>
+</div>
+
+<p style="margin:30px 0;color:var(--muted)">Next week → <a href="../index.html#weeks">Week 4: hover trim &amp; linearization</a>. We linearize this exact
+   nonlinear model about hover, find the \((A,B)\) pair and its unstable poles — the motivation for the controllers you start writing in Week 5.</p>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<!-- KaTeX auto-render for the inline math -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

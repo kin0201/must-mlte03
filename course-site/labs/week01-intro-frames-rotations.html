@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 1 Lab — Intro, Frames &amp; Rotations · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css?v=5" />
+<!-- KaTeX for the bit of math in the recap -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+</head>
+<body data-lab="week01-intro-frames-rotations">
+
+<div class="lab-progress"><i></i></div>
+
+<!-- ============ HEADER ============ -->
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Week 1 · Lab (second half of session)</div>
+    <h1>Intro, Frames &amp; Rotations — meet the simulator</h1>
+    <div class="sub">Fly the quad <b>open-loop</b>, watch it tip over, and prove the rotation matrix is a real member of \(SO(3)\).</div>
+    <div class="meta">
+      <span>⏱ <b>~60 min</b></span>
+      <span>🧩 Run <b>examples/01_open_loop.py</b></span>
+      <span>📦 Deliverable: <b>a divergence plot + one-line note</b></span>
+      <span>⭐ <b>Graded checkpoint</b></span>
+    </div>
+    <p style="margin-top:14px"><a class="btn ghost" href="../slides/week01-intro-frames-rotations.html">← Back to the Week 1 slides</a>
+       <a class="btn ghost" href="../index.html">Course home</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Goal</span>
+  Get <code>quadsim</code> running, then <b>see why this course exists</b>: with no feedback the open-loop quad
+  tips over. Along the way you'll handle the rotation matrix \(R\) directly and verify the two \(SO(3)\) laws
+  (\(R^{\top}R=I\), \(\det R=+1\)). No controller writing today — that starts in Week 5.
+</div>
+
+<!-- ============ 1. RECAP ============ -->
+<h2>1 · The 5-minute recap</h2>
+<p>The course uses a <b>world frame</b> that is <b>ENU / z-up</b> (gravity points \(-z\), thrust acts along
+   \(+\)body-\(z\)) and a <b>body frame</b> glued to the airframe. The rotation matrix \(R\) carries a body
+   vector into the world, \( \mathbf v_W = R\,\mathbf v_B \), and the simulator uses it to resolve thrust and
+   gravity into a world-frame acceleration:</p>
+<p style="text-align:center">
+  \[ \mathbf a = \begin{bmatrix}0\\0\\-g\end{bmatrix} + \frac{1}{m}\,R\begin{bmatrix}0\\0\\T\end{bmatrix} \]
+</p>
+<p>We build \(R\) (body→world) from <b>intrinsic ZYX</b> (yaw→pitch→roll) Euler angles —
+   exactly what <code>quadsim.dynamics.rotation_matrix</code> computes:</p>
+<p style="text-align:center">
+  \[ R(\phi,\theta,\psi) = R_z(\psi)\,R_y(\theta)\,R_x(\phi), \qquad R^{\top}R = I,\quad \det R = +1 \]
+</p>
+<div class="callout">
+  <span class="ttl">Two gotchas from lecture</span>
+  <b>Gimbal lock</b> for ZYX sits at <b>pitch \(\theta=\pm90^\circ\)</b> (the <em>second</em> rotation) — the
+  motivation for quaternions, which we order <b>scalar-first</b> \(q=[q_0,q_1,q_2,q_3]\). Beware: SciPy's
+  <code>Rotation.as_quat()</code> is <b>scalar-last</b> by default.
+</div>
+
+<!-- ============ 2. SETUP ============ -->
+<h2>2 · Setup (2 min)</h2>
+<p>From the <code>simulator/</code> directory, in your virtual environment:</p>
+<div class="code"><pre><span class="cm"># one-time</span>
+python -m venv .venv &amp;&amp; source .venv/bin/activate   <span class="cm"># Windows: .venv\Scripts\activate</span>
+pip install -r requirements.txt
+<span class="cm"># every session — so `import quadsim` works</span>
+export PYTHONPATH=.                                <span class="cm"># Windows: set PYTHONPATH=.</span></pre></div>
+<p>Nothing to edit this week — you only <em>run</em> code and read output. The two files we touch are the
+   ready-made <code>examples/01_open_loop.py</code> and the dynamics helper <code>quadsim/dynamics.py</code>.</p>
+
+<!-- ============ 3. THE TASK ============ -->
+<h2>3 · Explore frames &amp; rotations</h2>
+<p>Work through the steps. The first two run an existing example; the rest are short experiments you type into
+   a Python shell (or a scratch file) to <em>feel</em> what \(R\) is.</p>
+
+<details class="step" open>
+  <summary><span class="num">1</span> Run the open-loop quad <span class="tag">it tips over</span></summary>
+  <div class="step-body">
+    <p>This example applies exactly hover thrust plus a tiny <code>0.001 N·m</code> roll bias and <b>no
+       feedback</b>. Run it and read the final roll angle it prints:</p>
+    <div class="code"><pre>export PYTHONPATH=.
+python examples/01_open_loop.py</pre></div>
+    <p>It prints the final roll after 3 s of open loop and saves <code>open_loop.png</code>. The tiny bias is
+       never corrected, so the attitude <b>runs away</b> — that divergence is the whole point.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">2</span> Read the controller — why does it diverge? <span class="tag">no feedback</span></summary>
+  <div class="step-body">
+    <p>Open <code>examples/01_open_loop.py</code>. The <code>control()</code> method ignores the state <code>x</code>
+       entirely:</p>
+    <div class="code"><pre>def control(self, t, x, ref):
+    return np.array([self.p.weight, 0.001, 0.0, 0.0])  <span class="cm"># 0.001 N·m roll bias</span></pre></div>
+    <p>Because the command never depends on the measured attitude, nothing pushes back when the quad starts to
+       roll. <b>Open loop = no feedback = no stabilisation.</b> That is the gap the rest of the course fills.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">3</span> Build a rotation matrix <span class="tag">ZYX</span></summary>
+  <div class="step-body">
+    <p>Now handle \(R\) directly. In a Python shell (with <code>PYTHONPATH=.</code>):</p>
+    <div class="code"><pre>import numpy as np
+from quadsim.dynamics import rotation_matrix
+
+R = rotation_matrix(phi=0.3, theta=-0.2, psi=1.1)   <span class="cm"># ZYX, radians</span>
+print(R)</pre></div>
+    <p>The <b>columns</b> of <code>R</code> are the body axes \(\mathbf x_B,\mathbf y_B,\mathbf z_B\) expressed in
+       world coordinates. The third column is where body-\(z\) (the thrust direction) points in the world.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">4</span> Verify the two \(SO(3)\) laws <span class="tag">the core check</span></summary>
+  <div class="step-body">
+    <p>A real rotation is orthonormal with unit determinant. Check both numerically:</p>
+    <div class="code"><pre>print(np.allclose(R.T @ R, np.eye(3)))   <span class="cm"># True  -> orthonormal, R^-1 = R^T</span>
+print(round(np.linalg.det(R), 6))        <span class="cm"># 1.0   -> proper rotation (no reflection)</span></pre></div>
+    <p>Repeat for a few of your own angles. <b>Both must hold for every input.</b> If either fails you've built
+       the wrong matrix — usually a frame or Euler-order mismatch.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">5</span> Feel gimbal lock <span class="tag">pitch → ±90°</span></summary>
+  <div class="step-body">
+    <p>The Euler-rate map \(\dot{\boldsymbol\eta}=W(\phi,\theta)\,\boldsymbol\omega\) carries body rates to
+       Euler-angle rates. Watch it blow up as pitch approaches \(\pm90^\circ\):</p>
+    <div class="code"><pre>from quadsim.dynamics import euler_rate_matrix
+
+for theta in [0.0, np.deg2rad(80), np.deg2rad(89), np.deg2rad(89.99)]:
+    W = euler_rate_matrix(phi=0.0, theta=theta)
+    print(f"theta={np.rad2deg(theta):6.2f} deg   max|W| = {np.abs(W).max():.1f}")</pre></div>
+    <p>The entries explode (a \(1/\cos\theta\) term) — the singularity is at the <b>second</b> rotation,
+       \(\theta=\pm90^\circ\). \(R\) itself stays finite, but the angle <em>rates</em> are undefined there.
+       This is exactly why we move to quaternions.</p>
+  </div>
+</details>
+
+<!-- ============ 4. RUN & VERIFY ============ -->
+<h2>4 · Run &amp; verify</h2>
+<p>Save this as <code>examples/wk1_frames.py</code>. It reproduces the open-loop divergence, saves a plot, and
+   runs the \(SO(3)\) checks in one shot — the checkpoint for this lab:</p>
+<div class="code"><pre><span class="cm"># examples/wk1_frames.py — Week 1 checkpoint: open-loop divergence + SO(3) checks</span>
+import numpy as np
+
+from quadsim import Simulator, QuadParams
+from quadsim.controllers.base import Controller
+from quadsim.dynamics import hover_state, rotation_matrix
+
+
+class OpenLoopHover(Controller):
+    <span class="cm"># exactly hover thrust + a tiny torque bias, NO feedback</span>
+    def __init__(self, p):
+        self.p = p
+    def control(self, t, x, ref):
+        return np.array([self.p.weight, 0.001, 0.0, 0.0])
+
+
+sim = Simulator(QuadParams())
+log = sim.run(hover_state(position=(0, 0, 2.0)), OpenLoopHover(sim.params), t_final=3.0)
+
+roll = np.rad2deg(log.euler[:, 0])
+print(f"start roll = {roll[0]:6.2f} deg")
+print(f"final roll = {roll[-1]:6.1f} deg   (no feedback -> it tips over)")
+
+<span class="cm"># SO(3) sanity check on a handful of angles</span>
+for phi, theta, psi in [(0.0, 0.0, 0.0), (0.3, -0.2, 1.1), (-0.5, 0.4, -0.7)]:
+    R = rotation_matrix(phi, theta, psi)
+    ok_orth = np.allclose(R.T @ R, np.eye(3))
+    print(f"R^T R = I? {ok_orth}    det R = {np.linalg.det(R):.6f}")
+
+from quadsim.plotting import plot_states
+plot_states(log, save=<span class="st">"wk1_open_loop.png"</span>, show=False)
+print(<span class="st">"saved wk1_open_loop.png"</span>)</pre></div>
+
+<div class="code"><pre>export PYTHONPATH=.
+python examples/wk1_frames.py</pre></div>
+
+<div class="callout goal">
+  <span class="ttl">Expected — your graded checkpoint ⭐</span>
+  <ul style="margin:6px 0 0">
+    <li><b>Final roll is large</b> (tens of degrees and growing) — the attitude diverges with no feedback.</li>
+    <li>Every angle triple prints <b><code>R^T R = I? True</code></b> and <b><code>det R = 1.000000</code></b>.</li>
+    <li>The saved <code>wk1_open_loop.png</code> shows roll <b>running away</b> from zero (it does not settle).</li>
+  </ul>
+</div>
+
+<h2 class="dl-h">Try it live — the Digital Lab</h2>
+<p class="muted" style="margin:-4px 0 10px">The same physics as the lab, with sliders. Predict, then check; the full catalogue is in the <a href="../digital-lab.html">Digital Lab</a>.</p>
+<div class="callout"><span class="ttl">rot3d</span>Rotate the airframe; read R. Set pitch to 89° and sweep roll — that is gimbal lock, the reason §3 asks you to check R is orthonormal rather than trust the angles. <a href="../digital-lab.html#rot3d">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="rot3d"></div>
+
+<h3>Self-check</h3>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="a"/><label>I ran <code>01_open_loop.py</code> and saw the roll angle grow with no feedback.</label></li>
+  <li><input type="checkbox" data-id="b"/><label>For several angle triples, <code>rotation_matrix</code> gives \(R^{\top}R=I\) and \(\det R=+1\).</label></li>
+  <li><input type="checkbox" data-id="c"/><label>I can explain why the open-loop quad diverges (the command ignores the measured state).</label></li>
+  <li><input type="checkbox" data-id="d"/><label>I saw the Euler-rate map blow up near pitch \(=\pm90^\circ\) and know that's why we use quaternions.</label></li>
+</ul>
+
+<!-- ============ 5. GO FURTHER ============ -->
+<h2>5 · Going further (optional)</h2>
+<ul>
+  <li><b>Frame check.</b> With the quad level (\(\phi=\theta=0\)), confirm the third column of \(R\) is \([0,0,1]\) — thrust points straight up, so it exactly cancels gravity.</li>
+  <li><b>Order matters.</b> Compare <code>R_z R_y R_x</code> against the reversed product <code>R_x R_y R_z</code> for the same angles; they differ — rotations don't commute.</li>
+  <li><b>Quaternion order trap.</b> If you have SciPy, build a rotation with <code>Rotation.from_euler('ZYX', ...)</code> and print <code>.as_quat()</code>. Note the scalar part is <b>last</b> — the opposite of our scalar-first convention.</li>
+</ul>
+
+<!-- ============ DELIVERABLE / SUBMIT ============ -->
+<h2>6 · Deliverable &amp; submission</h2>
+<table class="rubric">
+  <tr><th>Criterion</th><th>What we look for</th><th>Weight</th></tr>
+  <tr><td>Open-loop divergence</td><td>The <code>wk1_open_loop.png</code> plot showing attitude running away with no feedback</td><td>50%</td></tr>
+  <tr><td>\(SO(3)\) verification</td><td>Console output (or screenshot) showing \(R^{\top}R=I\) and \(\det R=+1\) for a few angles</td><td>25%</td></tr>
+  <tr><td>Understanding</td><td>One line: why feedback is needed (open loop ignores the state, so nothing corrects the tilt)</td><td>25%</td></tr>
+</table>
+
+<div class="submit-box">
+  <h3>📤 Submit on the course platform</h3>
+  <div class="row">
+    <div>What</div><div><code>wk1_open_loop.png</code> + the \(SO(3)\) output + a one-line note on why feedback is needed (one PDF or zip)</div>
+    <div>Filename</div><div><code>MLTE03_Wk1_&lt;studentID&gt;.zip</code></div>
+    <div>Where</div><div>the <a href="https://course.ainrobotics.com/mlte03/">course platform</a> → <i>Week 1 Lab</i> upload box (log in at the Ken Sir course hub; every version you upload is kept)</div>
+    <div>Deadline</div><div><span class="tofill">date / time — TO FILL</span> (before Week 2)</div>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin:10px 0 0">Submissions go through the course platform (<a href="https://course.ainrobotics.com/mlte03/">course.ainrobotics.com/mlte03/</a>) — log in at the Ken Sir course hub; nothing is uploaded to this static site itself.</p>
+</div>
+
+<p style="margin:30px 0;color:var(--muted)">Next week → <a href="../index.html#weeks">Week 2: the 12-state nonlinear model</a>. You'll re-derive
+   <code>state_derivative(x, u)</code> yourself — built from today's rotation matrix \(R\) and the Euler-rate map \(W\).</p>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<!-- KaTeX auto-render for the inline math -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

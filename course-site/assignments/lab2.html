@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lab 2 Assignment — Attitude Control (Inner Loop) · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css" />
+</head>
+<body data-lab="week05-assignment">
+
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Assignment · Lab 2 (Week 5) · ⭐ graded</div>
+    <h1>Lab 2 — Attitude Control (Inner Loop)</h1>
+    <div class="sub">Make the quad return to level from a tilted start with your own cascade inner loop.</div>
+    <div class="meta">
+      <span>⚖️ Weight: <b>5%</b> of the course (Lab Reports 30% ÷ 6)</span>
+      <span>👤 <b>Individual</b></span>
+      <span>📄 Report ≤ <b>3 pages</b></span>
+    </div>
+    <p style="margin-top:14px">
+      <a class="btn ghost" href="../labs/week05-attitude-control.html">← Week 5 lab sheet (the how-to)</a>
+      <a class="btn ghost" href="../slides/week05-attitude-control.html">Week 5 slides</a>
+      <a class="btn ghost" href="../index.html#assign">All assignments</a> <a class="btn ghost" href="../pdf/MLTE03_Assignment_lab2.pdf">Download PDF</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Task</span>
+  Complete the Week 5 lab: implement the <b>attitude P/PD inner loop</b> in
+      <code>quadsim/controllers/student.py</code> (attitude error → body-rate/torque commands,
+      thrust = weight), and verify recovery from a tilted initial attitude with
+      <code>examples/wk5_attitude.py</code>.
+  The <a href="../labs/week05-attitude-control.html">Week 5 lab sheet</a> walks through the build step by step —
+  this page defines what you hand in and how it is graded.
+</div>
+
+<h2>What to submit (one zip)</h2>
+<ul>
+  <li><code>student.py</code> — with your inner attitude loop</li>
+  <li><code>wk5_attitude.png</code> — roll/pitch/yaw vs time from the tilted start</li>
+  <li>Report (PDF, ≤ 3 pages): your gains, the response plot, and what each gain does (one tuning experiment: change one gain, show the effect)</li>
+</ul>
+
+<h2>Pass bar — expected results</h2>
+<ul>
+  <li>From a <b>20° roll / −15° pitch</b> start: back to <b>level within ±1° in ≤ 3 s</b>, no sustained oscillation</li>
+  <li>Runs via <code>PYTHONPATH=. python examples/wk5_attitude.py</code></li>
+</ul>
+
+<h2>Assessment criteria</h2>
+<table class="rubric">
+<thead><tr><th>Criterion</th><th>Weight</th><th>What earns full marks</th></tr></thead>
+<tbody>
+<tr><td><b>Results &amp; verification</b></td><td style="text-align:center">40%</td><td>The pass-bar numbers are met and <b>reproduced by re-running your code</b> from a clean checkout. Partial credit tracks how close you get and whether failures are honestly reported.</td></tr>
+<tr><td><b>Code correctness &amp; quality</b></td><td style="text-align:center">25%</td><td>Your own implementation (not the reference copied back); runs without edits; readable structure and naming; no dead code.</td></tr>
+<tr><td><b>Report: plots &amp; numbers</b></td><td style="text-align:center">20%</td><td>Requested plots present, axes labelled, units shown; the key numbers stated in text, not left inside figures.</td></tr>
+<tr><td><b>Discussion &amp; insight</b></td><td style="text-align:center">15%</td><td>Interpretation goes beyond restating outputs — connects the result to the theory taught that week.</td></tr>
+<tr><td><b>Total</b></td><td style="text-align:center"><b>100%</b></td><td>= 5% of the course grade</td></tr>
+</tbody></table>
+<p style="color:var(--muted);font-size:14px">Lab-specific checks on top of the rubric:</p>
+<ul>
+  <li>Recovery meets the pass bar with <i>your</i> gains (we re-run your code)</li>
+  <li>The tuning experiment shows cause → effect (e.g. higher Kd → less overshoot)</li>
+</ul>
+
+
+<h2>Rules</h2>
+<ul>
+  <li><b>Individual work.</b> Discussing ideas is encouraged; code and report must be written by you. Identical code or text is treated under the University’s academic-integrity rules.</li>
+  <li><b>AI assistants</b> (ChatGPT, Copilot, …) may be used as a tool, with two conditions: <b>declare</b> the use in your report (one line is enough), and be able to <b>explain every line you submit</b> — you may be asked to, in person.</li>
+  <li><b>Late submission:</b> −20% per day, not accepted after 3 days. One free 48-hour extension per student per semester — ask <i>before</i> the deadline.</li>
+  <li><b>Re-runs.</b> We grade by re-running your code (<code>PYTHONPATH=. python …</code> on a clean copy of the course simulator plus your files). “Works on my machine” without reproducibility loses the results marks.</li>
+</ul>
+
+
+<div class="submit-box">
+  <h3>📤 Submit on the course platform</h3>
+  <div class="row">
+    <div>What</div><div>the zip described above</div>
+    <div>Filename</div><div><code>MLTE03_Wk5_&lt;studentID&gt;.zip</code></div>
+    <div>Where</div><div>the <a href="https://course.ainrobotics.com/mlte03/">course platform</a> → <i>Week 5 Lab</i> upload box (log in at the Ken Sir course hub; every version you upload is kept)</div>
+    <div>Deadline</div><div><span class="tofill">date / time — TO FILL</span> (before Week 6)</div>
+  </div>
+</div>
+
+</main>
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

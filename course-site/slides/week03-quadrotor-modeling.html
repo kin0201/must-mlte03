@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 3 — Quadrotor Modeling · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+
+<style>
+  .reveal .attitude-demo { font-size: 15px; margin: 6px 0; }
+  .reveal .attitude-demo canvas { height: 180px; }
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 3 · Quadrotor Modeling<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1. TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Quadrotor Modelling: Rotors &amp; Mixing</h1>
+    <p class="tp-sub">四旋翼建模:旋翼與混控</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 3 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. The session plan follows; keep this up while people settle.</aside>
+</section>
+
+<!-- 2. WHERE WE ARE -->
+<section>
+  <p class="eyebrow">Recap → today</p>
+  <h2>From rigid body to a controllable model</h2>
+  <div class="cols">
+    <ul>
+      <li><b>Wk 1:</b> frames, rotations, quaternions — how we describe orientation.</li>
+      <li><b>Wk 2:</b> the 12-state rigid-body kinematics &amp; dynamics \( \dot{\mathbf{x}}=f(\mathbf{x},\mathbf{u}) \).</li>
+      <li><b>Today:</b> where does \( \mathbf{u} \) come from? <b>Thrust, torque, and mixing</b> — closing the loop on the model.</li>
+    </ul>
+    <div class="box">
+      <b>The handoff we set up today:</b><br/>
+      the <em>controller</em> returns a wrench \([T,\tau_x,\tau_y,\tau_z]\); the <em>simulator</em>
+      mixes it into 4 motor thrusts and saturates them. Get the mixer right and every later week works.
+    </div>
+  </div>
+  <aside class="notes">Tie back to the state layout in dynamics.py: p, v, Euler (ZYX), body rates.</aside>
+</section>
+
+
+
+<!-- 2b. AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan</h2>
+<table class="agenda">
+<tr><th>Clock</th><th>Segment</th><th></th></tr>
+<tr><td class="t">00:00</td><td>Recap + <b>aircraft handout</b> (props stay OFF)</td><td>15&#8242;</td></tr>
+<tr><td class="t">00:15</td><td><b>Block A</b> — rotor physics: thrust, drag torque, the X-frame</td><td>35&#8242;</td></tr>
+<tr><td class="t">00:50</td><td>Concept check + mixer widget</td><td>10&#8242;</td></tr>
+<tr><td class="t">01:00</td><td><b>Block B</b> — allocation, saturation &amp; the full nonlinear model</td><td>30&#8242;</td></tr>
+<tr class="break"><td class="t">01:30</td><td>Break</td><td>10&#8242;</td></tr>
+<tr><td class="t">01:40</td><td>Lab briefing</td><td>10&#8242;</td></tr>
+<tr class="lab"><td class="t">01:50</td><td><b>Lab session</b>: mixer, trim, and your first look at (A,B)</td><td>60&#8242;</td></tr>
+<tr><td class="t">02:50</td><td>Debrief + milestone board</td><td>10&#8242;</td></tr>
+</table>
+</section><!-- 3. OBJECTIVES -->
+<section>
+  <p class="eyebrow">Learning objectives</p>
+  <h2>By the end of today you can…</h2>
+  <ul>
+    <li>Relate per-rotor <b>thrust</b> to speed: \( f_i \propto \omega_i^2 \), and explain why <b>drag torque alternates sign</b> (half CW, half CCW).</li>
+    <li>Write the <b>X-frame mixing matrix</b> mapping 4 motor thrusts → wrench \([T,\tau_x,\tau_y,\tau_z]\).</li>
+    <li>Assemble the <b>full nonlinear model</b> and trace the data flow: controller → wrench → mixer → saturated motors → dynamics.</li>
+    <li><span class="pill">Lab</span> Build &amp; invert the X-frame mixer; confirm hover allocates four equal thrusts and wrench round-trips.</li>
+  </ul>
+</section>
+
+<!-- CH 1 -->
+<section class="dense">
+  <p class="eyebrow">Mental picture first</p>
+  <h2>From your number to actual lift: five links</h2>
+  <div class="fig plain" data-diagram="cmdchain"><p class="cap">quadsim hands you the last box only. The four boxes to its left are where hardware surprises live.</p></div>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>We command <b>thrust in newtons</b>, not throttle percent — a deliberate abstraction that keeps the physics clean.</li>
+    <li>The price: everything between (PWM resolution, ESC protocol, motor lag, battery sag) is invisible in simulation and very visible on the aircraft.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Where the abstraction is honest.</span>
+  Over one control period the chain is well approximated by a first-order lag plus a static map. That is why simulation results transfer at all — and why they transfer with slightly lower gains.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Set expectations early: the sim is honest about physics and silent about plumbing.</aside>
+</section>
+
+<!-- 4a. MOTOR PHOTO -->
+<section class="dense">
+  <p class="eyebrow">Mental picture first · the real actuator</p>
+  <h2>What is actually bolted to each arm</h2>
+  <div class="cols">
+    <figure class="photo"><img src="../assets/img/outrunner.jpg" alt=""/><figcaption>A brushless outrunner: the whole bell (with magnets) spins around the wound stator. No brushes to wear, huge torque for its 30 g. <span class="cr">Photo: 1sfoerster, Wikimedia Commons, CC BY-SA 3.0.</span></figcaption></figure>
+    <ul class="small">
+      <li><b>The command chain:</b> firmware writes a duty cycle → the <b>ESC</b> switches three phases → the motor spins → the propeller makes thrust. Four copies of this chain <i>are</i> the actuator suite.</li>
+      <li>Each link adds delay: the chain behaves like a <b>first-order lag</b>, time constant \( \tau_m \approx 20\text{–}80 \) ms on small quads.</li>
+      <li>quadsim hides the chain and lets you command thrust \( f_i \) directly — a deliberate simplification whose price we will name today, and pay in Week 5's tuning.</li>
+    </ul>
+  </div>
+  <aside class="notes">Pass a real motor + ESC around while this is up. The lag bullet plants Wk-5's "why can't I just crank Kd" — motor lag eats phase margin.</aside>
+</section>
+
+<!-- 4b. ROTOR FIG -->
+<section>
+  <p class="eyebrow">The actuator · drawn</p>
+  <h2>Everything a rotor gives you</h2>
+
+  <div class="fig" data-diagram="rotor"><p class="cap">One knob (Ω), two effects: thrust you want, reaction torque you either cancel (pairing) or spend (yaw).</p></div>
+  <div class="turn" style="margin-top:.5em"><span class="tt">Your turn (60 s)</span> — hover thrust per motor is 1.59 N at Ω₀. To get 10% more thrust, does Ω rise by 10%? <span class="muted">(No — √1.1 ≈ 4.9%: the quadratic map means small speed changes move thrust a lot. This is why fine hover control is even possible.)</span></div>
+</section>
+
+<!-- 4. PER-ROTOR THRUST & TORQUE -->
+<section>
+  <p class="eyebrow">The actuators</p>
+  <h2>One rotor: thrust up, drag torque about z</h2>
+  <div class="cols">
+    <ul>
+      <li>Thrust along +body-z: \( f_i = k_f\,\omega_i^2 \) — quadratic in speed.</li>
+      <li>Drag reaction → <b>yaw torque</b> \( \tau_i = k_m\,\omega_i^2 \), opposing the spin.</li>
+      <li>Model motors by thrust \(f_i\) directly; yaw torque \( = \pm c f_i \), \( c = k_m/k_f \).</li>
+      <li>Two CW + two CCW → drag <b>cancels at hover</b>; deliberate imbalance = yaw control.</li>
+    </ul>
+    <div class="box">
+      <b>Why alternating spin?</b><br/>
+      If all four spun the same way, the airframe would yaw uncontrollably from net reaction torque.
+      Alternating CW/CCW zeroes it at hover and turns the residual into the \(\tau_z\) you command.
+    </div>
+  </div>
+  <aside class="notes">
+    Note we never expose omega to the controller — quadsim works in motor thrusts f_i [N], because
+    the f∝omega^2 map is a per-motor calibration. Keep it concrete: c here is params.k_torque = 0.016 m.
+  </aside>
+</section>
+
+
+<!-- 4c. AERO + ID -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>Where \( k_f \) comes from — aerodynamics, then a kitchen scale (the <code>kffit</code> widget)</h2>
+  <div class="env defn"><span class="eh">Definition <em>(propeller coefficients)</em>.</span>
+  Dimensional analysis gives \( f = C_T \rho\, n^2 D^4 \) and \( \tau_d = C_Q \rho\, n^2 D^5 \) (\(n\) rev/s, \(D\) diameter). For a <i>fixed</i> prop at low speed, \( C_T, C_Q \) are nearly constant — collapse everything into \( f = k_f\,\Omega^2 \), \( \tau_d = k_q\,\Omega^2 \), and note \( c = k_q/k_f \) has units of metres (our 0.016 m).</div>
+  <div class="cols top" style="margin-top:.4em">
+    <div class="env exm"><span class="eh">Worked example <em>(static thrust test — the instructor's bench, shown in Week 5)</em>.</span>
+    Aircraft held on a scale, one motor at a set speed. Scale reads \( 162 \) g ⇒ \( f = 1.59 \) N at \( \Omega = 800 \) rad/s:
+    \[ k_f = f/\Omega^2 = 1.59 / 800^2 \approx 2.5\times10^{-6}\ \mathrm{N\,s^2} \]
+    Repeat at 3–4 speeds; fit the square law; the fit quality tells you where the model ends (battery sag bends it at high throttle).</div>
+    <div class="env rmk"><span class="eh">Remark <em>(what we neglect, knowingly)</em>.</span>
+    In forward flight the advance ratio changes \(C_T\) (translational lift); near the ground, thrust rises (ground effect, below ~1 rotor diameter); descending fast into your own wake costs thrust (vortex ring). None are in quadsim's nominal model; drag <i>is</i> in the Week-10 team plant, hidden. Naming them now is what lets you diagnose them then.</div>
+  </div>
+  <aside class="notes">Drive the kffit widget: drag the four points, watch the fit and the residual. The square-law fit is a beautiful first data artifact even when the data is the instructor's.</aside>
+</section>
+
+<!-- ID 1 -->
+<section>
+  <p class="eyebrow">The identification, drawn</p>
+  <h2>Fitting \( k_f \) with a kitchen scale</h2>
+  <div class="fig plain" data-diagram="thrustcurve"><p class="cap">Four measurements, one square law, one honest boundary where battery sag bends the curve.</p></div>
+  <div class="turn"><span class="tt">(90 s)</span> — The bench reads 162 g at one speed. What fraction of \( f_{max} \) is that, and how much headroom does a 4-motor aircraft have at hover? <span class="muted">(1.59 N of 4 N = 40%; total 6.4 N of 16 N ⇒ thrust-to-weight 2.5, i.e. 1.5 g of spare acceleration.)</span></div>
+
+  <aside class="notes">Role 1's bench milestone in one picture. The T/W = 2.5 number recurs in every feasibility discussion this term.</aside>
+</section>
+
+<!-- WIDGET kffit -->
+<section>
+  <p class="eyebrow">One level deeper · interactive</p>
+  <h2>Fit it yourself — drag the bench points</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="kffit"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> Which single point, moved, changes k_f most? (Guess before dragging: the square law weights high-Ω points far more.) Then fake battery sag on the top two and describe the residual pattern.</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#kffit">Digital Lab → kffit</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">Least squares through the origin. The teaching point is the residual <i>pattern</i>, not R².</aside>
+</section>
+
+<!-- MT 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Why thrust is quadratic in \( \Omega \) — momentum theory in one slide</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>the rotor accelerates a column of air downwards</span>
+      <span class="dwhy"><b>Physical picture:</b> lift is the reaction to throwing air down. Nothing else is happening.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>mass flow \( \dot m = \rho A v_i \), induced velocity \( v_i \propto \Omega \)</span>
+      <span class="dwhy"><b>Both the amount of air and its speed rise with rotor speed</b> — the air column is swept faster and pushed harder.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">3</span>\( f = \dot m \, \Delta v \propto (\rho A v_i)(v_i) \propto \Omega^2 \)</span>
+      <span class="dwhy"><b>Two factors of \( \Omega \)</b> ⇒ the square law. Not an empirical fit — momentum conservation.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>torque: \( \tau_d \propto \rho A v_i^2 \, r \propto \Omega^2 \), same order</span>
+      <span class="dwhy"><b>Drag torque scales identically</b>, so the ratio \( c = \tau_d/f \) is nearly constant — which is exactly the assumption that lets the mixer be a constant matrix.</span></div>
+  </div>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">The consequence for control.</span>
+  At hover (\( f = 1.59 \) N) a 1% speed change gives a 2% thrust change: \( df/f = 2\, d\Omega/\Omega \). <b>The square law is a gain multiplier</b> — good for authority, and the reason ESC resolution near hover matters.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Where it fails.</span>
+  Momentum theory assumes still air and no blade stall. In fast forward flight, descent into your own wake, or near a wall, \( k_f \) shifts. Named in Week 2's omissions table; observable in Week 10.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Deriving the square law from momentum conservation converts a memorised formula into physics. Four steps, no aerodynamics prerequisite.</aside>
+</section>
+
+<!-- 5. X-FRAME GEOMETRY -->
+<section>
+  <p class="eyebrow">Geometry · the hazard</p>
+  <h2>X-frame: every motor rolls AND pitches</h2>
+  <pre style="font-size:.5em;background:#0e1a26;color:#e6edf3;border-radius:12px;padding:18px;line-height:1.5">
+            +x (forward)
+               ▲
+        f3 ◜   │   ◝ f4         X-frame: arms at 45° to the body axes.
+      (CCW)    │    (CW)        Each motor sits at (±l, ±l) → it has a
+        ───────┼───────► +y     moment arm on BOTH the x (pitch) and
+        f2 ◟   │   ◞ f1         y (roll) axes. No motor is "pure roll".
+      (CW)     │   (CCW)
+  </pre>
+  <div class="box warn" style="font-size:.72em">
+    ⚠ <b>Convention hazard.</b> Most free references — <span class="accent">MathWorks NMPC</span>, Bresciani,
+    Gibiansky — give the <b>plus-frame</b> matrix (roll uses only motors&nbsp;2&amp;4, pitch only 1&amp;3).
+    Our course is <b>X-frame</b>: relabel/re-derive or you will wire the wrong mixer. See <code>CONVENTIONS.md</code>.
+  </div>
+  <aside class="notes">
+    The exact motor index ↔ corner mapping is a convention; what matters is that it matches
+    params.mixer_matrix() row signs. Stress: textbook plus-frame is NOT wrong, it's a different airframe.
+  </aside>
+</section>
+
+<!-- 5b. XFRAME FIG -->
+<section>
+  <p class="eyebrow">Geometry · drawn</p>
+  <h2>The X-frame, with the numbers you must not mix up</h2>
+
+  <div class="fig" data-diagram="xframe"><p class="cap">quadsim's exact convention — m1 rear-right ↻, m2 front-right ↺, m3 front-left ↻, m4 rear-left ↺. Label your team aircraft's motors to match, this week.</p></div>
+  <aside class="notes">This slide IS the Wk-5 polarity drill's reference. The mislabeled-motor bug it prevents is the #1 first-flight crash cause.</aside>
+</section>
+
+<!-- MX 1 -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill">interactive</span></p>
+  <h2>Building the mixer row by row</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>total thrust: \( T = f_1 + f_2 + f_3 + f_4 \)</span>
+      <span class="dwhy"><b>All four push the same way</b> (along body-z), so thrust is a plain sum. Row 1 is all ones.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>roll: \( \tau_x = l\,(-f_1 - f_2 + f_3 + f_4) \)</span>
+      <span class="dwhy"><b>Right pair versus left pair.</b> Each motor sits \( l \) from the axis in the X-frame convention; the signs are read straight off the geometry drawing.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">3</span>pitch: \( \tau_y = l\,(f_1 - f_2 - f_3 + f_4) \)</span>
+      <span class="dwhy"><b>Rear pair versus front pair.</b> Same distances, different grouping — the two torque rows are orthogonal, which is what makes roll and pitch independent.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">4</span>yaw: \( \tau_z = c\,(-f_1 + f_2 - f_3 + f_4) \)</span>
+      <span class="dwhy"><b>CW pair versus CCW pair</b>, and \( c = 0.016 \) m is a <i>drag ratio</i>, not a lever arm. Ten times smaller than \( l \) — the numerical statement of yaw's weakness.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">5</span>stack: \( \mathbf u = M\mathbf f \), with \( M \) constant and invertible</span>
+      <span class="dwhy"><b>Four equations, four unknowns.</b> Constant because the geometry never changes; invertible because the four rows are independent. Invert once at startup, use forever.</span></div>
+  </div>
+  <p class="small muted">The four rows are mutually orthogonal — which is why, <i>inside the limits</i>, you can ask for roll without disturbing thrust. Outside the limits, that promise breaks (two slides on).</p>
+
+  <aside class="notes">Building M row by row from the drawing makes it memorable and re-derivable in an exam. Emphasise c is a ratio with units of metres, not an arm.</aside>
+</section>
+
+<!-- 6. THE MIXING MATRIX -->
+<section>
+  <p class="eyebrow">The core equation</p>
+  <h2>The X-frame mixer \( \mathbf{M} \)</h2>
+  <p>With arm \(l\) and torque ratio \(c\), the 4 motor thrusts \(f_i\) map to the wrench by:</p>
+  \[ \begin{bmatrix}T\\\tau_x\\\tau_y\\\tau_z\end{bmatrix}=
+     \underbrace{\begin{bmatrix}1&1&1&1\\-l&-l&l&l\\ l&-l&-l&l\\-c&c&-c&c\end{bmatrix}}_{\mathbf{M}}
+     \begin{bmatrix}f_1\\f_2\\f_3\\f_4\end{bmatrix} \]
+  <div class="cols" style="font-size:.78em;margin-top:.3em">
+    <ul class="muted">
+      <li><b>Row 1</b> (\(T\)): all <code>+1</code> — total thrust is the sum.</li>
+      <li><b>Rows 2–3</b> (\(\tau_x,\tau_y\)): \(\pm l\) on <em>every</em> motor — the X-frame signature.</li>
+      <li><b>Row 4</b> (\(\tau_z\)): \(\pm c\) follows the CW/CCW pattern.</li>
+    </ul>
+    <div class="box">
+      This is exactly <code>params.mixer_matrix()</code>.<br/>
+      The controller returns a wrench; the sim inverts \(\mathbf{M}\) (<code>allocation_matrix</code>) and
+      <b>clips each \(f_i\) to \([f_{\min},f_{\max}]\)</b>.
+    </div>
+  </div>
+  <aside class="notes">l = params.arm = 0.17 m, c = params.k_torque = 0.016 m. M is invertible by construction.</aside>
+</section>
+
+<!-- 7. ALLOCATION / INVERSE -->
+<section>
+  <p class="eyebrow">Going the other way</p>
+  <h2>Allocation: wrench → motors</h2>
+  <p>The controller speaks in wrench; the motors need thrusts. Invert the mixer:</p>
+  \[ \mathbf{f} = \mathbf{M}^{-1}\,\mathbf{u}, \qquad
+     \mathbf{f}\leftarrow \mathrm{clip}(\mathbf{f},\,f_{\min},\,f_{\max}) \]
+  <div class="cols" style="font-size:.8em">
+    <div class="box">
+      <b>Hover check.</b> A pure-thrust wrench \( \mathbf{u}=[\,mg,0,0,0\,]^\top \) must allocate to
+      <b>four equal</b> motor thrusts \( f_i = mg/4 \). If yours doesn't, a sign in \(\mathbf{M}\) is wrong.
+    </div>
+    <div class="box warn">
+      <b>Saturation is nonlinear.</b> Once a motor clips at \(f_{\max}\), the realized wrench no longer
+      equals \(\mathbf{u}\) — the controller has lost authority. We watch <code>log.f</code> for this later.
+    </div>
+  </div>
+  <p class="muted" style="margin-top:.4em">In <code>quadsim</code>: <code>wrench_to_motor_forces(u, p)</code> = <code>allocation_matrix() @ u</code> then <code>np.clip</code>.</p>
+  <aside class="notes">
+    For the hover thrust per motor: params.weight = mass*g = 0.65*9.81 ≈ 6.38 N, /4 ≈ 1.59 N,
+    well under f_max = 4 N — there's ~2.5x headroom by design.
+  </aside>
+</section>
+
+
+
+<!-- MX 2 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Inverting the mixer — and reading the inverse</h2>
+  \[ M^{-1} = \frac{1}{4}\begin{bmatrix} 1 & -1/l & \;\; 1/l & -1/c \\ 1 & -1/l & -1/l & \;\; 1/c \\ 1 & \;\; 1/l & -1/l & -1/c \\ 1 & \;\; 1/l & \;\; 1/l & \;\; 1/c \end{bmatrix} \]
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Column 1 is all \( 1/4 \):</b> a thrust request splits evenly. Obvious, but confirms the algebra.</li>
+    <li><b>Columns 2–3 carry \( 1/(4l) = 1.47 \):</b> a 1 N·m roll request costs ±1.47 N per motor.</li>
+    <li><b>Column 4 carries \( 1/(4c) = 15.6 \):</b> the same 1 N·m in <i>yaw</i> costs ±15.6 N per motor — ten times more.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Read the danger.</span>
+  Hover leaves ~2.4 N of headroom per motor. So the largest clean yaw torque is \( 2.4/15.6 \approx 0.15 \) N·m, versus \( 2.4/1.47 \approx 1.6 \) N·m in roll.<br/><br/><b>Yaw saturates ten times sooner.</b> Every 'my quad won't hold heading in wind' report traces to this column.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Reading M-inverse column by column is a five-minute investment that explains an entire class of hardware complaints.</aside>
+</section>
+
+<!-- MX 3 -->
+<section>
+  <p class="eyebrow">Worked example · by hand</p>
+  <h2>A wrench request, all the way to four numbers</h2>
+  <p>Ask for: hover thrust plus a gentle roll. \( \mathbf u = (6.38,\; 0.20,\; 0,\; 0) \).</p>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Base: \( 6.38/4 = 1.595 \) N to every motor.</li>
+    <li>Roll: \( 0.20 \times 1.47 = 0.294 \) N, subtracted from motors 1–2, added to 3–4.</li>
+    <li>\( \mathbf f = (1.30,\; 1.30,\; 1.89,\; 1.89) \) N.</li>
+    <li>Check limits: all inside \( [0,4] \) ✓ — the wrench is delivered exactly.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Now break it.</span>
+  Same roll request at <b>low</b> thrust, \( T = 1.5 \) N: base \( 0.375 \), so \( \mathbf f = (0.08, 0.08, 0.67, 0.67) \) — still legal, barely.<br/><br/>Push to \( \tau_x = 0.5 \) N·m: \( \mathbf f = (-0.36, -0.36, 1.11, 1.11) \). <b>Negative thrust is impossible.</b> Two motors clamp to zero, and the delivered roll drops to 0.33 N·m while thrust <i>rises</i> to 2.2 N.<br/><br/>You asked for roll and got roll <i>and a climb</i>.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(3 min)</span> — Repeat with \( T = 12 \) N (near full throttle) and \( \tau_x = 0.5 \). What clamps now, and what does the aircraft do instead? <span class="muted">(The upper pair hits \( f_{max} \) ⇒ delivered roll shrinks and thrust <i>falls</i> — the mirror failure. Authority is highest in the middle of the throttle range, which is why hover is a comfortable place to control from.)</span></div>
+
+  <aside class="notes">The two mirrored saturation failures (low and high throttle) are exactly what students meet in aggressive Wk-9 flight. Do the arithmetic together.</aside>
+</section>
+
+<!-- 7b. WIDGET -->
+<section class="dense">
+  <p class="eyebrow">Interactive · drag the sliders</p>
+  <h2>The allocation, live — and where it breaks</h2>
+  <div class="widget" data-widget="mixer"></div>
+  <p class="muted" style="font-size:.55em">Find a request the motors cannot honour.</p>
+  <aside class="notes">The teaching moment is saturation coupling: request tau_x = 0.5 at T = 2 N — motors clamp at 0, and suddenly the delivered T and tau_z change too. Axes decouple ONLY inside the box. This is why aggressive attitude commands sag altitude on a real quad — students will see it on hardware in Wk 9.</aside>
+</section>
+
+<!-- DS 1 -->
+<section>
+  <p class="eyebrow">Reading a datasheet</p>
+  <h2>Motor \( K_v \), propeller pitch, and what they promise</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Spec</th><th>Means</th><th>Our aircraft</th><th>Effect on control</th></tr>
+    <tr><td>\( K_v \) [rpm/V]</td><td>no-load speed per volt</td><td>≈4300</td><td>sets \( \Omega \) range for a given pack</td></tr>
+    <tr><td>prop \( D \times P \)</td><td>diameter × pitch, inches</td><td>≈3×2</td><td>\( k_f \propto D^4 \) — diameter dominates</td></tr>
+    <tr><td>cells (S)</td><td>pack voltage \( \approx 3.7\text{V} \times S \)</td><td>3S ≈ 11.1 V</td><td>\( \Omega_{max} = K_v \times V \)</td></tr>
+    <tr><td>C rating</td><td>max current \( = C \times \) capacity</td><td>≥25C</td><td>low C ⇒ voltage sag ⇒ thrust sag</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Put the numbers together.</span>
+  \( \Omega_{max} \approx 4300 \times 11.1 = 47{,}700 \) rpm no-load, maybe 60% of that loaded ≈ 3000 rad/s.<br/><br/>With \( k_f = 2.5\times10^{-6} \): \( f_{max} \approx 2.5\times10^{-6} \times 3000^2 \)… which overshoots reality, because \( k_f \) itself falls as the motor loads up. <b>This is why we measure rather than compute.</b></div>
+    </div>
+  </div>
+  <p class="small muted">Datasheets size the aircraft; the scale calibrates it. Both are needed, and only one of them is trustworthy for control design.</p>
+
+  <aside class="notes">Students building their own aircraft need this vocabulary. The 'datasheet sizes, scale calibrates' line is the transferable rule.</aside>
+</section>
+
+<!-- TW 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Thrust-to-weight: the one ratio that sets the aircraft's character</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>\( \mathrm{T/W} = 4f_{max}/mg \). Ours: \( 16/6.38 \approx 2.5 \).</li>
+    <li><b>Hover throttle</b> sits at \( 1/\mathrm{T/W} \approx 40\% \) of maximum thrust.</li>
+    <li><b>Spare vertical acceleration</b> \( = (\mathrm{T/W} - 1)g \approx 1.5g \approx 15 \) m/s².</li>
+    <li><b>Attitude authority</b> comes from the <i>same</i> headroom — which is why aggressive climbs and aggressive rolls compete for one budget.</li>
+  </ul>
+    </div>
+    <div>
+  <table class="data">
+    <tr><th>T/W</th><th>Character</th><th>Typical</th></tr>
+    <tr><td>1.2–1.5</td><td>sluggish, long endurance</td><td>survey, agriculture</td></tr>
+    <tr class="hl"><td>2–3</td><td><b>balanced — ours</b></td><td>photography, teaching</td></tr>
+    <tr><td>4–8</td><td>aerobatic</td><td>racing, freestyle</td></tr>
+    <tr><td>&lt;1.1</td><td>cannot climb meaningfully</td><td>overloaded; a warning sign</td></tr>
+  </table>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — Your team clips on a 100 g payload. New T/W? Hover throttle? <span class="muted">(\( m = 0.75 \) kg ⇒ T/W = 2.2, hover throttle ≈ 46%. Still comfortable — but the spare acceleration fell from 1.5g to 1.2g, and every controller gain you tuned is now facing a different plant. This is mission M3.)</span></div>
+
+  <aside class="notes">T/W is the number pilots quote and engineers compute. Linking payload → T/W → gains previews the adaptive-control motivation.</aside>
+</section>
+
+<!-- EN 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Where the energy goes — and how long you can hover</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li><b>Momentum theory's induced power:</b> \( P_i = \dfrac{T^{3/2}}{\sqrt{2\rho A}} \) — note the \( 3/2 \) power: doubling mass costs 2.8× the power.</li>
+    <li>Real rotors add profile drag: total \( P \approx P_i / \mathrm{FM} \), figure of merit \( \mathrm{FM} \approx 0.5\text{–}0.7 \) for small props.</li>
+    <li>Hover time \( \approx \dfrac{E_{battery} \times \text{usable}}{P} \).</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Our aircraft, honestly.</span>
+  Disc area \( A = 4 \times \pi(0.038)^2 \approx 0.018 \) m². With \( T = 6.38 \) N:<br/>\( P_i = 6.38^{1.5}/\sqrt{2 \times 1.225 \times 0.018} \approx 77 \) W.<br/>With FM = 0.6 ⇒ \( P \approx 128 \) W.<br/><br/>A 3S 1300 mAh pack holds \( \approx 14 \) Wh; at 80% usable ⇒ <b>≈ 5 minutes of hover</b>.<br/><br/>That five minutes is your lab session's real constraint — and why the tethered F570 demonstration aircraft, with its 1.75 h endurance, is such a useful teaching tool.</div>
+    </div>
+  </div>
+  <p class="small muted">Bigger propellers move more air more slowly for the same thrust — which is why efficient aircraft look ungainly and racing quads do not. The \( \sqrt{A} \) in the denominator is the whole story.</p>
+
+  <aside class="notes">The 5-minute number sets expectations for hardware sessions; the disc-loading insight explains every airframe they will ever see.</aside>
+</section>
+
+<!-- WIDGET hoverpower -->
+<section>
+  <p class="eyebrow">One level deeper · interactive</p>
+  <h2>Hover power — momentum theory with sliders</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="hoverpower"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> Prediction: if you double the propeller diameter, does hover power halve, quarter, or fall by √2? And what does +20 % mass cost in power — 20 %, 31 %, or 44 %?</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#hoverpower">Digital Lab → hoverpower</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">P ∝ T^{3/2}/√A. Both answers are on the widget; make them commit first.</aside>
+</section>
+
+<!-- 7c. QUIZ -->
+<section>
+  <p class="eyebrow">Concept check · 00:50</p>
+  <h2>Predict before you compute</h2>
+  <div class="quiz">
+    <div class="q">Q1 — Why do diagonal motor pairs (m1+m3 vs m2+m4) spin in opposite directions?</div>
+    <p class="fragment"><span class="ok">Yaw torque balance.</span> <span class="why">Each prop&#39;s aerodynamic drag torque reacts on the airframe; opposite pairs cancel it at hover. Yaw control is then <i>differential</i> drag — tiny (c = 0.016 m vs l = 0.17 m), which is why yaw is every quad&#39;s weakest axis. Check the row scales in M.</span></p>
+    <div class="q fragment">Q2 — At hover each motor pushes ~1.59 N (f_max = 4 N). Roughly how much roll torque is available <i>without</i> touching total thrust?</div>
+    <p class="fragment"><span class="ok">&plusmn;0.8 N&middot;m-ish: shift up to ~2.4 N across the roll pair &rarr; &tau; &asymp; 2&times;2.4&times;0.17.</span> <span class="why">The exact number matters less than the habit: <b>control authority is a budget readable off the mixer</b> — and it shrinks as T approaches 0 or 4f_max. Your Wk-5 gains must live inside this budget.</span></p>
+  </div>
+</section><!-- 7d. SATURATION POLICY -->
+<section>
+  <p class="eyebrow">One level deeper · what real autopilots do</p>
+  <h2>When the request doesn't fit: desaturation is a <i>policy</i></h2>
+  <div class="cols top">
+    <ul class="small">
+      <li>The inverse mixer can demand \( f_i &lt; 0 \) or \( f_i &gt; f_{max} \). Clamping per-motor <b>silently edits your wrench</b> — which axis gets sacrificed is then an accident.</li>
+      <li>Better: decide the sacrifice <b>by design</b>. The standard priority: keep <b>roll/pitch torque</b> (a tilted quad falls), then thrust, then yaw (annoying, not fatal).</li>
+      <li>Mechanism: if a motor would exceed its limit, shift <i>all four</i> thrusts equally (moves only T), and scale back \( \tau_z \) first — exactly what PX4's airmode desaturation does.</li>
+    </ul>
+    <div class="env exm"><span class="eh">Worked example.</span>
+    Request at low throttle: \( T = 2.0 \) N, \( \tau_x = 0.5 \) N·m ⇒ \( f = [\,-0.24,\ -0.24,\ 1.24,\ 1.24\,] \) N (from the widget). Naive clamp to 0 delivers τx = 0.42 N·m <i>and</i> raises T to 2.48 N — you commanded roll, got roll <b>and a climb</b>. Priority desaturation instead raises all four by 0.24 N first: T = 2.96 N, but τx delivered <i>exactly</i>. Both are compromises; only one is a <i>chosen</i> compromise.</div>
+  </div>
+  <aside class="notes">This slide upgrades the widget observation into engineering doctrine. Exam-style question: "state a desaturation priority order and defend it for a delivery quad vs a racing quad."</aside>
+</section>
+
+<!-- VIB 1 -->
+<section>
+  <p class="eyebrow">The thing that ruins estimators</p>
+  <h2>Vibration, aliasing, and where you bolt the IMU</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Each rotor at \( \Omega \approx 800 \) rad/s excites the frame at \( \approx 127 \) Hz — plus blade-passing harmonics.</li>
+    <li>The IMU samples at, say, 1 kHz. A 127 Hz vibration is <i>in band</i>; a 1200 Hz harmonic <b>aliases</b> down and appears as a slow, fake motion.</li>
+    <li>Fake motion enters the estimator, the controller reacts, the motors change speed, the vibration changes — <b>a closed loop through the airframe</b>.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The three defences.</span>
+  <b>1. Mechanical:</b> soft-mount the flight controller; balance propellers (a 0.1 g imbalance is visible in the traces). <b>2. Anti-alias:</b> analogue low-pass before sampling — no digital filter can undo aliasing after the fact. <b>3. Digital:</b> notch filters tracking rotor speed, standard in modern firmware.</div>
+    </div>
+  </div>
+  <p class="small">This is the physical reason behind Week 5's fix #5 (filtered derivative), and behind the advice to stop raising \( K_d \) when the motors start to hiss. <b>The noise is not abstract — it is your propellers, arriving through the frame.</b></p>
+
+  <aside class="notes">Connects Wk 3 hardware to Wk 5 tuning and Wk 8 estimation. The aliasing point is the one students have usually never considered.</aside>
+</section>
+
+<!-- CQ 3 -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Three questions before the lab</h2>
+  <div class="quiz">
+    <div class="q">Q1 — You swap to propellers of 20% larger diameter, same motors. What happens to hover throttle and to your Week-5 gains?</div>
+    <p class="fragment"><span class="ok">\( k_f \) rises roughly as \( D^4 \) (≈2×), so hover throttle drops sharply — and the plant gain seen by your controller doubles.</span> <span class="why">Every gain you tuned is now effectively twice as hot. Changing propellers is changing the plant; retune, do not hope.</span></p>
+    <div class="q fragment">Q2 — Two motors are wired so that motors 1 and 2 both spin CW (instead of 1 and 3). Roll and pitch still work on the bench. What fails, and when?</div>
+    <p class="fragment"><span class="ok">Yaw — completely.</span> <span class="why">The drag torques no longer cancel at hover, so the aircraft yaws constantly and \( \tau_z \) commands fight a standing bias. Roll and pitch look fine, which is exactly why this bug survives the bench and shows up on the first flight.</span></p>
+    <div class="q fragment">Q3 — At hover your controller asks for \( \tau_z = 0.3 \) N·m. Is that a reasonable request?</div>
+    <p class="fragment"><span class="ok">No — it needs ±4.7 N per motor, far beyond the 2.4 N of headroom.</span> <span class="why">The mixer will clamp and deliver perhaps a third of it, while disturbing thrust. Yaw commands must be scaled to the \( 1/(4c) = 15.6 \) reality, not to roll intuition.</span></p>
+  </div>
+
+  <aside class="notes">Q2 is a real build error that has cost real aircraft; it also justifies the motor-labelling milestone.</aside>
+</section>
+
+<!-- 8. FULL NONLINEAR MODEL -->
+<section>
+  <p class="eyebrow">Putting it together</p>
+  <h2>The full nonlinear model</h2>
+  <p>With the wrench in hand, the rigid-body dynamics (z-up / ENU, gravity \(-z\), thrust \(+\)body-\(z\)) are:</p>
+  \[ \dot{\mathbf p}=\mathbf v,\quad
+     \dot{\mathbf v}=\begin{bmatrix}0\\0\\-g\end{bmatrix}+\frac{1}{m}\,R\begin{bmatrix}0\\0\\T\end{bmatrix},\quad
+     \dot{\boldsymbol\eta}=W(\boldsymbol\eta)\,\boldsymbol\omega,\quad
+     \mathbf{I}\dot{\boldsymbol\omega}=\boldsymbol\tau-\boldsymbol\omega\times\mathbf{I}\boldsymbol\omega \]
+  <div class="box" style="font-size:.74em;margin-top:.3em">
+    \(R\) is the body→world matrix for <b>intrinsic ZYX</b> Euler \((\phi,\theta,\psi)\); \(W(\boldsymbol\eta)\)
+    maps body rates → Euler-rates. State \(\mathbf{x}=[\,\mathbf p,\mathbf v,(\phi,\theta,\psi),\boldsymbol\omega\,]\in\mathbb{R}^{12}\).
+    The wrench \([T,\boldsymbol\tau]\) is the <em>only</em> way a controller touches this model.
+  </div>
+  <aside class="notes">
+    This is dynamics.state_derivative verbatim. Point out gimbal lock lives in W at theta=±90°.
+    Gyroscopic term omega×Iomega is small near hover but we keep it — it's what makes the model "nonlinear".
+  </aside>
+</section>
+
+<!-- 9. WORKED EXAMPLE / SIMULATOR -->
+<section>
+  <p class="eyebrow">In the simulator</p>
+  <h2>Round-trip: wrench → motors → wrench</h2>
+  <pre><code class="language-python" data-trim data-noescape>import numpy as np
+from quadsim import QuadParams
+from quadsim.dynamics import wrench_to_motor_forces, motor_forces_to_wrench
+
+p = QuadParams()
+u = np.array([p.weight, 0.0, 0.0, 0.0])   # hover: thrust only, no torque
+
+f = wrench_to_motor_forces(u, p)          # allocation_matrix() @ u, then clip
+print(f.round(3))                         # -> [1.594 1.594 1.594 1.594]  (= mg/4)
+
+u_back = motor_forces_to_wrench(f, p)      # mixer_matrix() @ f
+print(np.allclose(u_back, u))             # -> True   (round-trips when unsaturated)</code></pre>
+  <p class="muted" style="font-size:.72em">Hover thrust per motor \(= mg/4 = 0.65\cdot 9.81/4 \approx 1.59\,\)N — far below \(f_{\max}=4\,\)N (≈2.5× headroom).</p>
+  <aside class="notes">
+    Run this live. The four equal numbers are the "aha": a level hover is a perfectly balanced
+    allocation. Then nudge tau_z and watch the CW pair vs CCW pair split.
+  </aside>
+</section>
+
+<!-- EX 3 -->
+<section>
+  <p class="eyebrow">Beyond four rotors</p>
+  <h2>Why the same matrix runs hexacopters, and what changes</h2>
+  <table class="data">
+    <tr><th>Configuration</th><th>Rotors</th><th>Mixer shape</th><th>What it buys</th></tr>
+    <tr><td>Quad X (ours)</td><td>4</td><td>4×4, square, invertible</td><td>simplest; a rotor failure is fatal</td></tr>
+    <tr class="hl"><td>Hexacopter</td><td>6</td><td>4×6, <b>wide</b> ⇒ infinitely many solutions</td><td>pseudo-inverse picks one; survives one rotor loss</td></tr>
+    <tr><td>Octocopter</td><td>8</td><td>4×8</td><td>redundancy, heavy lift; used in cinema and agriculture</td></tr>
+    <tr><td>Tilt-rotor / omni</td><td>4–8 + servos</td><td>full 6-DOF wrench</td><td>can hold attitude <i>and</i> translate independently — no longer underactuated</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">The pseudo-inverse, in one line.</span>
+  When \( M \) is wide, \( \mathbf f = M^\top (MM^\top)^{-1}\mathbf u \) gives the <b>minimum-energy</b> solution among all that deliver the wrench. Redundancy becomes an optimisation — the first appearance of a theme that owns Weeks 7 and 11.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Why we still teach the quad.</span>
+  Every idea transfers unchanged: the wrench, the allocation, the saturation trade. Only the matrix's shape differs. Learn it on four rotors and a hexacopter costs you an afternoon.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Answers 'why only quadrotors?' definitively and plants the pseudo-inverse/optimisation seed for Wk 7.</aside>
+</section>
+
+<!-- TH 3 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Derive \( M \) for a <b>plus-frame</b> quad (motors on the axes, not between them). Which rows change, and why is the X-frame preferred in practice?</li>
+    <li>Compute \( M^{-1} \) numerically for our parameters and verify \( MM^{-1} = I \) to machine precision.</li>
+    <li>For \( T \in \{2, 6.38, 12\} \) N, find the largest \( \tau_x \) deliverable without saturation. Plot authority against thrust and explain the shape.</li>
+    <li>A motor fails (\( f_3 = 0 \) permanently). Show the remaining system cannot hold both attitude and yaw, and identify which axis you would sacrifice.</li>
+    <li>Using momentum theory, estimate how \( k_f \) changes at 2000 m altitude (\( \rho \) drops ~18%). What happens to hover throttle?</li>
+    <li>Propose a desaturation priority for an agricultural sprayer (heavy, slow) and for a racing quad, and justify each in two sentences.</li>
+  </ol>
+  <div class="box warn">Question 3's plot is worth doing properly — it is the single most useful figure for understanding why your controller behaves differently at different throttle settings.</div>
+
+  <aside class="notes">Q4 (rotor-out) is a genuine research topic and a good hook for curious students.</aside>
+</section>
+
+<!-- CODE 3 -->
+<section class="dense">
+  <p class="eyebrow">Code walkthrough</p>
+  <h2>\( \texttt{params.py} \) — every number the simulator believes</h2>
+  <pre><code class="language-python">@dataclass
+class QuadParams:
+    mass:    float = 0.65                        # kg      ← your scale
+    g:       float = 9.81
+    inertia: np.ndarray = (2.3e-3, 2.3e-3, 4.0e-3)   # kg·m²  ← bifilar test
+    arm:     float = 0.17                        # m       ← ruler
+    k_torque:float = 0.016                       # m       ← drag/thrust ratio
+    f_min:   float = 0.0                         # N       ← props only push
+    f_max:   float = 4.0                         # N       ← static thrust test
+    dt:      float = 0.005                       # s       (200 Hz)
+
+    def mixer_matrix(self):      # [T; tau] = M @ f
+        l, c = self.arm, self.k_torque
+        return np.array([[ 1, 1, 1, 1],
+                         [-l,-l, l, l],
+                         [ l,-l,-l, l],
+                         [-c, c,-c, c]])</code></pre>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Eight numbers define the aircraft. <b>Six of them your team will measure</b> in the next three weeks.</li>
+    <li>\( f_{min} = 0 \) is not a formality: it is the physical fact that fixed-pitch propellers cannot pull, and it is half of every saturation story.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The team's job, concretely.</span>
+  Replace the defaults with <i>your</i> aircraft's values and re-run every lab. Your controller then flies <b>your</b> vehicle in simulation — which is what makes the Week-10 sim-vs-real comparison meaningful rather than decorative.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Make the connection explicit: this file is the interface between the team's controller and everything the simulator does to it.</aside>
+</section>
+
+<!-- DES 1 -->
+<section>
+  <p class="eyebrow">Worked example · design, not analysis</p>
+  <h2>Size an aircraft for a 500 g payload</h2>
+  <p>Requirement: carry 500 g, hover 8 minutes, T/W ≥ 2. Work it in the order a designer would.</p>
+  <ol class="small">
+    <li><b>Mass budget.</b> Payload 500 g + airframe/electronics ≈ 400 g + battery (unknown) ⇒ start at \( m \approx 1.2 \) kg and iterate.</li>
+    <li><b>Thrust needed.</b> \( T_{hover} = 11.8 \) N; T/W 2 ⇒ \( 4f_{max} \ge 23.6 \) N ⇒ \( f_{max} \ge 5.9 \) N per motor.</li>
+    <li><b>Power.</b> Larger props for efficiency: 8-inch (\( A = 4\times\pi(0.10)^2 = 0.126 \) m²). \( P_i = 11.8^{1.5}/\sqrt{2(1.225)(0.126)} \approx 73 \) W; FM 0.65 ⇒ \( P \approx 112 \) W.</li>
+    <li><b>Battery.</b> 8 min at 112 W = 15 Wh usable ⇒ ≈19 Wh pack ⇒ 4S 1300 mAh ≈ 200 g. <b>Consistent with the assumed budget</b> — iteration converged.</li>
+    <li><b>Check the control consequence.</b> \( I \) roughly quadruples versus our teaching quad (bigger arms, more mass) while torque authority rises similarly — so attitude bandwidth lands in the same ballpark, but everything is slower and less forgiving.</li>
+  </ol>
+  <div class="env rmk"><span class="eh">The lesson.</span>
+  Note what happened: <b>the same eight parameters</b>, re-solved. Aircraft design is not a different subject from aircraft modelling — it is the same model, read backwards. And the last step is the one engineers skip and regret: <i>what does this do to the controller?</i></div>
+
+  <aside class="notes">A genuine design loop in five steps. The final 'what does this do to the controller' step is the one that makes them systems engineers rather than component pickers.</aside>
+</section>
+
+<!-- GRD 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Prop guards, ducts, and what they cost you</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Our teaching aircraft (and the F570 demonstrator) fly with <b>full-perimeter guards</b>. That is a safety requirement indoors, not a styling choice.</li>
+    <li>Aerodynamically, a close-fitting duct <i>helps</i>: it suppresses tip vortices and can add 5–15% static thrust for the same power.</li>
+    <li>Mechanically, it hurts: guards add mass at large radius, so \( I_{zz} \) and \( I_{xx} \) rise by the parallel-axis theorem — <b>agility falls quadratically with guard radius</b>.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The trade, numerically.</span>
+  20 g of guard at 0.12 m radius adds \( \Delta I \approx 4 \times 0.005 \times 0.12^2 \approx 2.9\times10^{-4} \) kg·m² — roughly <b>+13% on \( I_{xx} \)</b>.<br/><br/>Same torque, 13% less angular acceleration ⇒ your attitude loop's \( \omega_n \) drops ~6%. Small, real, and a good reason to re-identify \( \mathbf I \) <i>after</i> fitting guards, not before.</div>
+    </div>
+  </div>
+  <p class="small muted">Safety hardware changes the plant. That sentence is worth remembering in general: every physical modification is a modelling event.</p>
+
+  <aside class="notes">Directly relevant to their aircraft. The 'safety hardware changes the plant' line generalises to payloads, cameras, everything.</aside>
+</section>
+
+<!-- RD 1 -->
+<section>
+  <p class="eyebrow">One level deeper</p>
+  <h2>Rotor drag: the term that quietly damps your quadrotor</h2>
+  <div class="cols top">
+    <div>
+  <p>A rotor moving sideways through the air experiences an in-plane force — <b>H-force</b> or rotor drag — roughly proportional to horizontal speed:</p>
+  \[ \mathbf F_H \approx -k_D \, \Omega \, \mathbf v_{xy} \]
+  <ul class="small">
+    <li>It acts like a <b>velocity damper</b> the model does not contain.</li>
+    <li>Typical magnitude: a few percent of thrust at moderate speeds — small, but it is a <i>stabilising</i> effect.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why it matters that we omit it.</span>
+  Your simulated quadrotor is slightly <b>less</b> damped than the real one. So a controller tuned in <code>quadsim</code> is, if anything, conservative when it meets the aircraft — the error is in the safe direction.<br/><br/>The reverse case is the dangerous one: models that flatter the plant (extra damping, no lag, no noise) produce controllers that fail on contact with reality. <b>Know which way your model errs.</b></div>
+    </div>
+  </div>
+
+  <aside class="notes">'Know which way your model errs' is a first-class engineering habit and reassures students before hardware week.</aside>
+</section>
+
+<!-- SUM 3 -->
+<section class="dense">
+  <p class="eyebrow">Summary of the model chain</p>
+  <h2>From four numbers to twelve derivatives</h2>
+  <div class="fig plain" data-diagram="eommap"><p class="cap">Weeks 2 and 3 together: the mixer turns four motor commands into a wrench; the wrench drives the two Newton–Euler halves; attitude couples rotation into translation.</p></div>
+  <table class="data">
+    <tr><th>You command</th><th>Mixer gives</th><th>Physics gives</th><th>Week</th></tr>
+    <tr><td>\( f_1..f_4 \) [N]</td><td>\( T, \boldsymbol\tau \)</td><td>\( \dot{\mathbf v}, \dot{\boldsymbol\omega} \)</td><td>3 + 2</td></tr>
+    <tr><td>(subject to \( 0 \le f_i \le 4 \))</td><td>(exactly, if unsaturated)</td><td>(twelve derivatives)</td><td>—</td></tr>
+  </table>
+  <p class="small"><b>The model is now complete.</b> Next week we ask what it looks like <i>near hover</i> — and discover why it cannot be left alone.</p>
+
+  <aside class="notes">Close the modelling arc cleanly. Two weeks of physics, one function, and the next four weeks are about controlling it.</aside>
+</section>
+
+<!-- ALLOC 1 -->
+<section>
+  <p class="eyebrow">The idea worth stealing</p>
+  <h2>Control allocation is a pattern, not a quadrotor trick</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>We split the problem in two: a controller decides <b>what wrench it wants</b>; an allocator decides <b>which actuators deliver it</b>.</li>
+    <li>The controller never learns how many rotors exist. Swap the airframe, swap \( M \), keep the controller.</li>
+    <li>This is the same pattern as a car's traction control (torque request → four wheels), a ship's thruster allocation, and a satellite's reaction-wheel distribution.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why the split pays.</span>
+  It turns one hard 12-state, 4-input problem into two easy ones: a physics problem (allocation, solved once by a matrix) and a control problem (which now sees clean, orthogonal inputs). <b>Most good engineering is a well-chosen interface</b>, and this is the course's first one.</div>
+    </div>
+  </div>
+  <p class="small muted">You will meet the interface again in Week 12, when MPC produces a wrench and the same mixer consumes it, unchanged.</p>
+
+  <aside class="notes">Naming the pattern (rather than just using it) is what makes it transferable to their future work.</aside>
+</section>
+
+<!-- SPIN 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Rotor spin-up: the actuator has its own dynamics</h2>
+  <div class="cols top">
+    <div>
+  <p>Rotors have inertia \( J_r \). Commanding a new thrust means <i>accelerating a spinning disc</i>:</p>
+  \[ J_r \dot\Omega = \tau_{motor} - k_q \Omega^2 \;\Longrightarrow\; \text{first-order-ish lag } \tau_m \]
+  <ul class="small">
+    <li>Typical \( \tau_m \): 20–80 ms for small props, more for large ones.</li>
+    <li>Deceleration is usually <b>slower</b> than acceleration — the motor can push but only drag can slow it. Asymmetric, and rarely modelled.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What it costs at the crossover.</span>
+  Your attitude loop will run near \( \omega_n \approx 13 \) rad/s. A 40 ms lag contributes \( \arctan(13 \times 0.04) \approx 27^\circ \) of phase lag right where the loop is most sensitive.<br/><br/>Phase margin is finite; 27° of it is now spent before your controller does anything. <b>This is the quantitative reason hardware gains land below simulation gains</b> — a claim you will verify yourself in Week 9.</div>
+    </div>
+  </div>
+
+  <aside class="notes">This slide is the bridge from Wk-3 hardware to the Wk-5 tuning ceiling; give the arctan number, it is what makes the claim checkable.</aside>
+</section>
+
+<!-- LOG 3 -->
+<section>
+  <p class="eyebrow">Worked example · read a real log</p>
+  <h2>Spotting saturation without being told</h2>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh">The symptom in the data.</span>
+  During an aggressive Week-9 manoeuvre a team's log shows:<br/><br/>• commanded \( \tau_x \): smooth, 0.6 N·m peak<br/>• measured roll rate: <b>flattens</b> mid-manoeuvre<br/>• altitude: dips 0.3 m at the same instant<br/>• two motor channels: pinned at their limits</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The diagnosis, in order.</span>
+  1. Motors pinned ⇒ the mixer clamped.<br/>2. Roll rate flattening ⇒ delivered \( \tau_x \) &lt; commanded.<br/>3. <b>The altitude dip is the tell</b>: clamping redistributed thrust, so the axes coupled — precisely the widget's lesson.<br/><br/><b>Conclusion:</b> not a tuning problem. An <i>authority</i> problem: the manoeuvre asked for more than the aircraft owns. Fix by limiting the reference (Week 9) or by respecting limits inside the optimiser (Week 11) — not by raising gains.</div>
+    </div>
+  </div>
+  <p class="small">Learning to read 'the aircraft ran out of authority' from a log — rather than reflexively retuning — is one of the more valuable habits this course can leave you with.</p>
+
+  <aside class="notes">Diagnostic reasoning practice. This exact pattern recurs in Wk-10 debriefs; teams that recognise it save an evening.</aside>
+</section>
+
+<!-- MAP 3 -->
+<section class="dense">
+  <p class="eyebrow">Concept map</p>
+  <h2>Week 3, in one page</h2>
+  <div class="fig plain" data-diagram="xframe"><p class="cap">The geometry sets M; M turns four scalars into a wrench; the wrench is what Weeks 5–12 will command.</p></div>
+  <table class="data">
+    <tr><th>Concept</th><th>One-line statement</th><th>Where it returns</th></tr>
+    <tr><td>\( f = k_f\Omega^2 \)</td><td>momentum theory, not a fitted curiosity</td><td>Wk 5 (gain scaling), hardware ID</td></tr>
+    <tr><td>drag torque \( = c f \)</td><td>yaw is a by-product of lift</td><td>every yaw-authority complaint</td></tr>
+    <tr><td>mixer \( M \)</td><td>geometry, frozen into a matrix</td><td>Wks 5–12, unchanged</td></tr>
+    <tr><td>allocation \( M^{-1} \)</td><td>wrench → motors</td><td>the controller's last step, always</td></tr>
+    <tr class="hl"><td>saturation</td><td>the hard nonlinearity</td><td>Wk 5 (fixes), Wk 11 (MPC's raison d'être)</td></tr>
+  </table>
+
+  <aside class="notes">Recap in 60 seconds; the right-hand column is what makes students feel the coherence of the syllabus.</aside>
+</section>
+
+<!-- AHEAD 3 -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: the model meets its own instability</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>You now have \( f(\mathbf x, \mathbf u) \) <b>and</b> the map from motors to \( \mathbf u \). The aircraft is fully described.</li>
+    <li>Next week we ask a narrower question: near hover, what does this model look like to a control engineer?</li>
+    <li>The answer — a set of integrator chains with no restoring force — is what makes every remaining week necessary.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Bring to Week 4:</b> your hand-derived mixer matched to <code>params.mixer_matrix()</code>, and the <code>kffit</code> widget's fit to the instructor's bench data. We will put the fitted \( k_f \) into the linearisation and see what it changes.</div>
+    </div>
+  </div>
+
+  <aside class="notes">End by making the parameters feel load-bearing: these numbers become next week's design model, and in Week 10 some of them will quietly be wrong.</aside>
+</section>
+
+<!-- F570 3a -->
+<section class="dense">
+  <p class="eyebrow">The instructor's aircraft</p>
+  <h2>Real identification data from the F570 demonstrator</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>PWM</th><th>Thrust, 1 motor</th><th>Thrust, 4 motors</th></tr>
+    <tr><td>150</td><td>0.007 N</td><td>3 g</td></tr>
+    <tr><td>400</td><td>0.098 N</td><td>40 g</td></tr>
+    <tr><td>700</td><td>0.284 N</td><td>116 g</td></tr>
+    <tr><td>1000</td><td>0.490 N</td><td>200 g</td></tr>
+    <tr><td>1250</td><td>0.637 N</td><td>260 g</td></tr>
+    <tr><td>1500</td><td><b>0.735 N</b></td><td><b>300 g</b></td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What the table tells you.</span>
+  Vendor's fit, thrust \( x \) in newtons:  \[ \mathrm{PWM} = 3481x^3 - 3864x^2 + 2774x + 156 \]
+Aircraft mass 195 g \( \Rightarrow \) hover needs 1.91 N total, 0.478 N per motor \( \Rightarrow \) <b>PWM ≈ 990, about 66% of the range</b>.<br/><br/>Thrust-to-weight \( = 2.94/1.91 \approx \textbf{1.54} \) — modest by design. A tethered teaching platform does not need to be aerobatic, and low T/W makes it far more forgiving to stand next to.</div>
+    </div>
+  </div>
+  <p class="small muted">Note this is a <b>PWM → thrust</b> map, not \( \Omega \to \) thrust: the vendor calibrated the entire command chain end-to-end, which is exactly the pragmatic move when you cannot measure rotor speed.</p>
+  <div class="turn"><span class="tt">(2 min)</span> — At hover the aircraft sits at PWM 990 of 1500. How much roll authority does that leave, in newtons? <span class="muted">(Upward: 0.735 − 0.478 = 0.257 N per motor. Downward: 0.478 N. Roughly symmetric — which is why 66% is a well-chosen hover point.)</span></div>
+
+  <aside class="notes">Real vendor data beats invented numbers. The T/W = 1.54 figure explains the aircraft's gentle character, and the 66% hover point is a genuine design insight.</aside>
+</section>
+
+<!-- F570 3b -->
+<section>
+  <p class="eyebrow">The aircraft in this room</p>
+  <h2>Two mixers, two motor numberings — and why it matters</h2>
+  <div class="cols top">
+    <div>
+  <div class="env exm"><span class="eh"><code>quadsim</code>.</span>
+  m1 rear-right ↻ · m2 front-right ↺ · m3 front-left ↻ · m4 rear-left ↺  \[ \tau_x = l(-f_1 - f_2 + f_3 + f_4) \]
+</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">F570 firmware.</span>
+  Motors <b>1, 3 counter-clockwise</b>; 2, 4 clockwise — the opposite pairing.  \[ u_2 = \tfrac{\sqrt2}{2} b\,(-f_1 + f_2 + f_3 - f_4) \]
+with half-diagonal \( b = 0.09 \) m, so the effective arm is \( b/\sqrt2 = 0.0636 \) m.</div>
+    </div>
+  </div>
+  <ul class="small">
+    <li><b>Both are correct.</b> Neither is more right — they are different labellings of the same aircraft.</li>
+    <li><b>Mixing them is catastrophic.</b> A controller written against one convention, flashed onto the other, produces positive feedback on roll: the aircraft flips within 0.2 s of arming.</li>
+    <li>This is precisely why Week 3's milestone says <b>memorise the motor numbering</b>, and why every real flight-test programme has a props-off polarity drill before the first arming.</li>
+  </ul>
+  <div class="env rmk"><span class="eh">The transferable habit.</span>
+  When you adopt someone else's firmware, the first thing to verify is not the gains — it is the <b>geometry convention</b>: motor order, spin directions, axis signs, and Euler sequence. Four checks, ten minutes, and they prevent the most expensive class of first-flight failure.</div>
+
+  <aside class="notes">This is a real, checkable difference between two systems the students will both touch. It makes the abstract 'conventions matter' warning concrete.</aside>
+</section>
+
+<!-- 10. THE LAB -->
+<section class="divider">
+  <p class="eyebrow">Second half · hands-on</p>
+  <h2>Now you build it</h2>
+  <hr class="drule"/>
+  <ul>
+    <li>Open the <b>Week 3 lab sheet</b> → compute per-motor hover thrust \(mg/4\).</li>
+    <li>Build the <b>X-frame mixer</b> \(\mathbf{M}\) by hand and invert it.</li>
+    <li>Confirm the <b>round-trip</b> <code>wrench → motors → wrench</code> and that hover allocates four equal thrusts.</li>
+    <li><b>Deliverable:</b> the mixer matrix + the hover-allocation check. graded graded.</li>
+  </ul>
+  <p style="margin-top:1em"><a class="btn" href="../labs/week03-quadrotor-modeling.html">Open the Week 3 lab sheet →</a></p>
+</section>
+
+
+
+<!-- 10b. BREAK -->
+<section class="divider">
+  <h2><span class="tchip">01:30</span> Break — 10 minutes</h2>
+  <hr class="drule"/>
+  <p>After: mixer &rarr; hover trim &rarr; a numerical (A,B) — the design model for everything until Wk 15.</p>
+</section>
+
+<!-- 10c. LAB SESSION -->
+<section>
+  <div class="labwrap">
+    <p class="eyebrow" style="color:#1ec8c8">Lab session · 01:50 &rarr; 02:50</p>
+    <h3>Build order &amp; checkpoints</h3>
+    <p class="cp"><b>02:05</b> — per-motor hover thrust computed from <code>params</code>; round-trip wrench &rarr; motors &rarr; wrench = identity</p>
+    <p class="cp"><b>02:20</b> — saturation experiment: find the largest roll torque deliverable at 0.5&times;, 1&times;, 1.5&times; hover thrust</p>
+    <p class="cp"><b>02:35</b> — finite-difference (A,B) about hover computed; spot-check three entries you can predict by hand</p>
+    <p class="cp"><b>02:50</b> — open-loop poles printed: <i>see</i> the instability you&#39;ll cure in Wk 5</p>
+    <p style="margin-top:.8em"><a class="btn" href="../labs/week03-quadrotor-modeling.html">Open the Week 3 lab sheet &rarr;</a></p>
+  </div>
+  <aside class="notes">Pass the F570 around during the lab: point at motors 1-4 and have them match the numbering to quadsim&#39;s convention by eye — a mislabeled motor is the #1 mixer bug on real aircraft, and the vendor&#39;s own numbering differs, which is the teaching point.</aside>
+</section>
+
+<!-- 10d. MILESTONE -->
+<section>
+  <p class="eyebrow">Team project · Wk 3 of 10 — hardware starts now</p>
+  <h2>Milestone board</h2>
+  <div class="miles">
+    <div class="m due"><b>Everyone</b>the X-frame mixer derived by hand and matched to <code>params.mixer_matrix()</code> — <b>motor numbering memorised</b></div>
+    <div class="m"><b>1 · Modeling</b><code>kffit</code> widget: the square law fitted to the instructor&#39;s bench data; the residual read</div>
+    <div class="m"><b>2 · Inner loop</b>allocation + saturation understood: the <code>mixer</code> widget driven to the 4 N clip and back</div>
+    <div class="m"><b>4 · Estimation</b>the hover-per-motor number (1.594 N) known by heart — it is the estimator&#39;s first sanity check</div>
+    <div class="m due"><b>5 · Integration</b>one shared <code>student.py</code> per team on git; everyone can run <code>08_team_mission.py --dry-run</code></div>
+  </div>
+  <p class="muted" style="margin-top:.6em">Standing rule from today: <b>one controller file per team</b>, on version control — the Week-10 workshop flies whatever is on <code>main</code>.</p>
+</section><!-- 10e. MISCONCEPTIONS -->
+<section>
+  <p class="eyebrow">Before you leave</p>
+  <h2>The traps, named</h2>
+  <table class="data">
+    <tr><th>The trap</th><th>The truth</th></tr>
+    <tr><td>"Yaw comes from angled rotors or rudder-like effects."</td><td>Pure <b>drag reaction</b>: unbalance the CW vs CCW pair. That is why yaw authority is tiny (\(c=0.016\) m vs \(l=0.17\) m) and yaw is always the lazy axis.</td></tr>
+    <tr><td>"Motor numbering is cosmetic."</td><td>Numbering ⇔ mixer rows. Swap two motors physically and every sign check passes on the bench while the aircraft flips on takeoff. Label them <i>this week</i>.</td></tr>
+    <tr><td>"Saturation just caps performance a little."</td><td>It <b>couples axes</b>: a clamped roll request silently edits thrust and yaw. All the Wk-5/6 'weird glitch during aggressive moves' reports trace here.</td></tr>
+    <tr><td>"\( k_f \) is a datasheet constant."</td><td>It is a <i>fit</i> to your motor+prop+battery, and it droops as the pack sags. The fit residuals are the model's honesty certificate.</td></tr>
+  </table>
+  <aside class="notes">Row 2 is the single most expensive mistake a team can make this term — repeat the labelling instruction from the milestone board.</aside>
+</section>
+
+<!-- 11. SUMMARY -->
+<section>
+  <p class="eyebrow">Wrap-up</p>
+  <h2>What to remember</h2>
+  <ul>
+    <li>Per-rotor thrust \( f_i\propto\omega_i^2 \); drag torque <b>alternates sign</b> (2 CW, 2 CCW) → yaw control + hover cancellation.</li>
+    <li>The course uses the <b>X-frame mixer</b>: every motor contributes to roll AND pitch. <span class="accent">Plus-frame from textbooks must be relabeled.</span></li>
+    <li>Controller returns a <b>wrench</b>; the sim <b>allocates &amp; saturates</b> motors. Hover ⇒ four equal \(mg/4\).</li>
+    <li><b>Next week:</b> hover trim &amp; <span class="accent">linearization</span> \((A,B)\) of this model — the springboard to control.</li>
+  </ul>
+  <p class="muted" style="margin-top:1em">Refs: MathWorks NMPC quadrotor dynamics (⚠ plus-frame — relabel) · <code>simulator/CONVENTIONS.md</code>. Deliverable &amp; deadline on the lab sheet.</p>
+  <aside class="notes">Preview Wk4: pick hover trim u*, linearize f about it, inspect the unstable poles → motivates Week 5 control.</aside>
+</section>
+
+</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+</script>
+<script>
+  Reveal.on("ready", () => { window.MLTEWidgets && MLTEWidgets.init(); window.MLTEDiagrams && MLTEDiagrams.init(); });
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

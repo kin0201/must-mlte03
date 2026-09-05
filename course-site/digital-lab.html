@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Digital Lab · MLTE03</title>
+<meta name="description" content="MLTE03 Digital Lab — 25 interactive, dependency-free widgets: every core concept of the course, visualised, adjustable, and paired with the quadsim command that makes it real." />
+<link rel="stylesheet" href="assets/css/site.css?v=5" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+<style>
+  .dl-hero { background: linear-gradient(135deg, #0b1f33 0%, #12304d 60%, #0d9ea6 140%); color: #eaf3fb; padding: 56px 0 40px; }
+  .dl-hero h1 { margin: 6px 0 4px; font-size: 34px; font-weight: 800; color: #fff; }
+  .dl-hero .zh { color: #bfe9ea; font-size: 18px; margin: 0 0 14px; }
+  .dl-hero p.lead { max-width: 76ch; font-size: 16px; line-height: 1.55; color: #dbe7f1; }
+  .dl-toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .dl-toc a { background: rgba(255,255,255,.12); color: #fff; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; text-decoration: none; border: 1px solid rgba(255,255,255,.25); }
+  .dl-toc a:hover { background: rgba(255,255,255,.22); }
+  .dl-block { padding: 44px 0; border-top: 1px solid var(--line); }
+  .dl-block:nth-child(even) { background: #fff; }
+  .dl-block h2 { font-size: 26px; margin: 0 0 4px; font-weight: 800; }
+  .dl-block .arc { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+  .dl-card { background: #fbfdff; border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px 14px; margin: 0 0 26px; box-shadow: 0 2px 10px rgba(11,31,51,.05); scroll-margin-top: 80px; }
+  .dl-card .wk { display: inline-block; font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--cyan-dk); background: #e6f7f8; padding: 2px 8px; border-radius: 6px; }
+  .dl-card h3 { margin: 8px 0 4px; font-size: 19px; }
+  .dl-card p.concept { margin: 0 0 6px; color: #33475b; line-height: 1.5; }
+  .dl-card .widget { margin: 10px 0 12px; }
+  .dl-card .try { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13.5px; }
+  .dl-card .try > div { background: #fff; border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px; line-height: 1.5; }
+  .dl-card .try b.lbl { color: var(--navy); display: block; margin-bottom: 2px; }
+  .dl-card .try .zh { color: var(--muted); font-size: 12.5px; display: block; }
+  .dl-card .try code { background: #eef3f9; padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  .dl-card .links { margin-top: 10px; font-size: 13px; }
+  .dl-card .links a { margin-right: 12px; }
+  @media (max-width: 720px) { .dl-card .try { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<nav class="topnav" id="topnav">
+  <div class="wrap">
+    <span class="brand"><a href="index.html" style="color:inherit;text-decoration:none">MLTE03</a> · Digital Lab</span>
+    <a class="nav-link" href="#dyn">Dynamics</a>
+    <a class="nav-link" href="#ctl">Control &amp; PID</a>
+    <a class="nav-link" href="#est">Estimation</a>
+    <a class="nav-link" href="#traj">Trajectory &amp; MPC</a>
+    <a class="nav-link" href="#ver">Verification &amp; the gap</a>
+    <a class="nav-link" href="index.html">Course home</a>
+  </div>
+</nav>
+
+<header class="dl-hero">
+  <div class="wrap">
+    <p class="eyebrow" style="color:#bfe9ea">MLTE03 · every concept, visualised · adjustable · yours to try</p>
+    <h1>The Digital Lab</h1>
+    <p class="zh">數字教學實驗室 — 每個概念都能看見、能撥動、能親手試</p>
+    <p class="lead">Twenty-five small instruments, one per idea the course is built on. Each runs in this page with no install: drag the
+      sliders, press the buttons, watch the plot recompute. Every card ends with the <code>quadsim</code> command that turns the
+      same idea into a flight you can run yourself. Use them before the lecture to predict, during it to check, after it to test
+      the edge cases nobody had time for.</p>
+    <div class="dl-toc">
+      <a href="#dyn">1 · Flight dynamics (Wks 1–4)</a><a href="#ctl">2 · Controller design &amp; PID (Wks 5–7)</a>
+      <a href="#est">3 · State estimation (Wk 8)</a><a href="#traj">4 · Trajectory &amp; MPC (Wks 9, 12)</a><a href="#ver">5 · Verification &amp; the reality gap (Wks 10, 11, 13)</a>
+    </div>
+  </div>
+</header>
+
+<main id="dl">
+<!-- Cards are generated from the CATALOGUE below so that the deck, the lab sheet and this page always agree. -->
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <b style="color:#cfe0ee">MLTE03 — Flight Dynamics &amp; Intelligent Control Technologies</b> · Macau University of Science and Technology<br/>
+    Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>
+    © 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.
+  </div>
+</footer>
+
+<script>
+const CATALOGUE = [
+ { id:"dyn", title:"1 · Flight dynamics", arc:"Weeks 1–4 · frames → 6-DOF → rotors and the mixer → linearisation. The model you will control, and where it stops being true.", items:[
+  { w:"rot3d", wk:"Wk 1", name:"Rotations — Euler ZYX and the rotation matrix", concept:"Three angles, one matrix: R = R<sub>z</sub>(ψ)R<sub>y</sub>(θ)R<sub>x</sub>(φ) maps body to world. Read the nine entries live; find the pitch where two axes collapse into one.",
+    try:"Set pitch to +89° and sweep roll: the airframe barely moves but the matrix entries race — gimbal lock.", zh:"把俯仰調到 89°，再撥滾轉：機體幾乎不動但矩陣元素狂變 —— 萬向鎖。", cmd:"python solutions/wk1_frames.py", lab:"labs/week01-intro-frames-rotations.html", deck:"slides/week01-intro-frames-rotations.html" },
+  { w:"wmatrix", wk:"Wk 2", name:"Euler kinematics — η̇ = W(η)ω", concept:"Body rates are not Euler-angle rates. W(η) converts them, and its 1/cosθ entries are the first place the coordinates fail before the aircraft does.",
+    try:"Hold r = 1 rad/s and push θ from 0° to 80°: ψ̇ climbs from 1 to almost 6 — the same physical spin, a different number.", zh:"固定 r = 1，把 θ 從 0° 推到 80°：ψ̇ 由 1 升到近 6 —— 同一個物理旋轉，不同的數字。", cmd:"python solutions/wk2_eom.py", lab:"labs/week02-six-dof-eom.html", deck:"slides/week02-six-dof-eom.html" },
+  { w:"eulereq", wk:"Wk 2", name:"Euler's equation — ω × Iω couples the axes", concept:"With no torque at all, a spinning body trades rate between axes. Near hover the term is second-order small — the gift Week 5 lives on. Away from hover it is the tennis-racket effect.",
+    try:"Set I₁ = I₂ = 2.3, spin q₀ = 6: p and r stay put. Make I₁ = 3.5 and watch p and r wake up and flip.", zh:"設 I₁ = I₂，q₀ = 6：p、r 不動。把 I₁ 改為 3.5，看 p、r 醒來並翻轉。", cmd:"python examples/01_open_loop.py", lab:"labs/week02-six-dof-eom.html", deck:"slides/week02-six-dof-eom.html" },
+  { w:"deriv12", wk:"Wk 2", name:"The 12-state derivative, term by term", concept:"Set a state and an input, read ẋ. The four sanity tests from the lecture are built in, and a button lets you hand-integrate 20 ms at a time — forward Euler, exactly what you will write in Lab 1.",
+    try:"Leave T = 6.38 N (= mg) and everything level: all derivatives zero. Tilt θ to 10° and step ten times — where did the vehicle go, and why did z start to fall?", zh:"T = mg、姿態水平：全部導數為零。把 θ 調到 10° 按十步 —— 機體去了哪裡，z 為何開始下降？", cmd:"python solutions/wk2_eom.py", lab:"labs/week02-six-dof-eom.html", deck:"slides/week02-six-dof-eom.html" },
+  { w:"kffit", wk:"Wk 3", name:"Fitting k_f — the square law and its residual", concept:"Thrust = k_f Ω². Six bench points, one least-squares fit through the origin. The residual pattern, not R², tells you where the model ends.",
+    try:"Drag the two highest points down by 10 %: R² barely moves, but every high point now sits below the curve — a systematic residual, the signature of battery sag.", zh:"把最高兩點下拉 10%：R² 幾乎不變，但高點全落在曲線下 —— 系統性殘差，電池壓降的特徵。", cmd:"python solutions/wk3_mixer.py", lab:"labs/week03-quadrotor-modeling.html", deck:"slides/week03-quadrotor-modeling.html" },
+  { w:"mixer", wk:"Wk 3", name:"The X-frame mixer — wrench to four motors, and back", concept:"A wrench [T, τx, τy, τz] becomes four thrusts through the inverse mixer. Clip them to [0, 4 N] and the achieved wrench is no longer what you asked for — saturation couples the axes.",
+    try:"T = 6.4 N, then push τx to +0.5: watch two motors hit 4 N and the achieved yaw torque change although you never asked for yaw.", zh:"T = 6.4 N，把 τx 推到 +0.5：兩個馬達撞到 4 N，實際偏航力矩改變了，雖然你沒有要求偏航。", cmd:"python solutions/wk3_mixer.py", lab:"labs/week03-quadrotor-modeling.html", deck:"slides/week03-quadrotor-modeling.html" },
+  { w:"hoverpower", wk:"Wk 3", name:"Hover power and endurance", concept:"Momentum theory: induced power ∝ T<sup>3/2</sup>/√(disk area). Everything about propeller size, payload and battery life follows from that one line.",
+    try:"Double the propeller diameter and read the power: it halves. Then add 20 % mass: power rises 31 %, not 20 %.", zh:"槳徑加倍，功率減半。再加 20% 質量：功率升 31%，不是 20%。", cmd:"python -c \"from quadsim import QuadParams as P; print(P().hover_thrust_per_motor)\"", lab:"labs/week03-quadrotor-modeling.html", deck:"slides/week03-quadrotor-modeling.html" },
+  { w:"integ", wk:"Wk 4", name:"Euler vs RK4 — choosing Δt", concept:"The same oscillator, two integrators. Forward Euler pumps energy in at every step; RK4 does not. This is why quadsim runs RK4 at 200 Hz and why a controller tuned at one Δt is wrong at another.",
+    try:"Push dt to 0.5 s: Euler's amplitude explodes while RK4 still tracks the truth. Find the dt where even RK4 gives up.", zh:"把 dt 推到 0.5 s：Euler 振幅爆炸，RK4 仍跟得住真值。找出連 RK4 也放棄的 dt。", cmd:"python solutions/wk4_analysis.py", lab:"labs/week04-linearization-trim-hover.html", deck:"slides/week04-linearization-trim-hover.html" },
+  { w:"jacobian", wk:"Wk 4", name:"Finite-difference Jacobians — the U-curve", concept:"Linearising numerically means choosing a step h. Too big and you leave the linear regime; too small and floating point eats the difference. The minimum is where quadsim.analysis lives.",
+    try:"Slide h from 10⁻¹ down to 10⁻¹²: the error falls, bottoms out, then rises again. Switch to forward differences and watch the bottom move right and up.", zh:"把 h 從 10⁻¹ 掃到 10⁻¹²：誤差先降、觸底、再升。切到前向差分，看谷底右移上升。", cmd:"python examples/04_analysis.py", lab:"labs/week04-linearization-trim-hover.html", deck:"slides/week04-linearization-trim-hover.html" },
+  { w:"linvalid", wk:"Wk 4", name:"Linear vs nonlinear — the radius of honesty", concept:"The hover linearisation replaces tanθ by θ. Here is exactly what that costs, as a function of tilt, and why the course tilt limit is where it is.",
+    try:"At 15° the linear model is 2 % optimistic; at 45° it is 27 %. Set your own tolerance and find the largest tilt the design model can be trusted at.", zh:"15° 時線性模型樂觀 2%；45° 時 27%。設定你的容差，找出設計模型可信的最大傾角。", cmd:"python examples/04_analysis.py", lab:"labs/week04-linearization-trim-hover.html", deck:"slides/week04-linearization-trim-hover.html" },
+ ]},
+ { id:"ctl", title:"2 · Controller design & PID", arc:"Weeks 5–7 · the inner attitude loop, the seven engineering fixes, the outer cascade with an integrator, and LQR as the rational way to pick gains.", items:[
+  { w:"pid", wk:"Wk 5", name:"One-axis attitude PID — every term, every fix", concept:"P, I, D on a single axis with a torque limit, sensor noise, and the seven engineering fixes as buttons. Each fix cures exactly one failure you can make appear first.",
+    try:"Noise 0.05, Kd 6, D low-pass off: torque turns to hash (fix 5). Ki 20, hold+release on, clamp off: the lurch (fix 1). D on error vs on measurement: the spike at t = 0 (fix 4).", zh:"噪聲 0.05、Kd 6、關掉 D 低通：力矩變成毛刺（修正 5）。Ki 20、開 hold+release、關限幅：鬆手後衝過頭（修正 1）。", cmd:"python solutions/wk5_attitude.py", lab:"labs/week05-attitude-control.html", deck:"slides/week05-attitude-control.html" },
+  { w:"cascade", wk:"Wk 6", name:"The cascade — tilt to translate", concept:"The outer loop asks for an acceleration; the inner loop delivers it as a tilt. Timescale separation is what lets you treat the inner loop as instant — until you push the outer gains too high.",
+    try:"Raise outer Kp past 8 with Kd at 2: the position overshoots and the commanded tilt saturates. Now raise the tilt limit — does it help or hurt?", zh:"Kd = 2 時把外環 Kp 推過 8：位置超調、指令傾角飽和。再提高傾角上限 —— 有幫助還是更糟？", cmd:"python examples/02_hover_pid.py", lab:"labs/week06-position-altitude-control.html", deck:"slides/week06-position-altitude-control.html" },
+  { w:"altitude", wk:"Wk 6", name:"Altitude with an unknown mass — what the integrator carries", concept:"Thrust is computed for 0.65 kg; the vehicle weighs something else. The integrator must find the difference, the clamp decides whether it can, and Ki decides how long it takes.",
+    try:"Mass error +10 %, Ki 2, clamp 0.5: it hovers low forever. Raise the clamp to 2: it gets there. Raise Ki to 8: it gets there and overshoots. That is Week 10's take-off sag, in advance.", zh:"質量誤差 +10%、Ki 2、限幅 0.5：永遠懸停偏低。限幅升到 2：到達。Ki 升到 8：到達但超調。這就是第 10 週的起飛下沉，提前看到。", cmd:"python examples/02_hover_pid.py --controller student", lab:"labs/week06-position-altitude-control.html", deck:"slides/week06-position-altitude-control.html" },
+  { w:"lqr", wk:"Wk 7", name:"LQR — state a preference, get a gain", concept:"Q says what you care about, R says what effort costs, the Riccati equation turns them into K. Dial the two and watch the response and the peak control trade against each other.",
+    try:"Set log r to −3: violent, fast, huge |u|. Set it to +1: gentle and slow. There is no free lunch — only a stated preference.", zh:"log r = −3：猛、快、|u| 巨大。log r = +1：溫和、慢。沒有免費午餐，只有明說的偏好。", cmd:"python solutions/wk7_lqr.py", lab:"labs/week07-lqr-optimal-control.html", deck:"slides/week07-lqr-optimal-control.html" },
+  { w:"riccati", wk:"Wk 7", name:"The Riccati recursion, one press at a time", concept:"scipy hides it; this does not. Each press is one backward step of dynamic programming. When ΔP stops changing you are holding the infinite-horizon cost-to-go — and Week 12's MPC terminal cost.",
+    try:"Press ×10 a few times and watch k_pos and k_vel settle. Change r and reset: how many iterations does convergence take now?", zh:"按幾次 ×10，看 k_pos、k_vel 收斂。改 r 再重設：現在要多少次迭代才收斂？", cmd:"python examples/04_analysis.py", lab:"labs/week07-lqr-optimal-control.html", deck:"slides/week07-lqr-optimal-control.html" },
+ ]},
+ { id:"est", title:"3 · State estimation", arc:"Week 8 · the controller never sees the truth. Complementary filtering, the Kalman gain as a trust ratio, and why a late measurement is a wrong measurement.", items:[
+  { w:"comp", wk:"Wk 8", name:"Complementary filter — trust the gyro fast, the accelerometer slow", concept:"Integrate the gyro (drifts), lean on the accelerometer (noisy), blend with α. One number sets the crossover between the two failure modes.",
+    try:"Bias 0.02 with α = 0.999: slow drift. α = 0.9: drift gone, but now the accelerometer noise walks straight into the attitude.", zh:"偏置 0.02、α = 0.999：緩慢漂移。α = 0.9：漂移消失，但加速度計噪聲直接走進姿態。", cmd:"python examples/07_estimation.py", lab:"labs/week08-state-estimation-fusion.html", deck:"slides/week08-state-estimation-fusion.html" },
+  { w:"kalman", wk:"Wk 8", name:"The Kalman filter — a belief with a width", concept:"Predict, then correct by the gain K = P/(P+σ²). The ±2σ band is the filter's honesty: watch it widen through a GPS dropout and snap shut when the fixes return.",
+    try:"Toggle the 2 s dropout: the band grows, the estimate coasts on prediction. Lower Q and the coast is smoother but slower to recover.", zh:"切換 2 秒中斷：帶寬變寬、估計靠預測滑行。調低 Q，滑行更平滑但恢復更慢。", cmd:"python solutions/wk8_estimation.py", lab:"labs/week08-state-estimation-fusion.html", deck:"slides/week08-state-estimation-fusion.html" },
+  { w:"latency", wk:"Wk 8", name:"Delay destabilises — the same gains, a later measurement", concept:"A pure delay removes phase. The loop corrects toward where the vehicle was, arrives late, and at some gain starts to hunt. The Week-10 plant delays GPS by 120–300 ms.",
+    try:"Kp 6, Kd 4: raise the delay until the response oscillates. Now lower Kp to 3 — how much delay can you tolerate? That trade is the whole latency lesson.", zh:"Kp 6、Kd 4：加大延時直到振盪。再把 Kp 降到 3 —— 能容忍多少延時？這就是延時課的全部。", cmd:"python examples/08_team_mission.py --team T1", lab:"labs/week08-state-estimation-fusion.html", deck:"slides/week08-state-estimation-fusion.html" },
+ ]},
+ { id:"traj", title:"4 · Trajectory & MPC", arc:"Weeks 9 and 12 · smooth references and feedforward, then the method that plans ahead under constraints.", items:[
+  { w:"poly7", wk:"Wk 9", name:"Seventh-order trajectories — feasibility before flight", concept:"Eight boundary conditions fix eight coefficients. Acceleration scales as distance/T²; tilt follows acceleration; jerk follows the body-rate command. Check the limits before anyone flies.",
+    try:"2 m in 3 s is fine. 2 m in 1.5 s asks for four times the acceleration and a 30° tilt. Read the T the widget says you actually need.", zh:"2 m 用 3 s 可以。2 m 用 1.5 s 要四倍加速度、30° 傾角。看看元件算出你真正需要的 T。", cmd:"python solutions/wk9_trajectory.py", lab:"labs/week09-trajectory-tracking.html", deck:"slides/week09-trajectory-tracking.html" },
+  { w:"traj", wk:"Wk 9", name:"Figure-eight tracking — why feedforward beats feedback", concept:"Pure feedback must lag a moving target: it needs an error to produce acceleration. Feed the reference acceleration forward and feedback is left with the only job it is good at — disturbances.",
+    try:"Feedforward off: a persistent lag no Kp removes cleanly. On: near-perfect. Now add 1 m/s² of wind and see what feedback is for.", zh:"關掉前饋：持續落後，Kp 再大也不乾淨。開啟：幾乎完美。加 1 m/s² 的風，看看反饋是幹什麼用的。", cmd:"python examples/03_figure8.py --plot --wind 0.5", lab:"labs/week09-trajectory-tracking.html", deck:"slides/week09-trajectory-tracking.html" },
+  { w:"mpc", wk:"Wk 12", name:"Receding horizon — brake before the wall", concept:"LQR reacts to error and clips; MPC sees the wall inside its horizon and brakes early. Anticipation is the product; the horizon is the price.",
+    try:"N = 18: MPC stops short, LQR punches the wall. Shrink N to 5: the horizon no longer reaches the wall in time and MPC fails the same way.", zh:"N = 18：MPC 提前停住，LQR 撞牆。把 N 縮到 5：視野碰不到牆，MPC 同樣失敗。", cmd:"python examples/05_mpc.py", lab:"labs/week12-mpc.html", deck:"slides/week12-mpc.html" },
+  { w:"softqp", wk:"Wk 12", name:"Soft constraints and QP size — the price of ρ and N", concept:"A hard state constraint can be infeasible after a gust, and an infeasible QP returns nothing. Soften it with a penalty ρ and you buy feasibility with a violation you pay for. Meanwhile the QP grows with N.",
+    try:"Corridor HARD, push 0.9 m: infeasible. Back to soft, log ρ = 0: it rents 20 cm of corridor. log ρ = 4: barely any — and note the solve time as you double N.", zh:"走廊設為硬約束、推 0.9 m：不可行。改回軟約束、log ρ = 0：借用 20 cm 走廊。log ρ = 4：幾乎不借 —— 同時看 N 加倍時的求解時間。", cmd:"python solutions/wk12_mpc.py", lab:"labs/week12-mpc.html", deck:"slides/week12-mpc.html" },
+ ]},
+ { id:"ver", title:"5 · Verification & the reality gap", arc:"Weeks 10, 11 and 13 · a number is a property of a controller and a plant; one run is one observation; a claim needs the figure that shows the mechanism.", items:[
+  { w:"gap", wk:"Wk 10", name:"Reality-gap explorer — one hidden effect at a time", concept:"The nominal PID flies the Week-10 square. Switch on motor lag, drag, extra mass, gust or GPS latency, one at a time, and learn the shape each one leaves in the track, in z(t), and in the error-heading histogram. Then do the inverse problem on your own team plant.",
+    try:"Mass alone, view z(t): the take-off sag. Gust alone, view heading: one lobe. Latency alone, XY track: fine — until you imagine raising the gains. Everything on at ×1: now which was which?", zh:"只開質量、看 z(t)：起飛下沉。只開陣風、看方向直方圖：一個瓣。只開延時、看 XY：正常 —— 直到你想像提高增益。全開 ×1：現在哪個是哪個？", cmd:"python examples/08_team_mission.py --team T3 --plot", lab:"labs/week10-consolidation-kickoff.html", deck:"slides/week10-consolidation-kickoff.html" },
+  { w:"seeds", wk:"Wk 11", name:"Seed spread — one run is one observation", concept:"The controller is deterministic; only the estimator noise moves. One seed tells you one thing. Eight seeds show you the distribution that was there all along, and the threshold turns it into a pass rate.",
+    try:"Seeds = 1: PASS. Seeds = 8: 6 of 8. Seeds = 200: 74 %. Same controller. Which of those three numbers would you put in a certification report?", zh:"seeds = 1：PASS。seeds = 8：6/8。seeds = 200：74%。同一個控制器。你會把哪個數字寫進認證報告？", cmd:"python certify.py --controller quadsim.controllers.cascade_pid:CascadePID --student <ID> --mission M3 --seeds 0,1,2", lab:"labs/week11-certification.html", deck:"slides/week11-certification.html" },
+  { w:"activation", wk:"Wk 13", name:"Constraint activation — when is the constraint doing the work?", concept:"MPC through a mass drop with a thrust cap. The shaded strip says when the bound was active. No shading means MPC was LQR with preview, and 'MPC handles the limit' is not a claim you can make.",
+    try:"Thrust cap 16 N: nothing shaded, both controllers similar. Lower the cap to 9 N: the strips light up and the two traces separate. Shorten N below the transient: MPC stops anticipating.", zh:"推力上限 16 N：沒有陰影，兩者相近。降到 9 N：條帶亮起、兩條曲線分開。把 N 縮到暫態以下：MPC 不再預判。", cmd:"python examples/05_mpc.py", lab:"labs/week13-evidence.html", deck:"slides/week13-evidence.html" },
+ ]},
+];
+const main = document.getElementById("dl");
+for (const blk of CATALOGUE) {
+  const sec = document.createElement("section"); sec.className = "dl-block"; sec.id = blk.id;
+  let html = `<div class="wrap"><h2>${blk.title}</h2><p class="arc">${blk.arc}</p>`;
+  for (const it of blk.items) {
+    html += `<article class="dl-card" id="${it.w}">
+      <span class="wk">${it.wk}</span>
+      <h3>${it.name}</h3>
+      <p class="concept">${it.concept}</p>
+      <div class="widget" data-widget="${it.w}"></div>
+      <div class="try">
+        <div><b class="lbl">Try</b>${it.try}<span class="zh">${it.zh}</span></div>
+        <div><b class="lbl">Then in quadsim</b><code>${it.cmd.replace(/</g,"&lt;")}</code><span class="zh">from <code>simulator/</code>, <code>PYTHONPATH=.</code></span></div>
+      </div>
+      <div class="links"><a href="${it.deck}">▶ Lecture slides</a><a href="${it.lab}">🧪 Lab sheet</a><a href="#${it.w}">¶ link to this card</a></div>
+    </article>`;
+  }
+  html += `</div>`; sec.innerHTML = html; main.appendChild(sec);
+}
+</script>
+<script src="assets/js/widgets.js?v=18"></script>
+</body>
+</html>

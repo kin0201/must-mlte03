@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 4 — Linearization, Trim &amp; Hover · MLTE03</title>
+
+<!-- reveal.js (CDN; swap to assets/vendor/ for offline classrooms — see course-site/README.md) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/github.css" />
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="../assets/css/deck.css?v=18" />
+
+<style>
+  .reveal .attitude-demo { font-size: 15px; margin: 6px 0; }
+  .reveal .attitude-demo canvas { height: 180px; }
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="footer">MLTE03 · Week 4 · Linearization, Trim &amp; Hover<span class="copyright">· © 2026 Dr Ken Lai · CC BY-NC 4.0</span></div>
+<div class="slides">
+
+<!-- 1. TITLE -->
+<section class="title-slide">
+  <div class="tp">
+    <p class="tp-course">MLTE03 · Flight Dynamics and Intelligent Control Technologies</p>
+    <hr/>
+    <h1>Linearisation, Trim &amp; the Simulation Loop</h1>
+    <p class="tp-sub">線性化、配平與仿真迴路</p>
+    <hr class="thin"/>
+    <p class="tp-meta">Week 4 · Lecture and Laboratory · three hours<br/>
+    Dr Ken Lai (黎子健) · Faculty of Innovation Engineering · Macau University of Science and Technology<br/>
+    <span class="tp-cr">© 2026 Dr Ken Lai (黎子健) · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></span></p>
+  </div>
+  <aside class="notes">Titlepage. The session plan follows; keep this up while people settle.</aside>
+</section>
+
+<!-- 2. WHERE WE ARE -->
+<section>
+  <p class="eyebrow">Recap → today</p>
+  <h2>From a nonlinear model to a design model</h2>
+  <div class="cols">
+    <ul>
+      <li><b>Wk 1:</b> frames, ZYX Euler, quaternions, the conventions sheet.</li>
+      <li><b>Wk 2–3:</b> the 12-state nonlinear model \( \dot{\mathbf{x}}=f(\mathbf{x},\mathbf{u}) \) and the X-frame mixer.</li>
+      <li><b>Today:</b> pin it at <b>hover</b>, linearize → \( (A,B) \), read the open-loop poles.</li>
+    </ul>
+    <div class="box warn">
+      <b>Why bother linearizing?</b><br/>
+      Almost all the classical &amp; optimal control we use next — pole placement, <b>LQR (Wk 7)</b>,
+      <b>MPC (Wk 11–12)</b> — is designed on a <em>linear</em> model. Hover is where we get one.
+    </div>
+  </div>
+  <aside class="notes">Tie back to 01_open_loop.py: the open-loop quad drifts and tips. We are about to explain that mathematically — the poles are not in the left half-plane.</aside>
+</section>
+
+
+
+<!-- 2b. AGENDA -->
+<section>
+  <p class="eyebrow">Today · 3 hours</p>
+  <h2>Session plan</h2>
+<table class="agenda">
+<tr><th>Clock</th><th>Segment</th><th></th></tr>
+<tr><td class="t">00:00</td><td>Recap: the (A,B) you computed — what is it <i>for</i>?</td><td>10&#8242;</td></tr>
+<tr><td class="t">00:10</td><td><b>Block A</b> — trim &amp; linearization, done properly</td><td>40&#8242;</td></tr>
+<tr><td class="t">00:50</td><td>Concept check + integrator widget</td><td>10&#8242;</td></tr>
+<tr><td class="t">01:00</td><td><b>Block B</b> — the simulation loop: RK4, timing, logging</td><td>30&#8242;</td></tr>
+<tr class="break"><td class="t">01:30</td><td>Break</td><td>10&#8242;</td></tr>
+<tr><td class="t">01:40</td><td>Lab briefing — Lab 1 (&starf; graded)</td><td>10&#8242;</td></tr>
+<tr class="lab"><td class="t">01:50</td><td><b>Lab session</b>: the closed-loop harness you&#39;ll reuse all term</td><td>60&#8242;</td></tr>
+<tr><td class="t">02:50</td><td>Debrief + milestone board</td><td>10&#8242;</td></tr>
+</table>
+</section><!-- 3. OBJECTIVES -->
+<section>
+  <p class="eyebrow">Learning objectives</p>
+  <h2>By the end of today you can…</h2>
+  <ul>
+    <li>Define the <b>hover trim</b>: level, at rest, thrust = weight, zero torque ⇒ \( f(\mathbf{x}_{eq},\mathbf{u}_{eq})=\mathbf 0 \).</li>
+    <li>Numerically <b>linearize</b> \( f(\mathbf{x},\mathbf{u}) \) about hover by finite differences → \( (A,B) \).</li>
+    <li>Read the <b>open-loop poles</b>: hover is a chain of integrators ⇒ <span class="accent">not asymptotically stable</span>.</li>
+    <li>Confirm the pair is <b>controllable</b> (rank 12) — the prerequisite for LQR/MPC.</li>
+    <li>Recall the <b>RK4 closed-loop loop</b> and the <code>SimLog</code> you will plot.</li>
+    <li><span class="pill">Lab</span> Build \( (A,B) \), plot the pole map, confirm rank = 12.</li>
+  </ul>
+</section>
+
+<!-- LIN 0 -->
+<section>
+  <p class="eyebrow">Mental picture first</p>
+  <h2>Linearisation is a tangent with a radius of honesty</h2>
+  <div class="fig plain" data-diagram="taylor"><p class="cap">The true nonlinear behaviour, its tangent at the operating point, and the band where the two are indistinguishable for engineering purposes.</p></div>
+  <div class="turn"><span class="tt">(90 s)</span> — Before the algebra: name one operating point <i>other</i> than hover that a quadrotor might be linearised about. <span class="muted">(Steady forward flight at constant speed and tilt; steady climb; a coordinated turn. Each has its own \( (A,B) \) — and gain-scheduling between them is how full-envelope aircraft autopilots have worked for fifty years.)</span></div>
+
+  <aside class="notes">The gain-scheduling answer previews how this scales to real aircraft, and pre-empts 'but hover is only one point'.</aside>
+</section>
+
+<!-- WIDGET linvalid -->
+<section>
+  <p class="eyebrow">Block A · interactive</p>
+  <h2>How far from hover is the tangent honest? Set your own tolerance</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="linvalid"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> At what tilt does the small-angle model become 5 % wrong? 10 %? Write both down, then move the slider. Which side of your guess were you on, and why?</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#linvalid">Digital Lab → linvalid</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">tanθ vs θ. This is the course tilt limit, justified by the students themselves.</aside>
+</section>
+
+<!-- TRIM 1 -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>Trim: a definition, and how many there are</h2>
+  <div class="env defn"><span class="eh">Definition <em>(trim / equilibrium)</em>.</span>
+  A pair \( (\mathbf x_0, \mathbf u_0) \) with \( f(\mathbf x_0, \mathbf u_0) = \mathbf 0 \): held there exactly, with no disturbance, the aircraft stays there forever.</div>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>We solved this last week: \( \phi = \theta = 0 \), \( \boldsymbol\omega = \mathbf 0 \), \( T = mg \), with \( (x,y,z,\psi) \) <b>free</b>.</li>
+    <li>So hover is a <b>4-parameter family</b> of trim points — and because the dynamics do not depend on \( (x,y,z,\psi) \), <b>they all share one \( (A,B) \)</b>.</li>
+    <li>That invariance is a gift: design once, use anywhere in the room.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Contrast with a fixed-wing aircraft.</span>
+  There, trim depends on airspeed, altitude and mass — so autopilots carry a <i>schedule</i> of \( (A,B) \) pairs and interpolate. The quadrotor's hover invariance is why one controller flies the whole flight envelope we care about, and why this course can be honest with a single linearisation.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The 'one (A,B) for the whole family' point is worth stressing; it is why the rest of the course is tractable.</aside>
+</section>
+
+<!-- LIN 1 -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill">interactive</span></p>
+  <h2>Taylor, in the only form we need</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>write the state as trim plus deviation: \( \mathbf x = \mathbf x_0 + \delta\mathbf x \), \( \mathbf u = \mathbf u_0 + \delta\mathbf u \)</span>
+      <span class="dwhy"><b>Change of variables.</b> From now on every symbol means 'how far from hover', not 'where in the room'. Forgetting this is the commonest Lab-4 bug.</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">2</span>\( f(\mathbf x_0+\delta\mathbf x, \mathbf u_0+\delta\mathbf u) = \underbrace{f(\mathbf x_0,\mathbf u_0)}_{=\,\mathbf 0} + \frac{\partial f}{\partial \mathbf x}\delta\mathbf x + \frac{\partial f}{\partial \mathbf u}\delta\mathbf u + O(\delta^2) \)</span>
+      <span class="dwhy"><b>Taylor about the trim.</b> The constant term vanishes <i>because</i> it is an equilibrium — that is the whole reason we bothered to find one.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">3</span>\( \dot{\delta\mathbf x} = A\,\delta\mathbf x + B\,\delta\mathbf u \)</span>
+      <span class="dwhy"><b>Drop the quadratic remainder</b> and rename the Jacobians. A linear time-invariant system — the single most-studied object in engineering.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>valid while \( \lVert O(\delta^2)\rVert \ll \lVert A\delta\mathbf x\rVert \)</span>
+      <span class="dwhy"><b>The fine print, made quantitative.</b> For our trigonometric terms that means roughly \( |\phi|,|\theta| \lesssim 20^\circ \) — the number behind the demo tilt limit.</span></div>
+  </div>
+  <p class="small muted">Everything from Week 5 to Week 12 is designed on this equation. Week 13 is the first method that does not need it.</p>
+
+  <aside class="notes">Step 1's 'delta coordinates' warning prevents the top Lab-4 error; repeat it during the lab.</aside>
+</section>
+
+<!-- 4. HOVER TRIM -->
+<section>
+  <p class="eyebrow">The equilibrium</p>
+  <h2>What is hover trim?</h2>
+  <div class="cols">
+    <ul>
+      <li><b>Level</b> — zero roll, pitch, yaw: \( \boldsymbol\eta=\mathbf 0 \).</li>
+      <li><b>At rest</b> — zero linear velocity and body rates: \( \mathbf v=\boldsymbol\omega=\mathbf 0 \).</li>
+      <li><b>Thrust balances weight</b> — \( T=mg \), pointing \(+\)body-z (which, level, is world up).</li>
+      <li><b>Zero torque</b> — \( \boldsymbol\tau=\mathbf 0 \).</li>
+    </ul>
+    <div class="box">
+      Convention check (z-up / ENU): gravity is \( (0,0,-g) \), thrust acts along \(+\)body-z, so
+      \[ \mathbf u_{eq}=\begin{bmatrix} mg \\ 0 \\ 0 \\ 0 \end{bmatrix},\qquad f(\mathbf x_{eq},\mathbf u_{eq})=\mathbf 0. \]
+    </div>
+  </div>
+  <p class="muted" style="margin-top:.3em">In <code>quadsim</code> this is exactly <code>analysis.hover_equilibrium(p)</code> → returns <code>(x_eq, u_eq)</code> with <code>u_eq = [p.weight, 0, 0, 0]</code>.</p>
+  <aside class="notes">Stress: equilibrium means the state-derivative vanishes. Not that nothing is happening physically — the motors are spinning hard to make thrust = weight — but the *state* is stationary.</aside>
+</section>
+
+<!-- 5. LINEARIZATION -->
+<section>
+  <p class="eyebrow">The design model</p>
+  <h2>Linearize by finite differences</h2>
+  <p>Write the state as a small deviation from trim, \( \mathbf x=\mathbf x_{eq}+\delta\mathbf x,\ \mathbf u=\mathbf u_{eq}+\delta\mathbf u \). To first order:</p>
+  \[ \dot{\delta\mathbf x}\approx A\,\delta\mathbf x + B\,\delta\mathbf u,\qquad
+     A=\left.\frac{\partial f}{\partial \mathbf x}\right|_{eq},\quad
+     B=\left.\frac{\partial f}{\partial \mathbf u}\right|_{eq} \]
+  <div class="cols" style="font-size:.85em;margin-top:.3em">
+    <ul>
+      <li>We never differentiate by hand — we hit the <em>same</em> nonlinear \(f\) with <b>central differences</b>.</li>
+      <li>\(A\) is <b>12×12</b> (state→state), \(B\) is <b>12×4</b> (wrench→state).</li>
+      <li>Column \(i\) of \(A\): \( \dfrac{f(\mathbf x_{eq}+\varepsilon\mathbf e_i,\mathbf u_{eq})-f(\mathbf x_{eq}-\varepsilon\mathbf e_i,\mathbf u_{eq})}{2\varepsilon} \).</li>
+    </ul>
+    <div class="box">
+      Built from the model the students <em>fly</em> — not a separate black box. Same \(f\) =
+      <code>dynamics.state_derivative</code>, so the linear model can never silently drift from the sim.
+    </div>
+  </div>
+  <aside class="notes">Central differences (vs forward) so the truncation error is O(eps^2). eps=1e-6 by default. Because f is built from the real dynamics, A and B inherit the conventions automatically — no NED/ENU sign bug.</aside>
+</section>
+
+<!-- 5b. TAYLOR FORMAL -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>Linearisation is a promise with a radius</h2>
+  <div class="env defn"><span class="eh">Definition.</span>
+  About an equilibrium \( (\mathbf x_0, \mathbf u_0) \) with \( f(\mathbf x_0,\mathbf u_0)=\mathbf 0 \):
+  \[ \dot{\delta\mathbf x} \approx A\,\delta\mathbf x + B\,\delta\mathbf u, \qquad
+     A = \frac{\partial f}{\partial \mathbf x}\Big|_{0}, \quad B = \frac{\partial f}{\partial \mathbf u}\Big|_{0} \]
+  valid while the quadratic remainder stays small against the linear term. <b>Everything from Week 5 to Week 12 designs on \( (A,B) \)</b> — so the radius of that promise is a number worth knowing.</div>
+  <div class="env exm" style="margin-top:.4em"><span class="eh">Worked example <em>(how far does "small angle" stretch?)</em>.</span>
+  The worst nonlinearity near hover is trigonometric. Relative error of \( \sin\theta \approx \theta \):
+  \( 5^\circ \to 0.13\% \quad\cdot\quad 15^\circ \to 1.1\% \quad\cdot\quad 30^\circ \to 4.7\% \quad\cdot\quad 45^\circ \to 10.3\% \).
+  Our tilt limit (12–25°) keeps the design model honest to ~1–3%. A racing turn at 60° does not — which is precisely why the M2 example in Week 11 cannot be certified by anything hover-linearised, and why Wk-12 mentions nonlinear MPC as an escape hatch.</div>
+  <div class="env rmk" style="margin-top:.3em"><span class="eh">Remark <em>(numerical Jacobians, done properly)</em>.</span>
+  Central differences \( \frac{f(x+\epsilon)-f(x-\epsilon)}{2\epsilon} \) with \( \epsilon \approx 10^{-5} \)–\(10^{-6}\) on unit-scaled states; verify entries you can derive by hand. Too-small \( \epsilon \) drowns in float noise (error \( \sim \delta/\epsilon \)), too-large leaves the linear regime (error \( \sim \epsilon^2 \)) — the sweet spot minimises their sum.</div>
+  <aside class="notes">The percent ladder is the quotable artifact. Master-level nuance: A's accuracy matters less once feedback is on (feedback forgives model error) — but the POLES' qualitative story must be right.</aside>
+</section>
+
+<!-- 5c. AB ANATOMY -->
+<section>
+  <p class="eyebrow">Read the matrices, entry by entry</p>
+  <h2>\( (A,B) \) at hover is mostly zeros — and every non-zero tells a story</h2>
+  <div class="cols top">
+    <div class="env exm" style="font-size:.78em"><span class="eh">The five stories in \(A\).</span>
+      <ul class="small" style="margin:.3em 0 0 1em">
+        <li>\( \partial \dot{\mathbf p}/\partial \mathbf v = I_3 \) — position integrates velocity.</li>
+        <li>\( \partial \dot{\boldsymbol\eta}/\partial \boldsymbol\omega = I_3 \) — \( W(0)=I \): angles integrate rates at hover.</li>
+        <li>\( \partial \ddot{x}/\partial \theta = +g, \quad \partial \ddot{y}/\partial \phi = -g \) — <b>the tilt-to-translate coupling</b>, the only bridge between the halves.</li>
+        <li>Everything else: <b>0</b>. No spring pulls position back; no damper resists tilt.</li>
+      </ul>
+    </div>
+    <div class="env exm" style="font-size:.78em"><span class="eh">The two stories in \(B\).</span>
+      <ul class="small" style="margin:.3em 0 0 1em">
+        <li>\( \partial \ddot z/\partial T = 1/m = 1.54 \) — thrust climbs.</li>
+        <li>\( \partial \dot\omega_i/\partial \tau_i = 1/I_{ii} \approx 435 \) (roll/pitch) — tiny torques, huge angular accelerations: <i>this</i> is why attitude is the fast loop.</li>
+      </ul>
+      <p class="small" style="margin-top:.4em">Block-triangular structure ⇒ at hover the system decouples into four chains: (x,θ), (y,φ), z, ψ — the licence for per-axis design in Wks 5–7.</p>
+    </div>
+  </div>
+  <div class="turn" style="margin-top:.4em"><span class="tt">(3 min)</span> — your Lab-3 code printed these matrices. Circle the g entries and the 1/I entries on your own printout; write one sentence on what a wind gust (a force, not a torque) touches first.</div>
+  <aside class="notes">"Read matrices like prose" is a transferable master skill. The 435 number invariably surprises — connect to why Kp=180 on attitude is sane while Kp=180 on position would be absurd.</aside>
+</section>
+
+<!-- AB 1 -->
+<section class="dense">
+  <p class="eyebrow">Read the structure</p>
+  <h2>\( (A,B) \) is mostly zeros — the sparsity <i>is</i> the physics</h2>
+  <div class="fig plain" data-diagram="absparse"><p class="cap">Every filled cell is a physical statement; every empty cell is an absent mechanism. The two amber cells are the only bridge from attitude to position.</p></div>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Teal cells (value 1):</b> pure integrators — position integrates velocity, angles integrate rates.</li>
+    <li><b>Amber cells (\( \pm g \)):</b> the tilt-to-translate coupling. Delete them and the aircraft can climb but never move sideways.</li>
+    <li><b>Everything else is zero:</b> no spring returns position, no damper resists rotation. <b>Nothing pulls the aircraft back to anything.</b></li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why the emptiness matters.</span>
+  A system with no restoring terms is not merely 'hard to fly' — it is <i>incapable</i> of flying itself. Feedback is not an improvement to this aircraft; it is a load-bearing component, as much as the arms.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Let them stare at the sparsity map. The emptiness is the most persuasive argument for control that exists in the course.</aside>
+</section>
+
+<!-- POLE 1 -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>Poles, eigenvalues, and what 'stability' actually asserts</h2>
+  <div class="env defn"><span class="eh">Definition.</span>
+  For \( \dot{\mathbf x} = A\mathbf x \), solutions are combinations of \( e^{\lambda_i t} \) where \( \lambda_i \) are the eigenvalues of \( A \) (the <b>poles</b>). Then: \( \mathrm{Re}\,\lambda &lt; 0 \) for all \( i \) ⇒ asymptotically stable; any \( \mathrm{Re}\,\lambda &gt; 0 \) ⇒ unstable; \( \mathrm{Re}\,\lambda = 0 \) ⇒ <b>marginal</b>, and the linear model declines to answer.</div>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Pole location</th><th>Behaviour</th><th>Our quad</th></tr>
+    <tr><td>\( \lambda &lt; 0 \), real</td><td>decays</td><td>none</td></tr>
+    <tr class="hl"><td>\( \lambda = 0 \)</td><td><b>integrates forever</b></td><td><b>most of them</b></td></tr>
+    <tr class="hl"><td>\( \lambda = 0 \) repeated</td><td>double integrator: drifts <i>and</i> accelerates away</td><td>position–tilt chains</td></tr>
+    <tr><td>complex, \( \mathrm{Re} &lt; 0 \)</td><td>damped oscillation</td><td>what we will <i>create</i></td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What a double integrator does.</span>
+  \( \ddot y = -g\phi \) with a constant \( \phi = 1^\circ \): after 3 s the aircraft has moved \( \tfrac12 (0.17)(9) \approx 0.77 \) m — and it is still accelerating.<br/><br/><b>A one-degree trim error crosses the room in five seconds.</b> That is what 'marginally stable' feels like in a classroom.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The one-degree/five-seconds calculation is the most visceral version of this argument; use it every year.</aside>
+</section>
+
+<!-- CTRL 1 -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>Controllability — can we get anywhere from here?</h2>
+  <div class="env defn"><span class="eh">Definition <em>(Kalman, 1960)</em>.</span>
+  \( (A,B) \) is <b>controllable</b> if for any initial and any target state there exists an input that gets you there in finite time. Test: \( \mathcal C = [\,B \;\; AB \;\; A^2B \;\; \dots \;\; A^{n-1}B\,] \) has full rank \( n = 12 \).</div>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Our hover model: <b>rank 12</b> ✓ — with four inputs and twelve states, and no wasted directions.</li>
+    <li>The chain \( B, AB, A^2B \) is the algebra noticing what you already know physically: torque → rate → angle → lateral acceleration → velocity → position. <b>Four matrix products for four integrations.</b></li>
+    <li>This rank test is the entry ticket for LQR (Week 7) and for the pole placement that makes the cascade work at all.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">What failure would look like.</span>
+  If a rotor died, \( B \) loses a column and yaw controllability degrades — the algebra would tell you which axis you can no longer command, before any flight test. That is the practical value of an abstract rank condition.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Frame controllability as 'the algebra confirming the physics', then note it becomes a precondition in Wk 7.</aside>
+</section>
+
+<!-- 6. OPEN-LOOP POLES -->
+<section>
+  <p class="eyebrow">Why we need feedback</p>
+  <h2>The open-loop poles sit at the origin</h2>
+  <p>The poles are the eigenvalues of \(A\). For hover, many of them are <b>exactly zero</b>:</p>
+  \[ \lambda_i=\operatorname{eig}(A),\qquad \text{several } \lambda_i = 0 \;\;(\text{Re}=0). \]
+  <div class="cols" style="font-size:.85em">
+    <ul>
+      <li>Position integrates velocity; attitude integrates rate ⇒ <b>chains of integrators</b>.</li>
+      <li>Poles on the imaginary axis ⇒ <span class="accent">marginally stable, NOT asymptotically stable</span>.</li>
+      <li>A torque bias is never corrected — it drifts away. <em>This</em> is why the open-loop quad tips.</li>
+    </ul>
+    <div class="box warn">
+      Marginal stability is the whole motivation for the course: feedback must <b>pull these poles
+      into the left half-plane</b>. Wk 5 does it for attitude; Wk 7 (LQR) &amp; Wk 11–12 (MPC) for the rest.
+    </div>
+  </div>
+  <aside class="notes">Don't say "unstable" loosely — at hover the linearization gives poles AT the origin (integrators), i.e. marginally stable. The nonlinear quad then diverges because nothing returns it. Either way: feedback required.</aside>
+</section>
+
+<!-- 6b. SPLANE FIG -->
+<section>
+  <p class="eyebrow">The pole picture</p>
+  <h2>Where the poles live — and where feedback must move them</h2>
+
+  <div class="fig" data-diagram="splane"><p class="cap">Open loop: integrator chains parked on the imaginary axis. Closed loop (Wks 5–7): feedback drags them left; σ sets decay, the pair's angle sets damping ζ.</p></div>
+  <div class="turn" style="margin-top:.5em"><span class="tt">Your turn (60 s)</span> — sketch where you'd *want* the attitude poles for ζ ≈ 1 and settling ≈ 0.5 s. Keep the sketch; after Wk 5's lab, compute your closed-loop eigenvalues and grade your own guess.</div>
+  <aside class="notes">The self-grading loop (predict → build → check) is the participation habit; say that this is exactly what the prediction tables in every lab sheet are for.</aside>
+</section>
+
+<!-- 7. CONTROLLABILITY -->
+<section>
+  <p class="eyebrow">Can we even fix it?</p>
+  <h2>Controllability: full rank 12</h2>
+  <p>Before designing any controller, check the four inputs can actually steer all twelve states. Build the controllability matrix and take its rank:</p>
+  \[ \mathcal C=\big[\,B\ \ AB\ \ A^2B\ \ \cdots\ \ A^{11}B\,\big],\qquad \operatorname{rank}\mathcal C = 12. \]
+  <div class="box" style="margin-top:.3em">
+    Full rank (\(=n=12\)) ⇒ every state is reachable from the wrench \( [T,\tau_x,\tau_y,\tau_z] \).
+    This is the green light for <b>LQR (Wk 7)</b>: a stabilizing gain exists. In <code>quadsim</code>:
+    <br/><code>C, rank = analysis.controllability(A, B)   # rank == 12</code>
+  </div>
+  <aside class="notes">Controllability does not depend on units being nice; rank tol is 1e-6 in the code. Tie underactuation (Wk5) to controllability: only 4 inputs, yet the coupling through tilt makes all 12 states reachable — that is why a quad can fly at all.</aside>
+</section>
+
+<!-- DECOMP 1 -->
+<section>
+  <p class="eyebrow">Read the answer</p>
+  <h2>The four independent aircraft hiding inside one quadrotor</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Subsystem</th><th>States</th><th>Input</th><th>Chain</th></tr>
+    <tr><td>longitudinal</td><td>\( x, v_x, \theta, q \)</td><td>\( \tau_y \)</td><td>\( \tau_y \to q \to \theta \to \ddot x \to v_x \to x \)</td></tr>
+    <tr><td>lateral</td><td>\( y, v_y, \phi, p \)</td><td>\( \tau_x \)</td><td>mirror image, with a sign flip</td></tr>
+    <tr><td>vertical</td><td>\( z, v_z \)</td><td>\( T \)</td><td>\( T \to \ddot z \to v_z \to z \)</td></tr>
+    <tr><td>heading</td><td>\( \psi, r \)</td><td>\( \tau_z \)</td><td>\( \tau_z \to r \to \psi \)</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why this is the week's most useful fact.</span>
+  At hover, \( A \) is block-diagonal in these four groups. So the twelve-state design problem <b>decomposes into two 4-state problems and two 2-state problems</b> — each small enough to reason about with pen and paper.<br/><br/>This is the licence for Weeks 5–7's per-axis design. It is <i>only</i> valid near hover: tilt the aircraft hard and the blocks start talking to each other.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — Which subsystem has the longest chain from input to position, and what does that predict about which axis is hardest to control? <span class="muted">(Longitudinal and lateral: four integrations from torque to position. Four integrators means four poles at the origin and a phase lag of 360° — which is exactly why position needs a cascade rather than one loop.)</span></div>
+
+  <aside class="notes">The decomposition is the single most load-bearing structural fact of the course; the 4-integrator chain answer motivates the cascade before Wk 6 asserts it.</aside>
+</section>
+
+<!-- MODE 1 -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>Modes and eigenvectors: what the poles are doing <i>to what</i></h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>An eigenvalue answers <i>how fast</i>; its <b>eigenvector</b> answers <i>which states move together</i>.</li>
+    <li>For the lateral block, the repeated zero eigenvalue has eigenvectors mixing \( \phi \) and \( v_y \) — the algebra saying <b>'tilt and drift are the same motion'</b>.</li>
+    <li>You cannot fix drift without touching tilt. Any controller that tries is fighting the eigenstructure.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Making it concrete.</span>
+  Start with \( \phi = 2^\circ \), everything else zero, no control. The linear model predicts \( \phi \) stays at 2°, \( v_y \) grows linearly, \( y \) grows quadratically.<br/><br/>Run the <i>nonlinear</i> sim for 5 s and compare: the same, to within a few percent. <b>A confirmation that the linearisation is telling the truth in this regime</b> — and a check worth doing before trusting any design built on it.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Eigenvectors are usually skipped; the 'tilt and drift are one motion' reading makes them worth five minutes.</aside>
+</section>
+
+<!-- VER 1 -->
+<section>
+  <p class="eyebrow">Verification, not faith</p>
+  <h2>Does the linear model actually predict the nonlinear one?</h2>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>Pick a deviation: \( \theta_0 = 5^\circ \), all else at trim.</li>
+    <li>Simulate the <b>nonlinear</b> \( f \) for 2 s.</li>
+    <li>Simulate \( \dot{\delta\mathbf x} = A\delta\mathbf x \) from the same start.</li>
+    <li>Overlay \( x(t) \). Repeat at \( 15^\circ \), \( 30^\circ \), \( 45^\circ \).</li>
+  </ol>
+  <div class="env exm"><span class="eh">What you will see.</span>
+  5°: curves indistinguishable.<br/>15°: ~1% apart at 2 s.<br/>30°: ~5%, visibly diverging.<br/>45°: ~12%, different stories.<br/><br/>The numbers match the \( \sin\theta \) error ladder from Week 1 — as they must, since that is the dominant nonlinearity.</div>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">The habit being taught.</span>
+  <b>Never inherit a model on trust.</b> Two simulations and one overlay tell you the radius of validity of everything you are about to design. It costs ten minutes and it is the difference between engineering and hoping.<br/><br/>This overlay is a required figure in today's lab report — and its analogue reappears in Week 10 as sim-versus-hardware.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Make the parallel explicit: today's linear-vs-nonlinear overlay is a rehearsal of Wk-10's nominal-vs-team-plant overlay. Same discipline, different pair.</aside>
+</section>
+
+<!-- RK 1 -->
+<section>
+  <p class="eyebrow">Derivation · click to advance <span class="pill">interactive</span></p>
+  <h2>Why RK4, and where the 4 comes from</h2>
+  <div class="derive">
+    <div class="dstep"><span><span class="dnum">1</span>we need \( \mathbf x(t+h) \) from \( \mathbf x(t) \) and \( f \)</span>
+      <span class="dwhy"><b>The whole problem of simulation:</b> we know the slope everywhere, we want the trajectory.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">2</span>Euler: \( \mathbf x + h f(\mathbf x) \) — use the slope at the start for the whole step</span>
+      <span class="dwhy"><b>Simplest possible answer</b>, and it systematically misses whenever the slope changes during the step. Error per step \( O(h^2) \).</span></div>
+    <div class="dstep fragment key"><span><span class="dnum">3</span>sample the slope <b>four times</b>: start, twice at the midpoint, end</span>
+      <span class="dwhy"><b>The key idea.</b> Instead of trusting one slope, probe how the slope evolves across the step — a poor man's higher derivative, obtained without ever differentiating \( f \).</span></div>
+    <div class="dstep fragment"><span><span class="dnum">4</span>\( \mathbf x_{n+1} = \mathbf x_n + \tfrac{h}{6}(k_1 + 2k_2 + 2k_3 + k_4) \)</span>
+      <span class="dwhy"><b>Weighted average, midpoints counted double.</b> The weights are chosen to cancel error terms up to \( h^4 \) — hence 'fourth order': halve the step and the error falls 16×.</span></div>
+    <div class="dstep fragment"><span><span class="dnum">5</span>cost: 4 evaluations of \( f \) per step, versus 1 for Euler</span>
+      <span class="dwhy"><b>The trade.</b> Four times the work per step buys you far more than four times the accuracy — which is why nearly every physics simulator you will ever use is RK4 or a cousin.</span></div>
+  </div>
+
+  <aside class="notes">Students use RK4 constantly and rarely know why it works. Step 3 is the insight; the weights are bookkeeping.</aside>
+</section>
+
+<!-- INT 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Fixed step, variable step, and why we chose fixed</h2>
+  <table class="data">
+    <tr><th></th><th>Fixed step (ours)</th><th>Variable step (e.g. <code>solve_ivp</code>)</th></tr>
+    <tr><td>Step size</td><td>constant 5 ms</td><td>adapts to local error</td></tr>
+    <tr><td>Cost</td><td>predictable — always \( N/h \) evaluations</td><td>varies; can stall on stiff regions</td></tr>
+    <tr class="hl"><td>Matches hardware?</td><td><b>yes — a flight controller runs on a fixed timer</b></td><td>no</td></tr>
+    <tr><td>Control code sees</td><td>exactly the \( \Delta t \) it will see on the aircraft</td><td>a fiction</td></tr>
+    <tr class="hl"><td>Best for</td><td><b>control simulation, hardware-in-the-loop</b></td><td>open-loop physics, accuracy studies</td></tr>
+  </table>
+  <div class="cols top">
+    <div>
+  <div class="env rmk"><span class="eh">The deciding argument.</span>
+  A discrete controller <i>is</i> a fixed-rate object: it samples, computes, holds. Simulating it with an adaptive integrator means your controller runs at a rate that does not exist on any real machine — and gains tuned there are gains tuned for an imaginary aircraft.</div>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The one thing to check.</span>
+  Fixed step demands you verify the step is small enough. Halve \( \Delta t \) to 2.5 ms and re-run: if the trajectory changes visibly, 5 ms was too coarse. Ours does not — a two-minute check that licenses everything after it.</div>
+    </div>
+  </div>
+
+  <aside class="notes">The 'halve dt and compare' convergence check is the standard professional habit; make it a lab checkpoint.</aside>
+</section>
+
+<!-- SIMLOOP 1 -->
+<section class="dense">
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>The simulation loop, and where the controller sits in it</h2>
+  <pre><code class="language-python">for k in range(n_steps):
+    t = k * dt
+
+    # ---- 1. sense: what the controller is allowed to know ----
+    meas = sensors.read(x, t)        # Wk 8 replaces this with noise + rates
+
+    # ---- 2. think: your code, once per step, fixed budget ----
+    u = controller.control(t, meas)  # returns [T, tau_x, tau_y, tau_z]
+
+    # ---- 3. allocate + saturate: physics has the last word ----
+    f = np.clip(alloc @ u, 0.0, p.f_max)
+    u_actual = mixer @ f             # what the aircraft ACTUALLY gets
+
+    # ---- 4. integrate the plant ----
+    x = rk4_step(x, u_actual, dt)
+
+    log.append(t, x, u, u_actual, meas)</code></pre>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>Step 3 is the honest one:</b> we log both what you asked for and what the aircraft delivered. The gap between them is a diagnostic you will use all term.</li>
+    <li>The controller is called <b>exactly once per step</b> — the same discipline as firmware.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why the structure matters.</span>
+  This loop is a miniature of the real flight-control task: sense, think, actuate, repeat, under a fixed budget. Weeks 8, 11 and 13 change what goes in the 'think' box and leave the rest untouched.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Point at each numbered block and name the week that will modify it. The u vs u_actual logging habit pays off in every later debugging session.</aside>
+</section>
+
+<!-- WEX 4 -->
+<section>
+  <p class="eyebrow">Worked example · predict, then check</p>
+  <h2>Two seconds of open-loop flight, by hand</h2>
+  <p>Start at hover. At \( t=0 \), hold \( \tau_y = 0.01 \) N·m for 2 s with \( T = mg \). Predict \( \theta(2) \) and \( x(2) \) using the <i>linear</i> model.</p>
+  <div class="cols top">
+    <div>
+  <ol class="small">
+    <li>\( \dot q = \tau_y/I_{yy} = 0.01/2.3\times10^{-3} = 4.35 \) rad/s².</li>
+    <li>\( \theta(t) = \tfrac12 (4.35) t^2 \Rightarrow \theta(2) = 8.7 \) rad — <b>impossible</b>, that is 500°.</li>
+    <li>Something is wrong with the <i>question</i>, not the arithmetic: the aircraft leaves the linear regime within about 0.3 s.</li>
+    <li>Redo for \( t = 0.3 \) s: \( \theta = 0.196 \) rad \( = 11^\circ \), \( x = \tfrac{1}{24} g (4.35) (0.3)^4 \approx 0.014 \) m.</li>
+  </ol>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">The lesson is the failure.</span>
+  A tiny 0.01 N·m torque — one sixtieth of available authority — flips the aircraft past vertical in under a second if nobody intervenes.<br/><br/><b>That is what 'no passive stability' means numerically.</b> It also shows the linear model policing its own boundary: when it predicts 500°, it is telling you the question left its jurisdiction.</div>
+    </div>
+  </div>
+  <div class="turn"><span class="tt">(2 min)</span> — How long until \( \theta \) reaches 30° (the edge of good linearity)? <span class="muted">(\( t = \sqrt{2(0.52)/4.35} \approx 0.49 \) s. Your controller has half a second to notice and respond — which sets the bandwidth requirement for Week 5.)</span></div>
+
+  <aside class="notes">The 0.49 s answer is a genuine specification derivation: it tells them why the attitude loop must run at tens of Hz.</aside>
+</section>
+
+<!-- 8. THE SIM LOOP -->
+<section>
+  <p class="eyebrow">How the sim runs</p>
+  <h2>The RK4 closed-loop &amp; <code>SimLog</code></h2>
+  <pre style="font-size:.5em;background:#0e1a26;color:#e6edf3;border-radius:12px;padding:18px;line-height:1.5">
+   reference(t) ─►┌──────────────┐  wrench  ┌──────────┐  motors  ┌───────────────┐
+                  │  controller  ├──[T,τ]──►│  mixer + ├──f_i────►│  RK4 step on  ├─► x(t+dt)
+   state x ──────►│  .control()  │          │ saturate │          │ state_deriv f │
+                  └──────────────┘          └──────────┘          └───────▲───────┘
+                          ▲                  records into SimLog          │ loop
+                          └──────────────────────────────────────────────┘
+  </pre>
+  <ul class="muted" style="font-size:.8em">
+    <li>Each step: <code>wrench = controller.control(t, x, ref)</code> → mixed to motor thrusts → <b>clipped to \([f_{min},f_{max}]\)</b> → applied.</li>
+    <li><code>SimLog</code> records <code>t, x</code> (N×12), <code>u</code> (N×4 applied wrench), <code>ref</code>, <code>f</code> (per-motor) — what you plot &amp; grade.</li>
+    <li>Integrator is fixed-step <b>RK4</b> at <code>p.dt</code> (200 Hz); optional <code>wind(t)</code> adds a disturbance accel.</li>
+  </ul>
+  <aside class="notes">The simulator OWNS actuator reality: the controller asks for a wrench, but the motors saturate, so the applied wrench can differ. That is why log.u is the *applied* wrench, not the requested one. Mention log.f for spotting saturation later.</aside>
+</section>
+
+
+
+<!-- 8b. WIDGET -->
+<section class="dense">
+  <p class="eyebrow">Interactive · drag the slider</p>
+  <h2>Why RK4 — in one picture</h2>
+  <div class="widget" data-widget="integ"></div>
+  <p class="muted" style="font-size:.62em">Find the dt where Euler&#39;s error would convince you your <i>controller</i> is unstable.</p>
+  <aside class="notes">The trap named out loud: a bad integrator masquerades as a bad controller. If your closed loop &#34;oscillates&#34;, first question is always: physics or numerics? quadsim&#39;s 200 Hz RK4 makes numerics a non-suspect — on the STM32, the firmware loop&#39;s dt is YOUR responsibility (measure it, Wk-9 checklist &sect;2).</aside>
+</section>
+
+<!-- 8c. QUIZ -->
+<section>
+  <p class="eyebrow">Concept check · 00:50</p>
+  <h2>Predict before you compute</h2>
+  <div class="quiz">
+    <div class="q">Q1 — The linearized hover model has eigenvalues at the origin (integrator chains), none in the right half-plane. So why did we keep calling the quad &#34;unstable&#34;?</div>
+    <p class="fragment"><span class="ok">Marginal + double-integrator chains = practically unstable.</span> <span class="why">Any disturbance integrates twice into runaway position/attitude drift; and the nonlinear coupling feeds errors between axes. &#34;No exponential blow-up in the linear model&#34; is cold comfort — watch the Wk-1 tip-over again. Feedback must <i>place</i> those poles left of the axis (Wk 5–7).</span></p>
+    <div class="q fragment">Q2 — Your finite-difference B matrix has a column of zeros. First suspect?</div>
+    <p class="fragment"><span class="ok">Perturbation size / units on that input.</span> <span class="why">Too-small &epsilon; drowns in float noise, too-large leaves the linear regime; or you perturbed a motor command where the model expects a wrench. Numerical Jacobians are a craft: always sanity-check entries you can derive by hand (&part;a_z/&part;T = 1/m = 1.54).</span></p>
+  </div>
+</section><!-- 8a. DISCRETIZATION -->
+<section>
+  <p class="eyebrow">One level deeper · continuous law, discrete computer</p>
+  <h2>Choosing \( \Delta t \): rules with numbers, not folklore</h2>
+  <div class="env defn"><span class="eh">Definition <em>(zero-order-hold discretisation)</em>.</span>
+  Holding \( \mathbf u \) constant over a step, the exact discrete model is \( A_d = e^{A\Delta t}, \; B_d = \int_0^{\Delta t} e^{A s} ds\, B \); for small \( A\Delta t \), \( A_d \approx I + A\Delta t \), \( B_d \approx B\Delta t \). MPC (Wk 11) uses exactly this \( (A_d, B_d) \).</div>
+  <div class="cols top" style="margin-top:.4em">
+    <div class="env exm"><span class="eh">Worked example <em>(is 200 Hz enough?)</em>.</span>
+    Fastest loop we will close: attitude at \( \omega_n \approx 13 \) rad/s (\( \approx 2.1 \) Hz). Rules of thumb: sample \( \ge 20\times \) the closed-loop bandwidth ⇒ ≥ 42 Hz for control; RK4 stability for oscillatory modes wants \( \omega_n \Delta t \lesssim 0.5 \) ⇒ \( \Delta t \lesssim 38 \) ms. Our 5 ms is ~10× inside both — comfortable, <i>and</i> it leaves room for the motor lag (\( \tau_m \approx 40 \) ms) to stay the binding constraint, not the mathematics.</div>
+    <div class="env rmk"><span class="eh">Remark <em>(the firmware's clock is yours to verify)</em>.</span>
+    quadsim's \( \Delta t \) is exact by construction. On the STM32, the loop period is whatever your code achieves <i>under load</i> — measure it with a toggling GPIO pin or timestamps, put the number on the wall (checklist §2). Gains tuned at one rate are silently wrong at another unless rate-normalised.</div>
+  </div>
+  <aside class="notes">Two takeaways: 200 Hz is generous by design, and "measure, don't assume" transfers to hardware. The ω_nΔt ≤ 0.5 rule comes straight from the widget they just used.</aside>
+</section>
+
+<!-- 9. WORKED EXAMPLE -->
+<section>
+  <p class="eyebrow">Worked example · examples/04_analysis.py</p>
+  <h2>The whole Week-4 analysis in code</h2>
+  <pre><code class="language-python" data-trim data-noescape>from quadsim import QuadParams, analysis as an
+import numpy as np
+
+p = QuadParams()
+
+# 1) Linearize the real nonlinear model about hover
+A, B = an.linearize(p)             # A: 12x12,  B: 12x4
+
+# 2) Open-loop poles — count how many sit at the origin
+ol = an.poles(A)
+n_origin = np.sum(np.abs(ol.real) &lt; 1e-6)
+
+# 3) Controllability rank (must be 12)
+_, rank = an.controllability(A, B)
+
+print(f"{n_origin} poles at the origin (marginally stable) "
+      f"· controllability rank {rank}/12")
+</code></pre>
+  <p class="muted" style="font-size:.75em">Output: several poles at the origin, <b>controllability rank 12/12</b>. This same \( (A,B) \) is what Wk 7 hands to <code>an.lqr(A,B,Q,R)</code> and Wk 11–12 to the MPC.</p>
+  <aside class="notes">Run this live if time. The numbers students see today are the literal inputs to the LQR/MPC weeks — make that continuity explicit so Week 4 doesn't feel like a detour.</aside>
+</section>
+
+<!-- OBS 1 -->
+<section>
+  <p class="eyebrow">Formally, once</p>
+  <h2>Observability: the mirror image of controllability</h2>
+  <div class="env defn"><span class="eh">Definition.</span>
+  \( (A,C) \) is <b>observable</b> if the state can be reconstructed from a finite record of the outputs \( \mathbf y = C\mathbf x \). Test: \( \mathcal O = [\,C;\, CA;\, \dots;\, CA^{n-1}\,] \) has rank \( n \).</div>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Controllability asks <i>can I steer it?</i>; observability asks <i>can I see it?</i>. Same algebra, transposed.</li>
+    <li>It decides whether Week 8's estimator is even <b>possible</b> — no filter can recover a state the sensors cannot distinguish.</li>
+    <li>With a full IMU plus a position fix, our quadrotor is observable. Remove the position fix and \( (x,y) \) become unobservable: the aircraft knows how it is <i>pointing</i>, never where it <i>is</i>.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">A real consequence.</span>
+  That last line is exactly why indoor flight without optical flow is impossible to stabilise in position — and why the flow deck is not an accessory but a <b>structural requirement</b> for L3 in the Week-10 demonstration.<br/><br/>The rank test predicts the flight failure before anyone builds the aircraft.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Pairing observability with the flow-deck requirement makes an abstract rank test operationally meaningful.</aside>
+</section>
+
+<!-- TF 1 -->
+<section>
+  <p class="eyebrow">A second view of the same system</p>
+  <h2>Transfer functions — one line, for the students who have met them</h2>
+  <div class="cols top">
+    <div>
+  <p>Laplace the lateral chain and the four integrators become four poles at the origin:</p>
+  \[ \frac{Y(s)}{T_x(s)} = \frac{-g}{I_{xx}\, s^4} \]
+  <ul class="small">
+    <li>Four poles at \( s=0 \) ⇒ \( -360^\circ \) of phase at every frequency.</li>
+    <li>Classical stability needs phase margin at crossover; with \( 1/s^4 \) there is <b>none to spare</b> — so a single loop cannot work, no matter the gain.</li>
+    <li>Add an inner attitude loop and the outer loop sees \( 1/s^2 \) instead: \( -180^\circ \), which a PD can rescue.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Why the course uses state space anyway.</span>
+  Transfer functions are elegant for one input and one output. We have four and twelve, coupled. State space handles that natively — and it is the only language in which LQR, Kalman and MPC can even be stated.<br/><br/>Take the insight (\( 1/s^4 \) is unmanageable; cascading fixes it) and leave the machinery.</div>
+    </div>
+  </div>
+
+  <aside class="notes">One slide of frequency-domain contact for students from a classical control background, without derailing the state-space narrative.</aside>
+</section>
+
+<!-- CQ 4 -->
+<section>
+  <p class="eyebrow">Concept check</p>
+  <h2>Three questions before the lab</h2>
+  <div class="quiz">
+    <div class="q">Q1 — You linearise about a <i>tilted</i> trim (steady 20° forward flight). Does \( A \) stay block-diagonal?</div>
+    <p class="fragment"><span class="ok">No — the blocks couple.</span> <span class="why">Tilting mixes the axes, so longitudinal and vertical motion interact. This is precisely why fixed-wing autopilots gain-schedule and why our hover-only design is such a simplification.</span></p>
+    <div class="q fragment">Q2 — Your numerical \( B \) has \( \partial\dot v_z / \partial T = 1.54 \). Sanity-check it.</div>
+    <p class="fragment"><span class="ok">\( 1/m = 1/0.65 = 1.538 \) ✓</span> <span class="why">Every entry you can predict by hand should be predicted by hand. Numerical Jacobians are code, and code has bugs; hand-checkable entries are your assertions.</span></p>
+    <div class="q fragment">Q3 — A classmate says "the poles are at zero, so the aircraft is neither stable nor unstable — it just sits there." Correct them.</div>
+    <p class="fragment"><span class="ok">Marginal in the <i>linear</i> model means the model declines to answer; the nonlinear aircraft diverges.</span> <span class="why">A double integrator turns any bias into quadratic drift — one degree of tilt crosses the room in five seconds. "Sits there" is what it does for the first tenth of a second only.</span></p>
+  </div>
+
+  <aside class="notes">Q3 is the conceptual crux of the week and a favourite exam question; insist on the double-integrator argument, not intuition.</aside>
+</section>
+
+<!-- TH 4 -->
+<section>
+  <p class="eyebrow">Take-home set</p>
+  <h2>Six problems — solutions posted Friday</h2>
+  <ol class="small">
+    <li>Derive \( \partial \ddot x/\partial\theta = g \) analytically from \( R(\boldsymbol\eta)T\mathbf e_3/m \), and state precisely which approximations you used.</li>
+    <li>Compute the controllability matrix rank for the <b>lateral block only</b> (\( y, v_y, \phi, p \) with input \( \tau_x \)). Show it is 4 and identify which power of \( A \) contributes each rank.</li>
+    <li>Simulate linear vs nonlinear from \( \theta_0 \in \{5,15,30,45\}^\circ \) and produce the four overlays. Report the 2-second position error in each case and comment against the \( \sin\theta \) ladder.</li>
+    <li>Halve \( \Delta t \) to 2.5 ms and re-run a 10 s closed-loop case. Quantify the trajectory difference and state whether 5 ms is justified.</li>
+    <li>For the vertical subsystem \( (z, v_z) \) with input \( T \), write \( A, B \) by hand and compute \( e^{A\Delta t} \) exactly. Compare with the \( I + A\Delta t \) approximation at \( \Delta t = 5 \) ms.</li>
+    <li>Suppose the IMU is mounted 2 cm above the CoM. What extra term appears in the measured acceleration during rotation, and how large is it at \( \dot\omega = 10 \) rad/s²?</li>
+  </ol>
+  <div class="box warn">Question 3 is the one to do first — it produces the figure your lab report needs, and it is the rehearsal for Week 10's nominal-versus-team-plant comparison.</div>
+
+  <aside class="notes">Q6 is a genuine sensor-placement effect that returns in Wk 8; strong students enjoy it.</aside>
+</section>
+
+<!-- MAP 4 -->
+<section class="dense">
+  <p class="eyebrow">Concept map</p>
+  <h2>Week 4, in one page</h2>
+  <div class="fig plain" data-diagram="splane"><p class="cap">Where the poles start (amber, on the axis) and where feedback must put them (teal, left half-plane). Weeks 5–7 are three different ways of moving those crosses.</p></div>
+  <table class="data">
+    <tr><th>Concept</th><th>One-line statement</th><th>Where it returns</th></tr>
+    <tr><td>trim</td><td>\( f(\mathbf x_0,\mathbf u_0)=0 \); a 4-parameter family at hover</td><td>every design, every week</td></tr>
+    <tr><td>\( (A,B) \)</td><td>the aircraft, told to a control engineer</td><td>Wks 5–7, 11–12</td></tr>
+    <tr class="hl"><td>marginal poles</td><td>no restoring force ⇒ feedback is structural</td><td>the motivation for everything</td></tr>
+    <tr><td>controllability</td><td>the algebra confirms we can steer</td><td>precondition for LQR</td></tr>
+    <tr><td>observability</td><td>can we see the state?</td><td>precondition for Wk 8</td></tr>
+    <tr><td>RK4 + fixed \( \Delta t \)</td><td>simulate the way hardware runs</td><td>every lab from here</td></tr>
+  </table>
+
+  <aside class="notes">Sixty-second recap. Point at the amber crosses and say: next week we move two of them, and the aircraft stops falling over.</aside>
+</section>
+
+<!-- AHEAD 4 -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: the first loop that flies</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>You have the model, its linearisation, and proof that it cannot be left alone.</li>
+    <li>Week 5 closes the <b>innermost</b> loop — attitude — and the open-loop tip-over from Week 1 stops happening.</li>
+    <li>You will also meet the seven engineering fixes that separate a controller that works in simulation from one that works on an aircraft.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Bring to Week 5:</b> your Lab-1 harness working from a clean clone, and your \( (A,B) \) printed out. We will read the two \( 1/I \) entries of \( B \) and turn them straight into gains.<br/><br/><b>Team:</b> one <code>student.py</code> on a shared git repo, everyone can run it.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Close by naming the team deliverable too, so the team and the individual labs stay synchronised.</aside>
+</section>
+
+<!-- NJ 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Numerical Jacobians: the bias-noise trade, quantified</h2>
+  <div class="cols top">
+    <div>
+  <p>Central difference, one column at a time:</p>
+  \[ \big[A\big]_{:,j} \approx \frac{f(\mathbf x_0 + \epsilon\mathbf e_j,\mathbf u_0) - f(\mathbf x_0 - \epsilon\mathbf e_j,\mathbf u_0)}{2\epsilon} \]
+  <ul class="small">
+    <li>Truncation error \( \sim \epsilon^2 \) — wants \( \epsilon \) small.</li>
+    <li>Round-off error \( \sim \delta_{machine}/\epsilon \) — wants \( \epsilon \) large.</li>
+    <li>Optimum near \( \epsilon \approx \delta^{1/3} \approx 6\times10^{-6} \) for doubles.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">See both failures.</span>
+  \( \epsilon = 10^{-2} \): the tilt is no longer small — you measure a <i>chord</i>, not a tangent. Error ~0.3%.<br/>\( \epsilon = 10^{-12} \): the two evaluations agree to 12 digits; their difference is pure noise. Error ~100%.<br/>\( \epsilon = 10^{-6} \): error \( &lt; 10^{-8} \). ✓<br/><br/><b>Scale each state first</b> — 1 metre and 1 radian are not comparable perturbations.</div>
+    </div>
+  </div>
+  <p class="small muted">Same trade-off, different clothes: too little smoothing is noise, too much is bias. You meet it again in Week 8's filter and Week 13's learning rate.</p>
+
+  <aside class="notes">The 'same trade in three places' framing is a genuine unifying thread — name it each time it appears.</aside>
+</section>
+
+<!-- WIDGET jacobian -->
+<section class="dense">
+  <p class="eyebrow">Block B · interactive</p>
+  <h2>The U-curve, live — pick h and watch the error</h2>
+  <div class="cols top">
+    <div class="widget" data-widget="jacobian"></div>
+    <div>
+      <div class="turn"><b>Predict before you compute.</b> Before sliding: which is better at h = 10⁻³, forward or central? By how many orders of magnitude? And where is each scheme's minimum?</div>
+      <p class="small muted" style="margin-top:.5em">Open it any time: <a href="../digital-lab.html#jacobian">Digital Lab → jacobian</a>.</p>
+    </div>
+  </div>
+  <aside class="notes">quadsim.analysis.linearize uses central differences near 1e-5 on unit-scaled states. Show why in thirty seconds.</aside>
+</section>
+
+<!-- LOG 4 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Logging: designing the data you will need at 2 a.m.</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>Log <b>time, full state, commanded \( \mathbf u \), delivered \( \mathbf u \), per-motor \( f_i \), and every controller internal</b> (each PID term separately).</li>
+    <li>Logging only the output is the commonest self-inflicted wound: when it misbehaves you cannot tell <i>which term</i> misbehaved.</li>
+    <li>Fixed-rate arrays, not lists of dicts. You will replay these thousands of times.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">What good logging answers instantly.</span>
+  • Did the mixer clamp? (commanded vs delivered)<br/>• Is the integrator winding up? (its own channel)<br/>• Is D amplifying noise? (D-term vs gyro trace)<br/>• Was the loop late? (timestamp deltas)<br/><br/>Each unanswered question costs a re-run — and on hardware a re-run costs a battery and a flight.</div>
+    </div>
+  </div>
+  <div class="box warn"><b>Lab 1 requirement:</b> your harness must answer all four questions above <i>without</i> re-running. That is the graded deliverable, not the plot.</div>
+
+  <aside class="notes">Framing logging as a spec with checkable criteria is the highest-leverage habit for the Week-10 diagnosis and the final-project evidence kit.</aside>
+</section>
+
+<!-- RTF 1 -->
+<section>
+  <p class="eyebrow">Detail, done properly</p>
+  <h2>Real-time factor — a number that becomes a deadline in Week 13</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li><b>RTF</b> = simulated seconds per wall-clock second. quadsim at 200 Hz gives \( \mathrm{RTF} \approx 50\text{–}200 \) on a laptop.</li>
+    <li>That surplus is what makes tuning pleasant: a 10 s flight evaluates in a tenth of a second, so you can sweep gains over lunch.</li>
+    <li>It is also the budget Weeks 11–14 will spend.</li>
+  </ul>
+    </div>
+    <div>
+  <table class="data">
+    <tr><th>What you add</th><th>Typical RTF</th><th>Consequence</th></tr>
+    <tr><td>nothing (Wks 1–9)</td><td>50–200</td><td>instant experiments</td></tr>
+    <tr><td>MPC solve each step</td><td>1–5</td><td>a 10 s flight takes seconds</td></tr>
+    <tr class="hl"><td>a 200-plant calibration sweep (Wk 10's <code>verify_team_plant.py</code>)</td><td><b>400 flights</b></td><td>~20 min; why the ranges are fixed, not re-drawn</td></tr>
+  </table>
+    </div>
+  </div>
+  <p class="small">Measure your RTF today and record it in the lab report — it is the baseline your final-project planning will lean on.</p>
+
+  <aside class="notes">Turning RTF into a planning number now prevents the Wk-13 panic about training time.</aside>
+</section>
+
+<!-- FAIL 4 -->
+<section>
+  <p class="eyebrow">Common failure gallery</p>
+  <h2>Four ways Lab 1 goes wrong, and what each looks like</h2>
+  <table class="data">
+    <tr><th>Symptom</th><th>Cause</th><th>Fastest check</th></tr>
+    <tr><td>Everything diverges immediately</td><td>hover thrust not applied, or gravity sign flipped</td><td>equilibrium assert: is \( f(\mathbf x_0,\mathbf u_0)=\mathbf 0 \)?</td></tr>
+    <tr><td>Trajectory fine, \( (A,B) \) wrong</td><td>perturbing motor commands where \( f \) expects a wrench</td><td>hand-check \( \partial\dot v_z/\partial T = 1/m \)</td></tr>
+    <tr><td>\( A \) has a column of zeros</td><td>\( \epsilon \) too small for that state's scale</td><td>rescale states; sweep \( \epsilon \) over decades</td></tr>
+    <tr class="hl"><td>Results change between runs</td><td>hidden state carried over (a global, a stale controller object)</td><td>re-instantiate everything inside the run function</td></tr>
+  </table>
+  <p class="small">The last row costs whole evenings, because the experiment appears to work and then quietly stops being reproducible. <b>A run function that takes parameters and returns a log, with no globals</b>, is the cure — and it is also what makes your final-project submission survive <code>certify.py</code> run from a fresh clone.</p>
+
+  <aside class="notes">Row 4 connects directly to the Wk-15 reproducibility requirement; say so.</aside>
+</section>
+
+<!-- AHEAD 4 -->
+<section>
+  <p class="eyebrow">Looking ahead</p>
+  <h2>Next week: the first loop that flies</h2>
+  <div class="cols top">
+    <div>
+  <ul class="small">
+    <li>You have the model, its linearisation, and proof that it cannot be left alone.</li>
+    <li>Week 5 closes the <b>innermost</b> loop — attitude — and the Week-1 tip-over stops happening.</li>
+    <li>You also meet the seven engineering fixes that separate a controller that works in simulation from one that works on an aircraft.</li>
+  </ul>
+    </div>
+    <div>
+  <div class="box warn"><b>Bring to Week 5:</b> your Lab-1 harness running from a clean clone, and \( (A,B) \) printed out — we will read the two \( 1/I \) entries and turn them straight into gains.<br/><br/><b>Team:</b> one <code>student.py</code> on a shared git repo, everyone can run it.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Name the deliverable for both tracks so they stay synchronised.</aside>
+</section>
+
+<!-- F570 4a -->
+<section>
+  <p class="eyebrow">The instructor's aircraft</p>
+  <h2>The vendor linearised it exactly as we did</h2>
+  <div class="cols top">
+    <div>
+  <p>WHEELTEC's own development manual reaches this model — identical to the one you will derive today:</p>
+  \[ \ddot x = g\theta, \quad \ddot y = -g\phi, \quad \ddot z = u_1/m \]
+  \[ \ddot\phi = u_2/I_{xx}, \quad \ddot\theta = u_3/I_{yy}, \quad \ddot\psi = u_4/I_{zz} \]
+  <p class="small">with \( u_1 = \sum f_i - mg \) — note the \( -mg \): they define the input as the <b>deviation from hover thrust</b>, exactly the \( \delta \)-coordinates this lecture insists on.</p>
+    </div>
+    <div>
+  <div class="env exm"><span class="eh">Their parameters, measured.</span>
+  \( m = 0.079 + 0.060 + 4(0.014) = 0.195 \) kg — frame, battery, four motors, counted individually.<br/><br/>\( I_{xx} = \tfrac{1}{12}m_1(0.069^2 + 0.012^2) + 4m_2(0.0636)^2 \)<br/>\( I_{zz} = \tfrac{1}{12}m_1(0.069^2 + 0.069^2) + 4m_2(0.0900)^2 \)<br/><br/><b>A slab plus four point masses</b> — precisely the estimate you did by hand in Week 2, used in a shipping product.</div>
+    </div>
+  </div>
+
+  <aside class="notes">Showing that a commercial vendor uses the same hand-derivation the students just did is enormously validating. Point at the -mg and connect to delta coordinates.</aside>
+</section>
+
+<!-- F570 4b -->
+<section>
+  <p class="eyebrow">The aircraft in this room</p>
+  <h2>Six two-state subsystems — the cascade, written in state space</h2>
+  <div class="cols top">
+    <div>
+  <table class="data">
+    <tr><th>Subsystem</th><th>State</th><th>Input</th><th>\( B \) entry</th></tr>
+    <tr class="hl"><td>x-translation</td><td>\( (x, \dot x) \)</td><td><b>\( \theta \)</b> — an angle!</td><td>\( g \)</td></tr>
+    <tr class="hl"><td>y-translation</td><td>\( (y, \dot y) \)</td><td><b>\( \phi \)</b></td><td>\( -g \)</td></tr>
+    <tr><td>height</td><td>\( (z, \dot z) \)</td><td>\( u_1 \)</td><td>\( 1/m \)</td></tr>
+    <tr><td>roll</td><td>\( (\phi, \dot\phi) \)</td><td>\( u_2 \)</td><td>\( 1/I_{xx} \)</td></tr>
+    <tr><td>pitch</td><td>\( (\theta, \dot\theta) \)</td><td>\( u_3 \)</td><td>\( 1/I_{yy} \)</td></tr>
+    <tr><td>yaw</td><td>\( (\psi, \dot\psi) \)</td><td>\( u_4 \)</td><td>\( 1/I_{zz} \)</td></tr>
+  </table>
+    </div>
+    <div>
+  <div class="env rmk"><span class="eh">Look at the first two rows.</span>
+  The x-subsystem's <b>input is an attitude angle</b>, and that angle is the <i>output</i> of the roll/pitch subsystem.<br/><br/>That is the cascade — not as an architectural preference, but as an <b>algebraic fact about the linearised model</b>. Six tiny 2×2 problems, chained. The vendor solves six separate 2-state LQRs and stacks them; we build two nested PD loops. <b>Same decomposition, two spellings.</b></div>
+    </div>
+  </div>
+  <p class="small muted">This is worth sitting with: two independent teams, one Chinese commercial vendor and one teaching simulator, arrived at the same partition of the problem — because the partition is in the physics, not in the taste.</p>
+
+  <aside class="notes">This slide is the strongest possible evidence that the Wk-4 decomposition is real. It also pre-explains the Wk-7 per-axis LQR design.</aside>
+</section>
+
+<!-- 10. THE LAB -->
+<section class="divider">
+  <p class="eyebrow">Second half · hands-on</p>
+  <h2>Now you build it</h2>
+  <hr class="drule"/>
+  <ul>
+    <li>Use <code>analysis.linearize</code> to get \( (A,B) \) about hover.</li>
+    <li>Plot the open-loop poles with <code>analysis.poles</code> + <code>plotting.plot_poles</code>.</li>
+    <li>Confirm <b>controllability rank = 12</b> with <code>analysis.controllability</code>.</li>
+    <li><b>Deliverable:</b> the pole map graded + the printed rank.</li>
+  </ul>
+  <p style="margin-top:1em"><a class="btn" href="../labs/week04-linearization-trim-hover.html">Open the Week 4 lab sheet →</a></p>
+</section>
+
+
+
+<!-- 10b. BREAK -->
+<section class="divider">
+  <h2><span class="tchip">01:30</span> Break — 10 minutes</h2>
+  <hr class="drule"/>
+  <p>After: Lab 1 &starf; — the harness every later lab plugs into. Build it once, build it well.</p>
+</section>
+
+<!-- 10c. LAB SESSION -->
+<section>
+  <div class="labwrap">
+    <p class="eyebrow" style="color:#1ec8c8">Lab session · 01:50 &rarr; 02:50</p>
+    <h3>Build order &amp; checkpoints</h3>
+    <p class="cp"><b>02:05</b> — <code>sim.py</code> walked through; a custom quantity added to <code>SimLog</code> and plotted</p>
+    <p class="cp"><b>02:20</b> — closed-loop run with the reference controller; timing measured (real-time factor printed)</p>
+    <p class="cp"><b>02:35</b> — your harness script: run &rarr; log &rarr; plot &rarr; metrics (RMSE, settle) in one command &starf;</p>
+    <p class="cp"><b>02:50</b> — harness committed; every teammate can run it from a clean clone</p>
+    <p style="margin-top:.8em"><a class="btn" href="../labs/week04-linearization-trim-hover.html">Open the Week 4 lab sheet &rarr;</a></p>
+  </div>
+  <aside class="notes">Insist on the clean-clone test — it is the difference between &#34;works on my laptop&#34; and an artifact the certification harness (certify.py) can actually run. The metrics function they write today is the same one that freezes the final-project baseline in Wk 12.</aside>
+</section>
+
+<!-- 10d. MILESTONE -->
+<section>
+  <p class="eyebrow">Team project · Wk 4 of 10</p>
+  <h2>Milestone board</h2>
+  <div class="miles">
+    <div class="m"><b>1 · Modeling</b>the \( (A,B) \) sparsity pattern explained row by row; the <code>jacobian</code> widget&#39;s U-curve reproduced</div>
+    <div class="m due"><b>2 · Inner loop</b><b>Lab 1 harness</b> runs from a clean clone on every member&#39;s machine (one command, metrics out)</div>
+    <div class="m"><b>3 · Outer loop</b>today&#39;s harness adopted as the team&#39;s test rig; the \( \Delta t \) choice justified with the <code>integ</code> widget</div>
+    <div class="m"><b>4 · Estimation</b>logging pipeline: <code>SimLog</code> &rarr; CSV &rarr; plots, demonstrated on one 10 s run</div>
+    <div class="m"><b>5 · Integration</b>CI green; a teammate reproduces your poles table from the repo alone</div>
+  </div>
+  <p class="muted" style="margin-top:.6em">Next week the controller era begins — and with it, the seven fixes, live on the instructor&#39;s tethered kit and in the <code>pid</code> widget.</p>
+</section><!-- 10e. MISCONCEPTIONS -->
+<section>
+  <p class="eyebrow">Before you leave</p>
+  <h2>The traps, named</h2>
+  <table class="data">
+    <tr><th>The trap</th><th>The truth</th></tr>
+    <tr><td>"Poles at the origin, none in the RHP — so hover is stable."</td><td><b>Marginally</b> stable: double-integrator chains turn any bias into unbounded drift. "Not exploding in the linear model" is not "flyable".</td></tr>
+    <tr><td>"My controller oscillates — the gains are wrong."</td><td>First ask: physics or numerics? A too-coarse integrator manufactures oscillations (you just watched it). quadsim's 200 Hz RK4 acquits numerics; on hardware, an unmeasured loop rate does not.</td></tr>
+    <tr><td>"A linear model is 'wrong', so why bother."</td><td>It is <i>locally excellent</i> (1% at 15°) and buys the entire design toolbox: poles, LQR, Kalman, linear MPC. The professional move is knowing the radius, not refusing the promise.</td></tr>
+    <tr><td>"Finite differences: smaller \( \epsilon \) is always better."</td><td>Below ~\(10^{-7}\), float cancellation dominates and the Jacobian gets <i>worse</i>. Numerical differentiation is a bias–noise trade, like everything else this term.</td></tr>
+  </table>
+  <aside class="notes">Row 2 is the debugging habit that saves the most lab hours. Row 3 frames the course's philosophy of models.</aside>
+</section>
+
+<!-- 11. SUMMARY -->
+<section>
+  <p class="eyebrow">Wrap-up</p>
+  <h2>What to remember</h2>
+  <ul>
+    <li><b>Hover trim:</b> level, at rest, \( T=mg \), zero torque ⇒ \( f(\mathbf x_{eq},\mathbf u_{eq})=\mathbf 0 \).</li>
+    <li><b>Linearize</b> the real \(f\) by finite differences ⇒ \(A\) (12×12), \(B\) (12×4).</li>
+    <li>Open-loop poles sit at the <b>origin</b> — integrators, not asymptotically stable ⇒ feedback needed.</li>
+    <li>The pair is <b>controllable (rank 12)</b> ⇒ LQR/MPC will work.</li>
+    <li><b>Next week:</b> close the first loop — <span class="accent">attitude control</span> — to drag those poles left.</li>
+  </ul>
+  <p class="muted" style="margin-top:1em">References: <a href="../simulator/CONVENTIONS.md">CONVENTIONS.md</a> (z-up, ZYX, X-frame mixer) ·
+     <a href="https://ocw.mit.edu/courses/16-323-principles-of-optimal-control-spring-2008/pages/lecture-notes/">MIT 16.323 (How), optimal control notes</a>. Deliverable &amp; deadline on the lab sheet.</p>
+  <aside class="notes">Preview Wk5: attitude PD law pulls the rotational poles into the LHP; Wk7 LQR does it for the full 12-state model on exactly this (A,B).</aside>
+</section>
+
+</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true, slideNumber: "c/t", history: false, transition: "slide",
+    width: 1100, height: 720, margin: 0.06,
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true } ] },
+  });
+</script>
+<script>
+  Reveal.on("ready", () => { window.MLTEWidgets && MLTEWidgets.init(); window.MLTEDiagrams && MLTEDiagrams.init(); });
+  Reveal.on("slidechanged", () => window.MLTEWidgets && MLTEWidgets.init());
+</script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/diagrams.js?v=18"></script>
+</body>
+</html>

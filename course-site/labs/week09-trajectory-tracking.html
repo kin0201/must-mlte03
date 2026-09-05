@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 9 Lab — Trajectory Tracking · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css?v=5" />
+<!-- KaTeX for the bit of math in the recap -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+</head>
+<body data-lab="week09-trajectory-tracking">
+
+<div class="lab-progress"><i></i></div>
+
+<!-- ============ HEADER ============ -->
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Week 9 · Lab (second half of session)</div>
+    <h1>Trajectory Tracking — fly a figure-eight</h1>
+    <div class="sub">Track a moving reference with feedforward, add wind, and report the tracking RMSE.</div>
+    <div class="meta">
+      <span>⏱ <b>~75 min</b></span>
+      <span>🧩 Run <b>examples/03_figure8.py</b> + a short script</span>
+      <span>📦 Deliverable: <b>strobe + error plot + RMSE numbers</b></span>
+      <span>⭐ <b>Graded checkpoint</b></span>
+    </div>
+    <p style="margin-top:14px"><a class="btn ghost" href="../slides/week09-trajectory-tracking.html">← Back to the Week 9 slides</a>
+       <a class="btn ghost" href="../index.html">Course home</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Goal</span>
+  Make the quad fly a smooth <b>figure-eight</b> instead of holding a point. Using the reference
+  autopilot's velocity/acceleration <b>feedforward</b>, the tracking error should be small (~<b>0.037 m</b>
+  RMSE with no wind). Then turn on <b>wind</b>, watch the RMSE rise (to ~0.48 m at 2 N), and render the 3-D flight
+  <b>strobe</b> and the tracking-error plot. This is also the week you consolidate Weeks 1–9 for the midterm.
+</div>
+
+<!-- ============ 1. RECAP ============ -->
+<h2>1 · The 5-minute recap</h2>
+<p>A <b>reference trajectory</b> is not just a point — it carries position <b>and its derivatives</b>:
+   \( \mathbf p_r(t),\ \mathbf v_r(t),\ \mathbf a_r(t) \). The figure-eight is the classic multirotor
+   benchmark (world is <b>z-up / ENU</b>, so height is \(+z\)):</p>
+<p style="text-align:center">
+  \[ \mathbf p_r(t)=\begin{bmatrix} a\sin\omega t \\ b\sin 2\omega t \\ h \end{bmatrix},\qquad
+     \omega=\frac{2\pi}{T},\qquad \mathbf v_r=\dot{\mathbf p}_r,\quad \mathbf a_r=\ddot{\mathbf p}_r. \]
+</p>
+<p>Chasing a moving target with feedback alone always <b>lags</b>. The cure is <b>feedforward</b>: feed the
+   reference acceleration straight into the desired world acceleration, so feedback only corrects what's left:</p>
+<p style="text-align:center">
+  \[ \mathbf a_{\text{des}} \;=\; \mathbf a_r \;+\; K_p\,(\mathbf p_r-\mathbf p)\;+\;K_d\,(\mathbf v_r-\mathbf v). \]
+</p>
+<p>That is exactly the line already in <code>quadsim/controllers/cascade_pid.py</code>:
+   <code>a_des = acc_ref + self.kp_pos * e_pos + self.kd_pos * e_vel</code>. Thrust then solves the vertical
+   accel, \( T=m\,(g+a_{\text{des},z}) \) — gravity is \(-z\), thrust is \(+\)body-\(z\).</p>
+
+<div class="callout warn">
+  <span class="ttl">Convention check (CONVENTIONS.md)</span>
+  Keep the course conventions straight: <b>z-up ENU</b> (don't lift z-down NED signs from Beard), intrinsic
+  <b>ZYX</b> Euler, and the <b>X-frame</b> mixer (every motor contributes to roll and pitch — <em>not</em>
+  plus-frame). You don't touch the mixer today, but these are midterm traps.
+</div>
+
+<!-- ============ 2. SETUP ============ -->
+<h2>2 · Setup (2 min)</h2>
+<p>From the <code>simulator/</code> directory, in your virtual environment:</p>
+<div class="code"><pre><span class="cm"># one-time</span>
+python -m venv .venv &amp;&amp; source .venv/bin/activate   <span class="cm"># Windows: .venv\Scripts\activate</span>
+pip install -r requirements.txt
+<span class="cm"># every session — so `import quadsim` works</span>
+export PYTHONPATH=.                                <span class="cm"># Windows: set PYTHONPATH=.</span></pre></div>
+<p>This week you mostly <b>run</b> the reference autopilot (<code>CascadePID</code>) on a trajectory rather than
+   editing it — the goal is to see feedforward and wind in action and to read the tracking numbers. The
+   ready-made example is <code>examples/03_figure8.py</code>.</p>
+
+<!-- ============ 3. THE TASK ============ -->
+<h2>3 · Track the figure-eight</h2>
+<p>Work through the steps. The reference generators live in <code>quadsim/trajectories.py</code>; each returns
+   a function <code>ref(t) → dict(pos, vel, acc, yaw)</code> you can hand straight to <code>sim.run(...)</code>.</p>
+
+<details class="step" open>
+  <summary><span class="num">1</span> Build the reference trajectory <span class="tag">trajectories.py</span></summary>
+  <div class="step-body">
+    <p>The figure-eight carries pos, vel <em>and</em> acc — that's what makes feedforward possible:</p>
+    <div class="code"><pre>from quadsim import trajectories as traj
+ref = traj.figure_eight(a=<span class="st">1.0</span>, b=<span class="st">0.5</span>, height=<span class="st">1.5</span>, period=<span class="st">10.0</span>)
+<span class="cm"># ref(t) -> {"pos": [...], "vel": [...], "acc": [...], "yaw": 0.0}</span></pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">2</span> Fly it with the reference autopilot <span class="tag">no wind</span></summary>
+  <div class="step-body">
+    <p>Start at the trajectory's height and run for two full periods (20 s). <code>CascadePID</code> already uses
+       the <code>acc</code>/<code>vel</code> feedforward, so tracking should be tight:</p>
+    <div class="code"><pre>from quadsim import Simulator, QuadParams
+from quadsim.controllers import CascadePID
+from quadsim.dynamics import hover_state
+
+sim = Simulator(QuadParams())
+log = sim.run(x0=hover_state(position=(<span class="st">0</span>, <span class="st">0</span>, <span class="st">1.5</span>)),
+              controller=CascadePID(sim.params),
+              reference=ref, t_final=<span class="st">20.0</span>)
+print(f<span class="st">"no wind  : RMSE = {log.position_rmse():.3f} m"</span>)   <span class="cm"># ~0.037 m</span></pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">3</span> Add wind &amp; re-measure <span class="tag">disturbance</span></summary>
+  <div class="step-body">
+    <p>Wind is an extra world-frame force (N) passed to <code>sim.run(..., wind=...)</code>. A constant gust along
+       world-x lets feedback (not feedforward) earn its keep — the RMSE should <b>rise</b>:</p>
+    <div class="code"><pre>import numpy as np
+wind = <span class="kw">lambda</span> t: np.array([<span class="st">2.0</span>, <span class="st">0.0</span>, <span class="st">0.0</span>])     <span class="cm"># 2 N along world +x</span>
+log_w = sim.run(x0=hover_state(position=(<span class="st">0</span>, <span class="st">0</span>, <span class="st">1.5</span>)),
+                controller=CascadePID(sim.params),
+                reference=ref, t_final=<span class="st">20.0</span>, wind=wind)
+print(f<span class="st">"with wind: RMSE = {log_w.position_rmse():.3f} m"</span>)</pre></div>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">4</span> Render the strobe &amp; the tracking-error plot <span class="tag">deliverable</span></summary>
+  <div class="step-body">
+    <p>Two figures from <code>quadsim.plotting</code>: the long-exposure 3-D <b>strobe</b> (X-frame drawn at
+       intervals, colour = time, reference dashed) and the <b>tracking error</b> (per-axis + norm + RMSE):</p>
+    <div class="code"><pre>from quadsim.plotting import plot_pose_strobe, plot_tracking_error
+plot_pose_strobe(log,   save=<span class="st">"wk9_strobe.png"</span>,      show=<span class="kw">False</span>)
+plot_tracking_error(log, save=<span class="st">"wk9_tracking.png"</span>,   show=<span class="kw">False</span>)</pre></div>
+    <p>The error plot prints the RMSE in its title — that's the number you report.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">✓</span> The fast path: one shell command</summary>
+  <div class="step-body">
+    <div class="callout warn"><span class="ttl">Use the script</span> <code>examples/03_figure8.py</code> already wires all of the above. Read it once, then run it both ways.</div>
+    <div class="code"><pre>export PYTHONPATH=.
+python examples/03_figure8.py --plot                 <span class="cm"># no wind  → ~0.037 m</span>
+python examples/03_figure8.py --plot --wind 2.0      <span class="cm"># with wind → ~0.48 m</span></pre></div>
+    <p>It prints <code>trajectory tracking RMSE: ... m</code> for each run and saves a 3-D path PNG. Use the
+       script for the RMSE numbers, and the short snippet above to add the <b>strobe</b> figure for your report.</p>
+  </div>
+</details>
+
+<!-- ============ 4. RUN & VERIFY ============ -->
+<h2>4 · Run &amp; verify</h2>
+<p>Save this as <code>examples/wk9_trajectory.py</code>. It flies the figure-eight twice — clean air and a wind
+   gust — prints both RMSEs, and saves the two deliverable figures:</p>
+<div class="code"><pre><span class="cm"># examples/wk9_trajectory.py — Week 9 checkpoint: track a figure-eight, no-wind vs wind</span>
+import numpy as np
+from quadsim import Simulator, QuadParams
+from quadsim.controllers import CascadePID
+from quadsim.dynamics import hover_state
+from quadsim import trajectories as traj
+from quadsim.plotting import plot_pose_strobe, plot_tracking_error
+
+sim = Simulator(QuadParams())
+ref = traj.figure_eight(a=1.0, b=0.5, height=1.5, period=10.0)
+
+<span class="cm"># 1) no wind</span>
+log = sim.run(x0=hover_state(position=(0, 0, 1.5)),
+              controller=CascadePID(sim.params), reference=ref, t_final=20.0)
+print(f<span class="st">"no wind  : RMSE = {log.position_rmse():.3f} m"</span>)
+
+<span class="cm"># 2) constant 2 N world-x wind</span>
+wind = lambda t: np.array([2.0, 0.0, 0.0])
+log_w = sim.run(x0=hover_state(position=(0, 0, 1.5)),
+                controller=CascadePID(sim.params), reference=ref, t_final=20.0, wind=wind)
+print(f<span class="st">"with wind: RMSE = {log_w.position_rmse():.3f} m"</span>)
+
+<span class="cm"># 3) deliverable figures (from the no-wind run)</span>
+plot_pose_strobe(log,    save=<span class="st">"wk9_strobe.png"</span>,   show=False)
+plot_tracking_error(log, save=<span class="st">"wk9_tracking.png"</span>, show=False)
+print(<span class="st">"saved wk9_strobe.png and wk9_tracking.png"</span>)</pre></div>
+
+<div class="code"><pre>export PYTHONPATH=.
+python examples/wk9_trajectory.py</pre></div>
+
+<div class="callout goal">
+  <span class="ttl">Expected — your graded checkpoint ⭐</span>
+  <ul style="margin:6px 0 0">
+    <li><b>No-wind RMSE ≈ 0.037 m</b> — the feedforward keeps the quad on the curve.</li>
+    <li><b>With-wind RMSE is clearly larger</b> than the no-wind value (feedback alone fights the gust).</li>
+    <li><code>wk9_strobe.png</code> shows the quad tracing both lobes of the eight, flown path hugging the dashed reference.</li>
+    <li><code>wk9_tracking.png</code> shows bounded per-axis error and the RMSE line.</li>
+  </ul>
+</div>
+
+<h2 class="dl-h">Try it live — the Digital Lab</h2>
+<p class="muted" style="margin:-4px 0 10px">The same physics as the lab, with sliders. Predict, then check; the full catalogue is in the <a href="../digital-lab.html">Digital Lab</a>.</p>
+<div class="callout"><span class="ttl">poly7</span>Before Lab 6's waypoint mission: check that your leg times keep peak acceleration under the tilt limit. Halve T and watch acceleration quadruple. <a href="../digital-lab.html#poly7">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="poly7"></div>
+<div class="callout"><span class="ttl">traj</span>Lab 7 in one picture: feedforward off, then on, then wind. Predict your no-wind RMSE before running the script (course bar: < 0.1 m). <a href="../digital-lab.html#traj">Open in the Digital Lab →</a></div>
+<div class="widget" data-widget="traj"></div>
+
+<h3>Self-check</h3>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="a"/><label>My no-wind figure-eight RMSE is ≈ 0.037 m (a few cm).</label></li>
+  <li><input type="checkbox" data-id="b"/><label>Turning on wind made the RMSE rise, and I can say why (feedforward can't anticipate the gust).</label></li>
+  <li><input type="checkbox" data-id="c"/><label>I can point to the feedforward term <code>acc_ref</code> in <code>a_des</code> and explain why it beats pure feedback on a moving target.</label></li>
+  <li><input type="checkbox" data-id="d"/><label>My strobe and tracking-error PNGs both rendered, with the flown path near the dashed reference.</label></li>
+  <li><input type="checkbox" data-id="e"/><label>I can sketch the Wk 1–9 map (frames → 6-DOF → trim/linearize → cascade → LQR → estimation → tracking) for the midterm.</label></li>
+</ul>
+
+<!-- ============ 5. GO FURTHER ============ -->
+<h2>5 · Going further (optional)</h2>
+<ul>
+  <li><b>Kill the feedforward.</b> Temporarily ignore <code>acc</code>/<code>vel</code> in the outer loop (pure P/D) and re-measure — watch the RMSE jump. This is the whole argument for feedforward.</li>
+  <li><b>Speed it up.</b> Halve the <code>period</code> (faster eight). Tracking error grows with target speed — by how much?</li>
+  <li><b>Other references.</b> Swap in <code>traj.waypoints([...])</code> or <code>traj.step(...)</code> and compare how the same autopilot copes with a non-smooth target.</li>
+  <li><b>Midterm warm-up.</b> For each arrow in the Wk 1–9 map, write the one convention hazard that lives there (NED↔ENU sign, plus↔X mixer, quaternion order, gimbal lock at \( \theta=\pm90° \)).</li>
+</ul>
+
+<!-- ============ DELIVERABLE / SUBMIT ============ -->
+<h2>6 · Deliverable &amp; submission</h2>
+<table class="rubric">
+  <tr><th>Criterion</th><th>What we look for</th><th>Weight</th></tr>
+  <tr><td>Tracking result</td><td>No-wind figure-eight RMSE ≈ 0.037 m; the strobe shows the path on the reference</td><td>40%</td></tr>
+  <tr><td>Wind comparison</td><td>With-wind RMSE reported and clearly larger; tracking-error plot included</td><td>30%</td></tr>
+  <tr><td>Understanding</td><td>One short paragraph: why feedforward beats pure feedback, and which conventions (z-up, X-frame) you kept</td><td>30%</td></tr>
+</table>
+
+<div class="submit-box">
+  <h3>📤 Submit on the course platform</h3>
+  <p style="margin:0 0 10px;font-size:14px">⭐ <b>This submission is graded (5%).</b> Full requirements &amp; rubric: <a href="../assignments/lab6.html">Lab 6 assignment brief</a>.</p>
+  <div class="row">
+    <div>What</div><div><code>wk9_strobe.png</code> + <code>wk9_tracking.png</code> + the two RMSE numbers + a 3–5 line note (one PDF or zip)</div>
+    <div>Filename</div><div><code>MLTE03_Wk9_&lt;studentID&gt;.zip</code></div>
+    <div>Where</div><div>the <a href="https://course.ainrobotics.com/mlte03/">course platform</a> → <i>Week 9 Lab</i> upload box (log in at the Ken Sir course hub; every version you upload is kept)</div>
+    <div>Deadline</div><div><span class="tofill">date / time — TO FILL</span> (before Week 10)</div>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin:10px 0 0">Submissions go through the course platform (<a href="https://course.ainrobotics.com/mlte03/">course.ainrobotics.com/mlte03/</a>) — log in at the Ken Sir course hub; nothing is uploaded to this static site itself.</p>
+</div>
+
+<p style="margin:30px 0;color:var(--muted)">Next week → <a href="../index.html#weeks">Week 10: the intelligent-control half begins</a>. The
+   <b>~0.037 m figure-eight RMSE</b> you just measured is the baseline that MPC and learning-based controllers
+   will try to beat. Reference: Beard &amp; McLain UAVbook (<a href="https://github.com/byu-magicc/mavsim_public">mavsim_public</a>) and <code>simulator/CONVENTIONS.md</code>.</p>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<!-- KaTeX auto-render for the inline math -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/widgets.js?v=18"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>

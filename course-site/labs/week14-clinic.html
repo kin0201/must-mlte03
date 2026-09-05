@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Week 14 — Final-Project Clinic · MLTE03</title>
+<link rel="stylesheet" href="../assets/css/site.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+</head>
+<body data-lab="week14-clinic">
+
+<div class="lab-progress"><i></i></div>
+
+<header class="lab-top">
+  <div class="wrap">
+    <div class="kicker">MLTE03 · Week 14 · Clinic worksheet</div>
+    <h1>Final-project clinic: the certification dry run</h1>
+    <div class="sub">Your working sheet for the session — tick it as you go. Leave the room with the dry run passed and your viva slot in hand.</div>
+    <div class="meta">
+      <span>⏱ <b>~3 h supervised</b></span>
+      <span>🧩 <b>M3</b> payload drop · <code>certify.py --student &lt;your ID&gt;</code></span>
+      <span>📦 Gate: <b>results complete + dry run passed</b></span>
+      <span>⭐ Feeds the <b>final project — 40%, individual</b></span>
+    </div>
+    <p style="margin-top:14px"><a class="btn ghost" href="../slides/week14-clinic.html">← Back to the Week 14 slides</a>
+       <a class="btn ghost" href="../index.html">Course home</a></p>
+  </div>
+</header>
+
+<main class="wrap lab">
+
+<div class="callout goal">
+  <span class="ttl">Goal</span>
+  Prove that your submission works <b>for someone who is not you, on a machine that is not yours, from what you actually pushed</b>.
+  Today is not about improving your controller — it is about making the result you already have reproducible, documented and defensible.
+</div>
+
+<div class="callout warn">
+  <span class="ttl">The final project is individual — and so is the aircraft</span>
+  You build, certify and defend your own controller. <b>Every student certifies against a different quadcopter</b>:
+  <code>certify.py --student &lt;your ID&gt;</code> derives mass, arm length, \(k_\tau\) and inertia deterministically from
+  your student ID — the same ID always gives the same aircraft, on any machine. A run made with the wrong ID is a run
+  on somebody else's aircraft and <b>does not count</b>, so <b>record your student ID in your README</b> and check it
+  in every report you save. The team reality-gap workshop and case study were Week 10; they are separately graded and
+  already finished.
+</div>
+
+<!-- 1 -->
+<h2>1 · The mission and the bar (30-second recap)</h2>
+<p>One mission, every student: <b>M3, payload drop</b>. The quadrotor holds position at <b>[0, 0, 1.5]</b>; at <b>t = 5 s</b> its mass
+   <b>steps down</b> as a package is released. <b>The controller is never told</b> — one continuous instance, which
+   must notice the change through feedback and correct it. The run is <b>15 s</b>, graded on estimator <b>seed 0</b>,
+   on <b>your own vehicle</b>.</p>
+
+<table class="rubric">
+  <tr><th>ID</th><th>Requirement</th><th>Bar</th></tr>
+  <tr><td><b>REQ-M3-1</b></td><td>maximum deviation over the post-drop window</td><td>&lt; 0.50 m</td></tr>
+  <tr><td><b>REQ-M3-2</b></td><td>transient deviation in the first 3 s after the drop</td><td>&lt; 0.50 m</td></tr>
+  <tr><td><b>REQ-M3-3</b></td><td>post-recovery RMSE over the last 5 s</td><td>&lt; 0.50 m</td></tr>
+</table>
+
+<div class="callout">
+  <span class="ttl">The whole project in two rows — on the <b>course-default</b> vehicle</span>
+  With no <code>--student</code> argument, the reference <b>CascadePID</b> baseline is <b>NOT CERTIFIED</b>:
+  <code>[FAIL] REQ-M3-1 max = 0.540 m</code>, with REQ-M3-2 and REQ-M3-3 both PASS.<br/>
+  The reference <b>LinearMPC</b> upgrade is <b>CERTIFIED</b>: <code>[PASS] REQ-M3-1 max = 0.473 m</code>, other two PASS.<br/>
+  This is the shared lecture example. <b>Your own two numbers will differ</b> — but the pattern holds on every student
+  vehicle: the baseline fails <b>exactly one</b> requirement, and the upgrade fixes <b>exactly that one</b>.
+  Your claim lives in that gap, with your numbers in it.
+</div>
+
+<!-- 2 -->
+<h2>2 · Setup (1 min)</h2>
+<div class="code"><pre><span class="cm"># from the simulator/ directory, venv active</span>
+export PYTHONPATH=.                 <span class="cm"># Windows: set PYTHONPATH=.</span>
+python -m quadsim.student_params &lt;your ID&gt;   <span class="cm"># your mass, arm, k_torque, inertia</span>
+python certify.py --controller &lt;yours&gt; --student &lt;your ID&gt; --mission M3</pre></div>
+<p>That single command is the entire assessment instrument. Everything below exists to make sure it behaves the same
+   way in a marker's hands as it does in yours.</p>
+
+<!-- 3 -->
+<h2>3 · The certification dry run — tick every box</h2>
+<p>Do this <b>exactly</b> as the real thing. Each condition below is here because a previous cohort lost marks to its absence.</p>
+
+<details class="step" open>
+  <summary><span class="num">1</span> Push everything and tag it <span class="tag">the tag is what gets marked</span></summary>
+  <div class="step-body">
+    <div class="code"><pre>git status                    <span class="cm"># must be clean: nothing uncommitted, nothing stashed</span>
+git tag final
+git push --tags</pre></div>
+    <p>Confirm the tag exists <b>on the remote</b>, not just locally.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">2</span> Clone fresh, check out <code>final</code> <span class="tag">not your working copy</span></summary>
+  <div class="step-body">
+    <div class="code"><pre>cd /tmp &amp;&amp; rm -rf dryrun
+git clone &lt;your-repo&gt; dryrun
+cd dryrun &amp;&amp; git checkout final</pre></div>
+    <p>A copy of your working directory does <b>not</b> count. The working copy is precisely the thing that is untrustworthy.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">3</span> Turn the network off <span class="tag">physically</span></summary>
+  <div class="step-body">
+    <p>Wi-Fi off. Build the environment only from what the repository declares. This catches the "it quietly downloads
+       something at import time" failure, which is invisible on a connected machine.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">4</span> Certify both controllers <span class="tag">baseline and submission</span></summary>
+  <div class="step-body">
+    <div class="code"><pre>ID=&lt;your ID&gt;
+python certify.py --controller baseline --student $ID --mission M3
+python certify.py --controller mine     --student $ID --mission M3
+python certify.py --controller mine     --student $ID --mission M3 --seeds 0,1,2</pre></div>
+    <p>Save all output to a file immediately — a terminal scrollback is not a saved report. Then <b>read the student ID
+       printed in both reports</b>: same ID, yours, on both, or the comparison is void.
+       <code>--seeds</code> measures the spread for one required sentence; <b>the grading rule is seed 0</b>.</p>
+  </div>
+</details>
+
+<details class="step">
+  <summary><span class="num">5</span> Paste both reports verbatim <span class="tag">now, not later</span></summary>
+  <div class="step-body">
+    <p>Copy the tool's own output into your report file, whole, including the <code>[FAIL]</code> lines. Do not reformat,
+       do not summarise, do not delete the baseline's failure — that failure is the reason your improvement means anything.</p>
+  </div>
+</details>
+
+<div class="callout goal">
+  <span class="ttl">Checkpoint ⭐</span>
+  Both certify runs produced a report from a fresh clone of tag <code>final</code>, with the network off.
+  <b>A NOT CERTIFIED verdict for your submission still counts as a passed dry run</b> — the gate tests the procedure, not the verdict.
+</div>
+
+<h3>Dry-run checklist</h3>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="z"/><label><b>Student ID confirmed</b> — the one in my README is mine, digit by digit.</label></li>
+  <li><input type="checkbox" data-id="a"/><label><code>git status</code> clean; tag <code>final</code> pushed and confirmed <b>on the remote</b>.</label></li>
+  <li><input type="checkbox" data-id="b"/><label>Fresh clone into a new empty directory, tag <code>final</code> checked out.</label></li>
+  <li><input type="checkbox" data-id="c"/><label>Network <b>off</b>; environment built only from what the repo declares.</label></li>
+  <li><input type="checkbox" data-id="d"/><label><code>certify.py --student &lt;my ID&gt;</code> run on the <b>frozen baseline</b>; report saved.</label></li>
+  <li><input type="checkbox" data-id="e"/><label><code>certify.py --student &lt;my ID&gt;</code> run on the <b>submission</b>; report saved.</label></li>
+  <li><input type="checkbox" data-id="f"/><label><code>--seeds 0,1,2</code> run; the range recorded.</label></li>
+  <li><input type="checkbox" data-id="y"/><label><b>Student ID read back out of both reports</b> — same ID, mine, on both.</label></li>
+  <li><input type="checkbox" data-id="g"/><label>Both reports pasted <b>verbatim</b> into the report file, FAIL lines intact.</label></li>
+</ul>
+
+<!-- 4 -->
+<h2>4 · Leakage self-check (5 min, on your own code)</h2>
+<p>M3's entire difficulty is that the controller is <b>not told</b> about the drop. A controller that is told has solved an
+   easier problem, and <code>certify.py</code> will not say so — you must. Grep your own controller for all three:</p>
+<table class="rubric">
+  <tr><th>Search for</th><th>Why it is a problem</th><th>The legitimate version</th></tr>
+  <tr><td>the true-state handle</td><td>the controller must close on the <b>estimate</b>, not ground truth</td><td>read only what the estimator provides</td></tr>
+  <tr><td>your <b>post-drop</b> mass (or <code>p_light</code>)</td><td>nothing tells the controller the drop happened</td><td>design against your <b>pre-drop</b> mass and say so in one line</td></tr>
+  <tr><td>the literal <code>5.0</code></td><td>a schedule keyed to the drop time is not feedback</td><td>detect the change through the measured response</td></tr>
+</table>
+<div class="callout">
+  <span class="ttl">Found something?</span>
+  Fix it today and it is simply a bug you caught. Found at the viva, it voids the claim your evidence was supporting.
+  Leakage is almost never deliberate — it arrives as a debug line nobody removed.
+</div>
+
+<!-- 5 -->
+<h2>5 · The three required report items</h2>
+<p>The report is <b>≤ 6 pages</b> and has exactly three required items, plus one sentence on seeds and your student ID.
+   Separately, a one-page <b>engineering log</b> (10 marks): what you tried, what failed, what you decided.</p>
+<table class="rubric">
+  <tr><th>Item</th><th>What we look for</th></tr>
+  <tr><td><b>1 · Both certification reports</b></td><td>Pasted <b>verbatim</b> — frozen baseline and submission, raw output, FAIL lines intact, <b>the same student ID on both</b>.</td></tr>
+  <tr><td><b>2 · The MPC formulation</b></td><td>Written as engineering: model, horizon, weights, constraints — your actual numbers, each with a reason.</td></tr>
+  <tr><td><b>3 · One figure + one paragraph</b></td><td>Baseline and MPC on the same axes, the 0.50 m bar drawn, t = 5 s marked, <b>your</b> two peaks labelled with their values; the paragraph names the <b>mechanism</b>.</td></tr>
+  <tr><td><b>+ The seed sentence</b></td><td>One sentence from <code>--seeds 0,1,2</code>. It measures spread; <b>the grading rule is still seed 0</b>. On the course-default vehicle the same CascadePID ranges <b>0.211–0.721 m</b> across 8 seeds — the verdict flips on the seed alone, so a number without its spread is not a result.</td></tr>
+</table>
+<p><b>Optional stretch, only once the three are complete:</b> constraint-activation plot · solve-time histogram against your
+   control period · ablation table (shorter horizon, different weights). A stretch item bolted onto an incomplete required
+   three is worth nothing.</p>
+
+<h3>Seven ways to lose marks on work you already did</h3>
+<table class="rubric">
+  <tr><th>Failure mode</th><th>The fix</th></tr>
+  <tr><td><b>Certified on the wrong vehicle</b> — a missing <code>--student</code>, or a classmate's ID</td><td>your ID in the README; read it back out of <b>both</b> reports</td></tr>
+  <tr><td>Controller not importable from a clean clone</td><td>the dry run above; declare every dependency in the repo</td></tr>
+  <tr><td>Ground-truth leakage</td><td>the three greps in §4</td></tr>
+  <tr><td>Hard-coded mass or absolute path</td><td>no absolute paths; state which mass model you designed against — and note a hard-coded mass is now almost certainly the <b>wrong</b> mass</td></tr>
+  <tr><td>Certify report not pasted verbatim</td><td>copy the whole block, keep the FAIL lines</td></tr>
+  <tr><td>A pass claimed with no seed spread</td><td>the one sentence from <code>--seeds 0,1,2</code></td></tr>
+  <tr><td>A figure with no stated claim</td><td>one sentence asserting something a reader could disagree with</td></tr>
+</table>
+
+<!-- 6 -->
+<h2>6 · Exit gate — what "done" looks like tonight</h2>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="h"/><label>Dry run completed from a fresh clone of tag <code>final</code>, network off, <b>both</b> controllers certified with <b>my</b> student ID.</label></li>
+  <li><input type="checkbox" data-id="i"/><label>Both reports saved and pasted verbatim into the report file.</label></li>
+  <li><input type="checkbox" data-id="j"/><label>Seed spread measured; the one sentence drafted.</label></li>
+  <li><input type="checkbox" data-id="k"/><label>Comparison figure produced, with the 0.50 m bar and t = 5 s drawn.</label></li>
+  <li><input type="checkbox" data-id="l"/><label>Leakage self-check done: true state, post-drop mass, the literal 5.0.</label></li>
+  <li><input type="checkbox" data-id="m"/><label>Engineering log up to date and committed — one page: what I tried, what failed, what I decided.</label></li>
+  <li><input type="checkbox" data-id="n"/><label>Viva slot drawn; the time written down, not remembered.</label></li>
+</ul>
+<div class="callout">
+  <span class="ttl">Not required tonight</span>
+  A finished report, polished prose, or a better number. Improving your number is optional; reproducing it from a clean clone
+  is not. <b>Commit the state that passed before you continue improving it</b> — if tonight goes badly, that commit is your submission.
+</div>
+
+<!-- 7 -->
+<h2>7 · What to bring to the Week-15 viva</h2>
+<p>Week 15 is <b>individual vivas only</b> — 5 minutes each, hard cut, 35 students. The team flight demonstration and case study
+   already happened in Week 10 and are separately graded. You choose nothing here: not the figure, not the question,
+   not the code block. The question bank is <code>final-project-assessment.md</code> §6 — A (MPC), B (verification and
+   certification), C (integrative).</p>
+<ul class="checklist">
+  <li><input type="checkbox" data-id="o"/><label>The <b>same laptop</b> and the <b>same clean clone</b> you used today — you will be asked to open code, not describe it.</label></li>
+  <li><input type="checkbox" data-id="p"/><label>Both certification reports, on screen and findable in under thirty seconds.</label></li>
+  <li><input type="checkbox" data-id="q"/><label>Your <b>numbers and margins</b> memorised: your student ID, your vehicle's masses, REQ-M3-1's value, the bar, the margin, the seed range.</label></li>
+  <li><input type="checkbox" data-id="r"/><label>One mechanism you can explain <b>without notes</b> — why MPC caps the excursion the baseline does not.</label></li>
+  <li><input type="checkbox" data-id="s"/><label>An honest answer to "what is thin about this result?" — know your own margin, and what it depends on.</label></li>
+  <li><input type="checkbox" data-id="t"/><label>Your <b>engineering log</b> + git trail, and the ability to defend <b>every line you submitted</b> — all of it is yours.</label></li>
+</ul>
+<div class="callout goal">
+  <span class="ttl">Five minutes is enough for exactly one good idea, said clearly</span>
+  Prepare that one. A marginal result you understand precisely is better engineering than a comfortable one you cannot
+  account for — and the viva is examining the understanding, not the number.
+</div>
+
+<p style="margin:30px 0;color:var(--muted)">Next → <a href="../index.html#weeks">Week 15: individual vivas</a>.
+   Refs: <code>simulator/CERTIFICATION.md</code> · <code>final-project-assessment.md</code> ·
+   <a href="../slides/week14-clinic.html">Week 14 slides</a>.</p>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">MLTE03 · Macau University of Science and Technology · Instructor: Dr Ken Lai (黎子健) · <a href="mailto:cklai@must.edu.mo">cklai@must.edu.mo</a><br/>© 2026 Dr Ken Lai (黎子健) · Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> — free to use and adapt for non-commercial teaching, with attribution.</div>
+</footer>
+
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}]});"></script>
+<script src="../assets/js/schedule.js?v=1"></script>
+<script src="../assets/js/lab.js"></script>
+</body>
+</html>
